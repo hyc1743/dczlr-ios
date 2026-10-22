@@ -1,0 +1,73 @@
+name: Publish unsigned iOS release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to create or update
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select release tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: echo "value=${INPUT_TAG:-$REF_NAME}" >> "$GITHUB_OUTPUT"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate --spec project.yml
+      - name: Build unsigned device app
+        working-directory: ios
+        run: |
+          xcodebuild -project PortLab.xcodeproj -scheme PortLab -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/release CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+      - name: Package IPA
+        working-directory: ios
+        run: |
+          rm -rf build/release-ipa && mkdir -p build/release-ipa/Payload
+          cp -R build/release/Build/Products/Release-iphoneos/PortLab.app build/release-ipa/Payload/
+          (cd build/release-ipa && zip -qry ../PortLab-unsigned.ipa Payload)
+      - name: Write build status report
+        working-directory: ios
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          Path('build/build-report.json').write_text(json.dumps({
+              'product': 'PortLab-unsigned.ipa',
+              'host_build': 'compiled_by_xcodebuild',
+              'native_guest': 'not_embedded',
+              'game_playability': 'not_claimed',
+              'resource_manifest': 'embedded',
+              'resource_parts': 'published_separately_as_release_assets',
+              'signing': 'unsigned',
+          }, indent=2) + '\n')
+          PY
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          test -n "$RELEASE_TAG"
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Unsigned iOS build. Sign with your own Apple identity before installation. Resource parts are separate assets." \
+              --target "$GITHUB_SHA"
+          gh release upload "$RELEASE_TAG" \
+            ios/build/PortLab-unsigned.ipa \
+            ios/build/build-report.json \
+            ios/Resources/DczlrData.manifest.json \
+            --clobber

@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "format": "dczlr-ios-converted-effects-v1",
+  "source_artifact": {"sha256": "<original-pe-sha256>"},
+  "effects": [
+    {
+      "id": "IDR_SPRITE",
+      "source_sha256": "<source-effect-sha256>",
+      "metal_library": "IDR_SPRITE.metallib",
+      "technique_count": 1,
+      "pass_count": 1,
+      "constant_bindings": [
+        {"name": "g_mWVP", "buffer": 1, "offset": 0, "type": "float4x4"}
+      ],
+      "texture_bindings": [
+        {"name": "g_txSprite", "index": 0, "pixel_format": "rgba8Unorm"}
+      ],
+      "state": {"blend": "sourceAlpha/oneMinusSourceAlpha", "depth_write": false}
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+name: Build PortLab iOS IPA
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate resource manifest and packer
+        shell: bash
+        run: |
+          python -m py_compile tools/pack_resources.py tools/validate_effect_manifest.py tools/validate_release_contract.py
+          python tools/validate_release_contract.py .
+          python -m unittest discover -s tests -v
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          m=json.loads(Path('ios/Resources/DczlrData.manifest.json').read_text())
+          assert m['format']=='dczlr-resource-parts-v1'
+          assert m['part_bytes'] <= 1_000_000_000
+          assert all(p['size'] <= m['part_bytes'] for p in m['parts'])
+          print(f"{m['file_count']} files, {len(m['parts'])} parts, {m['total_bytes']} bytes")
+          PY
+
+  ios:
+    needs: portable
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate --spec project.yml
+      - name: Build unsigned simulator app
+        working-directory: ios
+        run: |
+          xcodebuild -project PortLab.xcodeproj -scheme PortLab -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO build
+      - name: Upload simulator app and manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-simulator-and-resources
+          path: |
+            ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app
+            ios/Resources/DczlrData.manifest.json
+
+  unsigned-ipa:
+    needs: portable
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate --spec project.yml
+      - name: Build unsigned device app
+        working-directory: ios
+        run: |
+          xcodebuild -project PortLab.xcodeproj -scheme PortLab -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath build/device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          rm -rf build/ipa && mkdir -p build/ipa/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/PortLab.app build/ipa/Payload/
+          (cd build/ipa && zip -qry ../PortLab-unsigned.ipa Payload)
+      - name: Write build status report
+        working-directory: ios
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = {
+              'product': 'PortLab-unsigned.ipa',
+              'host_build': 'compiled_by_xcodebuild',
+              'native_guest': 'not_embedded',
+              'game_playability': 'not_claimed',
+              'resource_manifest': 'embedded',
+              'resource_parts': 'published_separately_as_release_assets',
+              'signing': 'unsigned',
+          }
+          Path('build/build-report.json').write_text(json.dumps(report, indent=2) + '\n')
+          PY
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-unsigned-ipa
+          path: |
+            ios/build/PortLab-unsigned.ipa
+            ios/build/build-report.json
+            ios/Resources/DczlrData.manifest.json

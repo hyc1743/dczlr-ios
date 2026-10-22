@@ -1,0 +1,34 @@
+name: Validate resource parts
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub Release tag containing the three dczdata assets
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  instructions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check embedded manifest contract
+        run: |
+          python tools/validate_release_contract.py .
+          python -m unittest discover -s tests -v
+      - name: Print release asset contract
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          echo "Release tag: $RELEASE_TAG"
+          echo "Upload these exact assets to that release:"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for p in json.loads(Path('ios/Resources/DczlrData.manifest.json').read_text())['parts']:
+              print(f"  {p['name']}  {p['size']} bytes  sha256={p['sha256']}")
+          PY
