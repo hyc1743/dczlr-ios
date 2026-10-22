@@ -1,5 +1,7 @@
 # Effect 转换工具路线
 
+修正：早期宽松解析器的 comment/instruction 长度都少算一个 DWORD，生成的旧 raw IR 不可信。现已修正 token framing，并撤销凭 comment 数量自动挑选 shader 的做法。`build_dx9_ir.py` 只接受 schema 2，并要求显式指定 effect 和 offset；旧数据必须重新生成。详见 `runtime-decision.md`。这些 shader 工具仍不是 x86 游戏执行后端，当前主线是先验证实际 CPU/Windows 运行时。
+
 当前主机没有 FXC、DXC、SPIR-V 或 SPIRV-Cross。不要直接根据 D3DX effect 的头字段编写完整解析器。
 
 ## 首选解析参考

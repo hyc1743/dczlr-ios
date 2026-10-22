@@ -1,0 +1,57 @@
+name: Evaluate x86 interpreter without JIT
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-probe:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned runtime source
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/boxedvn-interpreter"
+          git init "$upstream"
+          git -C "$upstream" fetch --depth=1 https://github.com/125hz/BoxedVN.git 7b6e03575922967ca161f2b55c39846e242916f6
+          git -C "$upstream" checkout --detach FETCH_HEAD
+          test "$(git -C "$upstream" rev-parse HEAD)" = 7b6e03575922967ca161f2b55c39846e242916f6
+          python3 tools/prepare_interpreter_probe.py "$upstream"
+      - name: Configure interpreter experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install cmake ninja sdl2
+          cmake -S "$RUNNER_TEMP/boxedvn-interpreter" -B "$RUNNER_TEMP/interpreter-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DBOXEDVN_BUILD_TESTS=OFF -DBOXEDVN_BUILD_RUNTIME=OFF \
+            -DBOXEDVN_BUILD_MACOS_HOST=OFF -DBOXEDVN_ENABLE_UI=OFF \
+            -DBOXEDVN_ENABLE_MIDI=OFF -DBOXEDVN_ENABLE_GUEST_X64=OFF \
+            -DBOXEDVN_ENABLE_FEX64=OFF -DBOXEDVN_SDL2_ROOT="$(brew --prefix sdl2)"
+      - name: Compile actual interpreter and CPU test harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/interpreter-build" --target portlab_cpu_probe --parallel 3
+      - name: Run bounded x86 CPU self-tests
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/interpreter-evidence
+          "$RUNNER_TEMP/interpreter-build/portlab_cpu_probe" 0 16 1 --fast | tee out/interpreter-evidence/cpu.log
+      - name: Retain configuration and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interpreter-probe-evidence
+          path: |
+            out/interpreter-evidence/
+            ${{ runner.temp }}/interpreter-build/CMakeCache.txt
+            ${{ runner.temp }}/interpreter-build/compile_commands.json
+          if-no-files-found: ignore

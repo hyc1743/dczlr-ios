@@ -81,6 +81,6 @@ REA 的 PE 资源解析已经确认主程序有 13 个资源，其中 7 个命�
 
 ## 当前阻塞
 
-Windows 环境没有 Swift、Xcode、Apple SDK 或 iOS 设备，因此 PortLab 尚未编译或安装。当前游戏也没有已知的 ARM64 Switch 客体或原始源码可供复用。下一项具有最大信息量的动作是完成阶段 B 的 Windows 运行时调用记录，或取得合法的源代码/移植工程。
+PortLab 已通过公共仓的 macOS Actions 编译并生成 arm64 未签名 IPA，构建 run 为 `39833671786`。它只是平台实验宿主，没有游戏执行引擎，不能运行原游戏。优先研究普通侧载且无需手动开启 JIT 的路线；执行后端调查见 `runtime-decision.md`。当前游戏仍没有已知 ARM64 Switch 客体或原始源码可供复用。
 
 Ghidra 12.1.4 headless 已尝试对 ASCII 副本做静态导入，但上级 `weixing3` 安装目录拒绝写入 x86 语言缓存 `x86.sla`，因此没有导出函数或调用图。状态见 `research/ghidra-port-status.json`；本次没有执行或修改目标。
