@@ -31,7 +31,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -DBOXEDVN_BUILD_TESTS=OFF -DBOXEDVN_BUILD_RUNTIME=OFF \
             -DBOXEDVN_BUILD_MACOS_HOST=OFF -DBOXEDVN_ENABLE_UI=OFF \
-            -DBOXEDVN_ENABLE_MIDI=OFF -DBOXEDVN_ENABLE_GUEST_X64=OFF \
+            -DBOXEDVN_ENABLE_MIDI=ON -DBOXEDVN_ENABLE_GUEST_X64=OFF \
             -DBOXEDVN_ENABLE_FEX64=OFF -DBOXEDVN_SDL2_ROOT="$(brew --prefix sdl2)"
       - name: Compile actual interpreter and CPU test harness
         shell: bash
