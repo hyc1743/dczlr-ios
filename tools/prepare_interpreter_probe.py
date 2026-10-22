@@ -58,6 +58,36 @@ def fix_rusage_cache_scope(source):
     return source.replace(guard, fields + guard)
 
 
+def fix_single_thread_vulkan(source):
+    begin = ("    DISPATCH_MAIN_THREAD_BLOCK_THIS_BEGIN_WITH_ARG2(\n"
+             "        =, &result COMMA &offscreenMetalLayer)")
+    end = ("    DISPATCH_MAIN_THREAD_BLOCK_END\n#else\n"
+           "    DISPATCH_MAIN_THREAD_BLOCK_THIS_BEGIN\n"
+           "    if (!screen->additionalSDLWindowFlags)")
+    if source.count(begin) != 1 or source.count(end) != 1:
+        raise ValueError("Vulkan creation dispatch scope changed")
+    source = source.replace(begin,
+        "#ifdef BOXEDWINE_MULTI_THREADED\n" + begin +
+        "\n#else\n    [&]() -> U32 {\n#endif")
+    source = source.replace(end,
+        "#ifdef BOXEDWINE_MULTI_THREADED\n    DISPATCH_MAIN_THREAD_BLOCK_END\n"
+        "#else\n    return 0;\n    }();\n#endif\n#else\n"
+        "    DISPATCH_MAIN_THREAD_BLOCK_THIS_BEGIN\n"
+        "    if (!screen->additionalSDLWindowFlags)")
+    begin = ("#ifdef BOXEDWINE_IOS\n    DISPATCH_MAIN_THREAD_BLOCK_THIS_BEGIN\n"
+             "    if (!removed.presentation)")
+    end = "    DISPATCH_MAIN_THREAD_BLOCK_END\n#else\n    (void)removed;"
+    if source.count(begin) != 1 or source.count(end) != 1:
+        raise ValueError("Vulkan teardown dispatch scope changed")
+    source = source.replace(begin,
+        "#ifdef BOXEDWINE_IOS\n#ifdef BOXEDWINE_MULTI_THREADED\n"
+        "    DISPATCH_MAIN_THREAD_BLOCK_THIS_BEGIN\n#else\n"
+        "    [&]() -> U32 {\n#endif\n    if (!removed.presentation)")
+    return source.replace(end,
+        "#ifdef BOXEDWINE_MULTI_THREADED\n    DISPATCH_MAIN_THREAD_BLOCK_END\n"
+        "#else\n    return 0;\n    }();\n#endif\n#else\n    (void)removed;")
+
+
 def prepare(root, mode="cpu-probe"):
     root = root.resolve()
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
@@ -74,6 +104,8 @@ def prepare(root, mode="cpu-probe"):
     fixed_process = fix_process_diagnostics(process.read_text(encoding="utf-8"))
     thread = root / "include/kthread.h"
     fixed_thread = fix_rusage_cache_scope(thread.read_text(encoding="utf-8"))
+    vulkan = root / "platform/sdl/kvulkanSDL.cpp"
+    fixed_vulkan = fix_single_thread_vulkan(vulkan.read_text(encoding="utf-8"))
     source = source.replace(flag, "\n")
     cpu_cmake = '''
 # PortLab experiment: the interpreter is selected by omitting the JIT define.
@@ -106,6 +138,7 @@ target_sources(boxedwine_core PRIVATE
     normal_cpu.write_text(fixed_normal_cpu, encoding="utf-8")
     process.write_text(fixed_process, encoding="utf-8")
     thread.write_text(fixed_thread, encoding="utf-8")
+    vulkan.write_text(fixed_vulkan, encoding="utf-8")
     if mode == "ios-core":
         (root / "portlab_interpreter_backend.cpp").write_text('''
 #include "boxedwine.h"
