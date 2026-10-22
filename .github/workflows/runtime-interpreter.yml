@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmake --build "$RUNNER_TEMP/interpreter-build" --target portlab_cpu_probe --parallel 3
+          cmake --build "$RUNNER_TEMP/interpreter-build" --target portlab_cpu_probe --parallel 3 -- -k 0
       - name: Run bounded x86 CPU self-tests
         timeout-minutes: 3
         shell: bash

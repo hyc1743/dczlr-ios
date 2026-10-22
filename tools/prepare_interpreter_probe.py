@@ -21,6 +21,43 @@ def fix_interpreter_guard(source):
     return source.replace(end, "#endif\n" + end)
 
 
+def guard_diagnostic_function(source, signature, condition, fallback):
+    if source.count(signature) != 1:
+        raise ValueError("Diagnostic function changed: " + signature)
+    start = source.index(signature)
+    opening = source.index("{", start)
+    closing = source.index("\n}", opening)
+    original_body = source[opening + 1:closing]
+    return (source[:opening + 1] + "\n#if " + condition + original_body +
+            "\n#else\n" + fallback + "\n#endif" + source[closing:])
+
+
+def fix_process_diagnostics(source):
+    source = guard_diagnostic_function(
+        source, "static mach_port_t nativePortForThread(KThread* thread)",
+        "defined(BOXEDWINE_MULTI_THREADED)",
+        "    (void)thread;\n    return MACH_PORT_NULL;")
+    return guard_diagnostic_function(
+        source, "static void describeNativePc(KProcess* process, uint64_t pc, char* out,",
+        "defined(BOXEDWINE_JIT)",
+        '    (void)process;\n    (void)pc;\n'
+        '    snprintf(out, outSize, " mappedGuest=unavailable-interpreter");')
+
+
+def fix_rusage_cache_scope(source):
+    guard = "#if defined(BOXEDWINE_IOS) && defined(BOXEDWINE_MULTI_THREADED)"
+    fields = ("    U64 cachedSelfRusageMicroseconds = 0;\n"
+              "    U32 cachedSelfUserSeconds = 0;\n"
+              "    U32 cachedSelfUserMicroSeconds = 0;\n"
+              "    U32 cachedSelfKernelSeconds = 0;\n"
+              "    U32 cachedSelfKernelMicroSeconds = 0;\n"
+              "    bool hasCachedSelfRusage = false;\n")
+    if source.count(fields) != 1 or source.count(guard) != 1:
+        raise ValueError("Thread rusage cache declaration changed")
+    source = source.replace(fields, "")
+    return source.replace(guard, fields + guard)
+
+
 def prepare(root):
     root = root.resolve()
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
@@ -33,6 +70,10 @@ def prepare(root):
         raise ValueError("JIT configuration changed; refusing an ambiguous patch")
     normal_cpu = root / "source/emulation/cpu/normal/normalCPU.cpp"
     fixed_normal_cpu = fix_interpreter_guard(normal_cpu.read_text(encoding="utf-8"))
+    process = root / "source/kernel/kprocess.cpp"
+    fixed_process = fix_process_diagnostics(process.read_text(encoding="utf-8"))
+    thread = root / "include/kthread.h"
+    fixed_thread = fix_rusage_cache_scope(thread.read_text(encoding="utf-8"))
     source = source.replace(flag, "\n")
     source += '''
 # PortLab experiment: the interpreter is selected by omitting the JIT define.
@@ -57,6 +98,8 @@ endforeach()
 '''
     cmake.write_text(source, encoding="utf-8")
     normal_cpu.write_text(fixed_normal_cpu, encoding="utf-8")
+    process.write_text(fixed_process, encoding="utf-8")
+    thread.write_text(fixed_thread, encoding="utf-8")
     (root / "portlab_cpu_probe.cpp").write_text('''
 #include "boxedwine.h"
 #include <cstdio>
