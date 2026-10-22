@@ -24,7 +24,8 @@ jobs:
       - name: Identify SDK for dependency cache
         id: sdk
         run: echo "version=$(xcrun --sdk iphoneos --show-sdk-version)" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: dependencies
         with:
           path: ${{ runner.temp }}/boxedvn-ios-app/third_party
           key: interpreter-app-${{ runner.os }}-${{ runner.arch }}-sdk${{ steps.sdk.outputs.version }}-7b6e0357
@@ -35,6 +36,12 @@ jobs:
           set -euo pipefail
           brew install cmake ninja
           bash "$RUNNER_TEMP/boxedvn-ios-app/scripts/fetch-dependencies.sh" --platform ios
+      - name: Cache completed dependencies before application compilation
+        if: steps.dependencies.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/boxedvn-ios-app/third_party
+          key: ${{ steps.dependencies.outputs.cache-primary-key }}
       - name: Build actual frontend and interpreter bridge
         shell: bash
         run: |

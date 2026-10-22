@@ -6,6 +6,7 @@ files or user data are copied. Upstream GPL notices remain in that checkout.
 import argparse
 from pathlib import Path
 import plistlib
+import re
 
 from prepare_interpreter_probe import prepare
 
@@ -14,6 +15,18 @@ def replace_once(source, old, new, description):
     if source.count(old) != 1:
         raise ValueError(description + " changed in the pinned source")
     return source.replace(old, new)
+
+
+def prune_missing_optional_sources(source, ios_directory):
+    def select(match):
+        block = match.group(0)
+        if re.search(r"(?m)^\s+optional:\s+true\s*$", block):
+            relative = match.group(1).strip().strip("'\"")
+            if not (ios_directory / relative).exists():
+                print("Omitted missing optional resource: " + relative)
+                return ""
+        return block
+    return re.sub(r"(?m)^      - path: ([^\n]+)\n(?:        [^\n]*\n)*", select, source)
 
 
 def stage(root):
@@ -96,6 +109,7 @@ extension AppModel {
     text = replace_once(spec.read_text(encoding="utf-8"),
                         "PRODUCT_BUNDLE_IDENTIFIER: org.boxedwine.boxedvn",
                         "PRODUCT_BUNDLE_IDENTIFIER: org.example.portlab", "Bundle identity")
+    text = prune_missing_optional_sources(text, root / "ios")
     spec.write_text(text, encoding="utf-8")
     info = root / "ios/app/Info.plist"
     document = plistlib.loads(info.read_bytes())
