@@ -33,6 +33,17 @@ establish iOS startup, graphics, audio, acceptable speed or game playability.
 The existing app will not advertise the interpreter as ready until those later
 gates have real execution evidence.
 
+The host experiment has now passed: run `39871262517`, revision `6510113`,
+compiled the interpreter on an ARM64 macOS runner and executed 16 upstream
+baseline tests with zero failures. Its log explicitly reports that no JIT
+backend was compiled. The run took four seconds to execute those tests; this
+is not a game performance measurement.
+
+`runtime-ios-core.yml` is the next gate: compile the real interpreter archive
+against the iPhoneOS SDK, without test-only flags and without a JIT backend.
+It does not yet launch Wine or a game, and it does not replace the app's
+runtime with a pretend implementation.
+
 ## Correction to the earlier shader investigation
 
 The previous token scanner undercounted both comments and instructions by one

@@ -58,7 +58,7 @@ def fix_rusage_cache_scope(source):
     return source.replace(guard, fields + guard)
 
 
-def prepare(root):
+def prepare(root, mode="cpu-probe"):
     root = root.resolve()
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if revision != PIN:
@@ -75,7 +75,7 @@ def prepare(root):
     thread = root / "include/kthread.h"
     fixed_thread = fix_rusage_cache_scope(thread.read_text(encoding="utf-8"))
     source = source.replace(flag, "\n")
-    source += '''
+    cpu_cmake = '''
 # PortLab experiment: the interpreter is selected by omitting the JIT define.
 # __TEST enables the upstream CPU test functions; this is not a shipping app.
 file(GLOB_RECURSE PORTLAB_CPU_TESTS CONFIGURE_DEPENDS
@@ -96,10 +96,26 @@ foreach(name Cocoa CoreGraphics Carbon IOKit ForceFeedback GameController
     endif()
 endforeach()
 '''
+    core_cmake = '''
+# Compile-time backend assertion is part of the actual iOS core archive.
+target_sources(boxedwine_core PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/portlab_interpreter_backend.cpp")
+'''
+    source += cpu_cmake if mode == "cpu-probe" else core_cmake
     cmake.write_text(source, encoding="utf-8")
     normal_cpu.write_text(fixed_normal_cpu, encoding="utf-8")
     process.write_text(fixed_process, encoding="utf-8")
     thread.write_text(fixed_thread, encoding="utf-8")
+    if mode == "ios-core":
+        (root / "portlab_interpreter_backend.cpp").write_text('''
+#include "boxedwine.h"
+#ifdef BOXEDWINE_JIT
+#error "The iOS interpreter core must not contain a JIT backend"
+#endif
+extern "C" const char *PortLabInterpreterBackendName() { return "interpreter"; }
+''', encoding="utf-8")
+        print("Prepared iOS interpreter core at pinned revision " + PIN)
+        return
     (root / "portlab_cpu_probe.cpp").write_text('''
 #include "boxedwine.h"
 #include <cstdio>
@@ -118,4 +134,6 @@ int main(int argc, char **argv) {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkout", type=Path)
-    prepare(parser.parse_args().checkout)
+    parser.add_argument("--mode", choices=["cpu-probe", "ios-core"], default="cpu-probe")
+    arguments = parser.parse_args()
+    prepare(arguments.checkout, arguments.mode)

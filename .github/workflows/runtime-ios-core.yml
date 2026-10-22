@@ -1,0 +1,88 @@
+name: Compile iOS x86 interpreter core without JIT
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-interpreter:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch fixed runtime source and prepare interpreter mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/boxedvn-ios-interpreter"
+          git init "$upstream"
+          git -C "$upstream" fetch --depth=1 https://github.com/125hz/BoxedVN.git 7b6e03575922967ca161f2b55c39846e242916f6
+          git -C "$upstream" checkout --detach FETCH_HEAD
+          python3 tools/prepare_interpreter_probe.py "$upstream" --mode ios-core
+      - name: Build pinned iOS SDL and verify graphics dependencies
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install cmake ninja
+          bash "$RUNNER_TEMP/boxedvn-ios-interpreter/scripts/fetch-dependencies.sh" \
+            --platform ios --third-party-dir "$RUNNER_TEMP/interpreter-ios-deps"
+      - name: Configure actual iOS arm64 core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S "$RUNNER_TEMP/boxedvn-ios-interpreter" -B "$RUNNER_TEMP/interpreter-ios-build" -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=17.0 \
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DBOXEDVN_BUILD_TESTS=OFF -DBOXEDVN_BUILD_RUNTIME=OFF \
+            -DBOXEDVN_BUILD_MACOS_HOST=OFF -DBOXEDVN_ENABLE_UI=OFF \
+            -DBOXEDVN_ENABLE_MIDI=OFF -DBOXEDVN_ENABLE_GUEST_X64=OFF \
+            -DBOXEDVN_ENABLE_FEX64=OFF \
+            -DBOXEDVN_SDL2_ROOT="$RUNNER_TEMP/interpreter-ios-deps/prefix/ios" \
+            -DBOXEDVN_MOLTENVK_ROOT="$RUNNER_TEMP/interpreter-ios-deps/src/MoltenVK-ios-1.4.2"
+      - name: Compile real interpreter archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build "$RUNNER_TEMP/interpreter-ios-build" --target boxedwine_core --parallel 3 -- -k 0
+      - name: Stage library and precise build evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/interpreter-ios
+          cp "$RUNNER_TEMP/interpreter-ios-build/"*.a out/interpreter-ios/
+          cp "$RUNNER_TEMP/boxedvn-ios-interpreter/license.txt" out/interpreter-ios/Boxedwine-LICENSE.txt
+          xcrun lipo -info out/interpreter-ios/libboxedwine_core.a
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'interpreter-ios-build'
+          commands = json.loads((root / 'compile_commands.json').read_text())
+          selected = [x for x in commands if x['file'].endswith('portlab_interpreter_backend.cpp')]
+          assert len(selected) == 1
+          assert '-DBOXEDWINE_JIT' not in selected[0]['command']
+          assert 'iPhoneOS' in selected[0]['command']
+          report = {
+            'runtime_source': '125hz/BoxedVN',
+            'runtime_revision': '7b6e03575922967ca161f2b55c39846e242916f6',
+            'architecture': 'arm64', 'platform': 'iOS', 'jit_compiled': False,
+            'core_archive': 'libboxedwine_core.a',
+            'ios_execution': 'not_tested', 'game_playability': 'not_verified',
+            'cpu_test_run': 39871262517,
+          }
+          Path('out/interpreter-ios/build-report.json').write_text(json.dumps(report, indent=2) + '\n')
+          PY
+      - name: Retain actual library or failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-interpreter-core
+          path: |
+            out/interpreter-ios/
+            ${{ runner.temp }}/interpreter-ios-build/CMakeCache.txt
+            ${{ runner.temp }}/interpreter-ios-build/compile_commands.json
+          if-no-files-found: ignore
