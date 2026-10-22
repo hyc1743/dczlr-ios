@@ -10,6 +10,17 @@ import subprocess
 PIN = "7b6e03575922967ca161f2b55c39846e242916f6"
 
 
+def fix_interpreter_guard(source):
+    # Upstream's selection telemetry uses variables declared in the preceding
+    # JIT-only scope. Keep that telemetry inside the same conditional scope.
+    old = "        }\n#endif\n        // Account for what a requested selection actually did."
+    end = "        BOXEDWINE_CRITICAL_SECTION_WITH_MUTEX(memory->mutex);\n        op = memory->getDecodedOp(startIp);"
+    if source.count(old) != 1 or source.count(end) != 1:
+        raise ValueError("NormalCPU conditional guard changed; refusing an ambiguous patch")
+    source = source.replace(old, "        }\n        // Account for what a requested selection actually did.")
+    return source.replace(end, "#endif\n" + end)
+
+
 def prepare(root):
     root = root.resolve()
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
@@ -20,6 +31,8 @@ def prepare(root):
     flag = "\n    BOXEDWINE_MAC_JIT\n"
     if source.count(flag) != 1:
         raise ValueError("JIT configuration changed; refusing an ambiguous patch")
+    normal_cpu = root / "source/emulation/cpu/normal/normalCPU.cpp"
+    fixed_normal_cpu = fix_interpreter_guard(normal_cpu.read_text(encoding="utf-8"))
     source = source.replace(flag, "\n")
     source += '''
 # PortLab experiment: the interpreter is selected by omitting the JIT define.
@@ -43,6 +56,7 @@ foreach(name Cocoa CoreGraphics Carbon IOKit ForceFeedback GameController
 endforeach()
 '''
     cmake.write_text(source, encoding="utf-8")
+    normal_cpu.write_text(fixed_normal_cpu, encoding="utf-8")
     (root / "portlab_cpu_probe.cpp").write_text('''
 #include "boxedwine.h"
 #include <cstdio>
