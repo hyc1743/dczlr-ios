@@ -1,0 +1,77 @@
+name: Build actual iOS interpreter runtime app
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  interpreter-app:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned runtime and stage interpreter launch mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/boxedvn-ios-app"
+          git init "$upstream"
+          git -C "$upstream" fetch --depth=1 https://github.com/125hz/BoxedVN.git 7b6e03575922967ca161f2b55c39846e242916f6
+          git -C "$upstream" checkout --detach FETCH_HEAD
+          python3 tools/prepare_interpreter_app.py "$upstream"
+      - name: Identify SDK for dependency cache
+        id: sdk
+        run: echo "version=$(xcrun --sdk iphoneos --show-sdk-version)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/boxedvn-ios-app/third_party
+          key: interpreter-app-${{ runner.os }}-${{ runner.arch }}-sdk${{ steps.sdk.outputs.version }}-7b6e0357
+      - name: Build pinned iOS dependencies
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install cmake ninja
+          bash "$RUNNER_TEMP/boxedvn-ios-app/scripts/fetch-dependencies.sh" --platform ios
+      - name: Build actual frontend and interpreter bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/boxedvn-ios-app/scripts/build-ios.sh" \
+            --configuration Release --skip-dependencies --no-bundled-rootfs \
+            --output-dir "$RUNNER_TEMP/interpreter-app-build"
+      - name: Package the interpreter app and report actual limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out/interpreter-app/Payload
+          ditto "$RUNNER_TEMP/interpreter-app-build/DerivedData/Build/Products/Release-iphoneos/BoxedVN.app" \
+            out/interpreter-app/Payload/BoxedVN.app
+          (cd out/interpreter-app && zip -qry PortLab-interpreter-unsigned.ipa Payload)
+          cp "$RUNNER_TEMP/boxedvn-ios-app/license.txt" out/interpreter-app/Runtime-LICENSE.txt
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          Path('out/interpreter-app/build-report.json').write_text(json.dumps({
+              'cpu_backend': 'x86 interpreter', 'jit_compiled': False,
+              'native_runtime': 'Boxedwine core and actual iOS launch bridge',
+              'upstream_revision': '7b6e03575922967ca161f2b55c39846e242916f6',
+              'wine_rootfs': 'requires separately supplied runtime ZIP',
+              'original_game_files': 'not included', 'game_playability': 'not verified',
+              'device_execution': 'not verified', 'signing': 'unsigned',
+          }, indent=2) + '\n')
+          PY
+      - name: Retain IPA or actual build failure logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-interpreter-app
+          path: |
+            out/interpreter-app/*.ipa
+            out/interpreter-app/*.json
+            out/interpreter-app/*LICENSE.txt
+            ${{ runner.temp }}/interpreter-app-build/xcodebuild.log
+            ${{ runner.temp }}/interpreter-app-build/cmake/CMakeCache.txt
+          if-no-files-found: ignore
