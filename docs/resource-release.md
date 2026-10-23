@@ -59,3 +59,9 @@ locations, cross-part restoration, stale/partial repair, save/config preservatio
 corrupt-part rejection and malformed-path/oversized-segment rejection. This gate
 uses no original resources; the separate local full-data roundtrip covers the
 real package bytes.
+
+The actual Swift importer gate passed in native run `40028825820` from source
+`f199ad8`; its retained log includes the explicit importer PASS marker. The
+matching app run `40028786968` also passed its device packaging and generated
+startup/audio/GPU-card checks. This is a verified development stage, not a
+complete playable-game release.

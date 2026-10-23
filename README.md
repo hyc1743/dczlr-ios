@@ -27,20 +27,23 @@ AVAudioPlayer; pointer hover and selection use the reconstructed menu helper.
 Existing save prefixes supply title unlock flags. **New-game/load/extra actions,
 full script execution, gameplay and actual game-save writing are not complete.**
 
-Public CI uses entirely generated fixtures. The latest inspected app stage,
-source `661eaca`, passed 140 portable tests, 103 ARM64 native tests, iPhoneOS
-compilation, device IPA packaging, a checker scene and the generated two-card /
-title / audio-clock gate. Runs: app `40025756624`, native `40025792555`. The
-fullscreen title layout was inspected. System screenshots can lag earlier
-markers, so subsequent work adds exact-frame GPU captures and generated-card
-pixel checks; the two older card screenshots alone are insufficient identity
-proof. Physical-device execution, audible output, original GPU equivalence and
+Public CI uses entirely generated fixtures. The inspected app stage, source
+`f199ad8`, passed 146 portable tests, 107 ARM64 native tests, compilation of 16
+iPhoneOS objects, device IPA packaging, a checker scene and generated fullscreen
+two-card / title / audio-clock gates. Runs: app `40028786968`, native
+`40028825820`. Exact stable-frame GPU readbacks distinguish both cards with
+nine central color samples each; captures, title and checker screenshots were
+inspected. Delayed system screenshot labels are not used for earlier-card
+identity. The actual Swift importer also passed its generated three-part
+roundtrip/recovery/preservation/corruption/path/oversized-segment gate.
+Physical-device execution, audible output, original GPU equivalence and
 complete-game playability remain unverified.
 
-The numbered intro script reader is a later native-only increment: 19 local
-scripts / 434 record spans match independent framing. Control codes, glyph
-layout, voice sequencing and state dispatch remain separate work. Its source
-`76350b6` passes the independent native workflow `40026854428`.
+The intro reader matches 434 opaque numbered-record spans across 19 local
+scripts, preserving cursor order for 52 repeated IDs. The new-game numeric
+initializer matches all 59,960 bytes from the isolated original helper. Script
+commands, glyph layout, voice sequencing and new-game state dispatch remain
+unfinished; these numeric/reader results do not make gameplay available.
 
 Implementation and verification details:
 

@@ -94,3 +94,15 @@ checks nine central samples against the generated blue/orange card profiles.
 Swapped or repeated-card screenshots fail this check. Normal launches do not
 save these captures. UI screenshots remain useful for layout inspection but
 cannot alone certify the identity of the earlier card.
+
+## Verified development stage
+
+Source `f199ad86f343051b70144c1337cd3b8b5ea48869` passed app run
+`40028786968` and native run `40028825820`. Downloaded artifacts match the
+source hashes and bundled resource manifest; all sixteen native objects are
+ARM64 Mach-O objects. The unsigned iPhoneOS IPA passed packaging checks.
+The generated simulator startup gate observed the two cards, title and music
+clock, with 3/31-second stage intervals. Both exact GPU card PNGs pass their
+9-sample identity profiles and were visually inspected, along with title and
+checker screenshots. The actual Swift importer gate also passed on ARM64
+macOS. There is no original full-game or physical-device playability evidence.
