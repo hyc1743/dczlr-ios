@@ -7,11 +7,34 @@ permissions:
   contents: read
 
 jobs:
+  compile-win32-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate guest execution evidence rules
+        run: python3 -m unittest discover -s tests -p test_wine_boot_evidence.py -v
+      - name: Compile the self-authored 32-bit Windows probe
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686
+          mkdir -p out/win32-probe
+          i686-w64-mingw32-gcc -std=c11 -Os -Wall -Wextra -Werror -static \
+            probes/win32_smoke.c -o out/win32-probe/portlab-win32-smoke.exe -lgdi32 -luser32 -lwinmm
+          file out/win32-probe/portlab-win32-smoke.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: self-authored-win32-probe
+          path: out/win32-probe/portlab-win32-smoke.exe
   wine-boot:
+    needs: compile-win32-probe
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: self-authored-win32-probe
+          path: out/win32-probe
       - name: Stage pinned actual interpreter host
         shell: bash
         run: |
@@ -55,6 +78,14 @@ jobs:
           set -euo pipefail
           python3 tools/run_wine_boot_probe.py "$RUNNER_TEMP/wine-boot-build/portlab_wine_host" \
             "$RUNNER_TEMP/TinyCore15Wine11.0.zip" --output out/wine-boot --seconds 240
+      - name: Verify Win32 files, threads, GDI pixels and audio buffer completion
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/run_wine_boot_probe.py "$RUNNER_TEMP/wine-boot-build/portlab_wine_host" \
+            "$RUNNER_TEMP/TinyCore15Wine11.0.zip" --output out/win32-smoke --seconds 240 \
+            --guest-exe out/win32-probe/portlab-win32-smoke.exe
       - name: Retain only bounded execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,5 +94,7 @@ jobs:
           path: |
             out/wine-boot/wine-console.log
             out/wine-boot/wine-boot-report.json
+            out/win32-smoke/wine-console.log
+            out/win32-smoke/wine-boot-report.json
             ${{ runner.temp }}/wine-boot-build/compile_commands.json
           if-no-files-found: ignore

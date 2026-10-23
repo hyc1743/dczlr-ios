@@ -69,6 +69,23 @@ counts; printing the command line cannot pass. The harness stops after a hard
 deadline and records shutdown separately from whether Wine executed the command.
 Graphics, audio, iOS execution and game playability remain separate gates.
 
+Run `39878555474` passed that console execution gate. The retained guest log
+ends with the exact `PORTLAB_WINE32_OK` line (surrounded by terminal cursor
+escapes), and the report records 31.08 seconds. The host was subsequently
+stopped by the bounded harness with exit code 1, so this is evidence of command
+execution, not clean host shutdown. Changing the diagnostic profile made the
+test pass; it does not isolate which change resolved the initial timeout.
+
+The next gate in the same workflow compiles `probes/win32_smoke.c` as a static
+PE32 executable, mounts only its artifact directory and launches it through
+Wine in a separate scratch prefix. It checks a temporary file roundtrip,
+thread/event completion and exit status, 64 known offscreen GDI pixels, and
+WinMM submission/completion of a silent PCM buffer. The harness requires all
+four exact subsystem markers plus the final marker. SDL uses a dummy audio
+device; neither audible output nor on-screen presentation is established.
+D3D9 and physical iOS execution remain untested by this gate. No original
+application executable or resources are used or uploaded.
+
 ## Correction to the earlier shader investigation
 
 The previous token scanner undercounted both comments and instructions by one

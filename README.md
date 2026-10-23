@@ -2,7 +2,9 @@
 
 This repository contains an experimental iOS interpreter runtime and a separate diagnostic host. There is no verified playable game release yet.
 
-The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and guest boot and target-device playability remain unverified.
+The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.
+
+Wine console execution has passed on the ARM64 macOS runner in run `39878555474`: the genuine no-JIT interpreter produced the exact guest-output line `PORTLAB_WINE32_OK` in 31.08 seconds. The host was subsequently stopped by the bounded harness; normal shutdown was not demonstrated. This console-only profile disables optional HTML/.NET installers. It does not prove iOS execution, graphics, audio or game compatibility. The same workflow now also builds and runs a self-authored PE32 probe for file roundtrips, thread/event synchronization, offscreen GDI pixel readback and WinMM buffer completion through a dummy SDL audio device. These additional checks require their own successful guest markers.
 
 The default `build-ios.yml` and `release-ios.yml` workflows still produce the earlier diagnostic `PortLab-unsigned.ipa`. Those are platform tests, not the interpreter runtime or a playable game release.
 

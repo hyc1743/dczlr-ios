@@ -81,6 +81,6 @@ REA 的 PE 资源解析已经确认主程序有 13 个资源，其中 7 个命�
 
 ## 当前阻塞
 
-PortLab 已通过公共仓的 macOS Actions 编译并生成 arm64 未签名 IPA，构建 run 为 `39833671786`。它只是平台实验宿主，没有游戏执行引擎，不能运行原游戏。优先研究普通侧载且无需手动开启 JIT 的路线；执行后端调查见 `runtime-decision.md`。当前游戏仍没有已知 ARM64 Switch 客体或原始源码可供复用。
+早期平台实验宿主之外，真正的无 JIT 解释器与 iOS 启动桥已在 run `39877459414` 构建出 ARM64 未签名 IPA。Wine 的命令行执行验证也已在 ARM64 macOS runner 的 run `39878555474` 通过，日志包含完整客体输出标记；宿主随后由测试控制器结束，正常退出尚未验证。当前继续使用自制 PE32 程序验证文件、线程、离屏 GDI 和音频缓冲接口。这些证据尚不能证明 iOS 客体启动、D3D9、实机画面、声音或可玩性。执行后端调查见 `runtime-decision.md`；仍没有已知 ARM64 Switch 客体或原始源码可供复用。
 
 Ghidra 12.1.4 headless 已尝试对 ASCII 副本做静态导入，但上级 `weixing3` 安装目录拒绝写入 x86 语言缓存 `x86.sla`，因此没有导出函数或调用图。状态见 `research/ghidra-port-status.json`；本次没有执行或修改目标。
