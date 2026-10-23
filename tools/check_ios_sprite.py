@@ -53,7 +53,8 @@ def check(app, output, runtime):
     device = phone["udid"]
     run("xcrun", "simctl", "bootstatus", device, "-b", timeout=240)
     run("xcrun", "simctl", "install", device, str(app))
-    run("xcrun", "simctl", "launch", "--terminate-running-process", device, "org.example.portlab")
+    launch = run("xcrun", "simctl", "launch", "--terminate-running-process", device, "org.example.portlab")
+    (output / "launch.txt").write_text(launch + "\n", encoding="utf-8")
     container = Path(run("xcrun", "simctl", "get_app_container", device, "org.example.portlab", "data"))
     deadline = time.monotonic() + 60
     log = ""
@@ -66,8 +67,30 @@ def check(app, output, runtime):
                 break
         time.sleep(1)
     (output / "app.log").write_text(log, encoding="utf-8")
+    unified = subprocess.run(["xcrun", "simctl", "spawn", device, "log", "show", "--last", "3m",
+        "--style", "compact", "--predicate", 'process == "PortLab" OR process == "SpringBoard" OR eventMessage CONTAINS[c] "PortLab"'],
+        capture_output=True, text=True, timeout=60)
+    (output / "unified.log").write_text(unified.stdout + unified.stderr, encoding="utf-8")
+    container_logs = Path(run("xcrun", "simctl", "get_app_container", device,
+        "org.example.portlab", "data")) / "Library/Logs"
+    crash_dir = output / "app-crashes"
+    crash_dir.mkdir(exist_ok=True)
+    if container_logs.exists():
+        import shutil
+        for crash in container_logs.rglob("*.ips"):
+            shutil.copyfile(crash, crash_dir / crash.name)
+    diagnostic_reports = Path.home() / "Library/Logs/DiagnosticReports"
+    if diagnostic_reports.exists():
+        import shutil
+        for crash in diagnostic_reports.glob("*PortLab*.ips"):
+            shutil.copyfile(crash, crash_dir / crash.name)
     run("xcrun", "simctl", "io", device, "screenshot", str(output / "sprite-scene.png"))
     if marker not in log:
+        process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
+            capture_output=True, text=True, timeout=30)
+        (output / "processes.log").write_text(process.stdout + process.stderr, encoding="utf-8")
+        if unified.returncode:
+            raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified.stderr[-1500:])
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame: " + log[-2000:])
     report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device, "scene": "self-authored checker sprite",
               "vulkan_first_present": "reported_by_native_view_after_successful_present",

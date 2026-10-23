@@ -43,11 +43,12 @@
         [self releaseRenderer];
 }
 - (nullable NSString *)drawAtX:(float)x y:(float)y time:(double)time {
-    if (!self.window || self.bounds.size.width <= 0 || self.bounds.size.height <= 0) return nil;
+    if (!self.window) return @"Vulkan sprite view is not attached to a window";
+    if (self.bounds.size.width <= 0 || self.bounds.size.height <= 0) return @"Vulkan sprite view has empty bounds";
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     if (!_renderer) {
         uint32_t width = (uint32_t)layer.drawableSize.width, height = (uint32_t)layer.drawableSize.height;
-        if (!width || !height) return nil;
+        if (!width || !height) return @"CAMetalLayer has empty drawable size";
         dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 16, .initial_filter = 2,
             .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
             .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv),

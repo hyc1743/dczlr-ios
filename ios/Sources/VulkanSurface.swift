@@ -7,6 +7,7 @@ struct VulkanSurface: UIViewRepresentable {
     func makeCoordinator() -> SpritePresenter { SpritePresenter(model: model) }
 
     func makeUIView(context: Context) -> DCVulkanSpriteView {
+        model.record("Vulkan UIView creation")
         let view = DCVulkanSpriteView(frame: .zero)
         context.coordinator.attach(view)
         return view
@@ -27,6 +28,7 @@ final class SpritePresenter: NSObject {
     private weak var view: DCVulkanSpriteView?
     private var displayLink: CADisplayLink?
     private var reportedFirstFrame = false
+    private var reportedFirstTick = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
 
@@ -34,6 +36,7 @@ final class SpritePresenter: NSObject {
 
     func attach(_ view: DCVulkanSpriteView) {
         self.view = view
+        model.record("Vulkan display link attached")
         let link = CADisplayLink(target: self, selector: #selector(draw))
         link.preferredFramesPerSecond = 30
         link.isPaused = !model.active
@@ -53,6 +56,10 @@ final class SpritePresenter: NSObject {
 
     @objc private func draw() {
         guard model.active, !failed, let view = view else { return }
+        if !reportedFirstTick {
+            reportedFirstTick = true
+            model.record("Vulkan display tick; attached=\(view.window != nil), bounds=\(view.bounds)")
+        }
         if let error = view.renderSprite(x: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start) {
             failed = true
             displayLink?.isPaused = true
