@@ -160,5 +160,36 @@ ARM64 云端验证已在提交 `512a13c` 的 run `39921045212` 通过：20 项�
 
 此命令计划不建立初始深度、混合启用、alpha test 或其他纹理阶段状态。其他渲染路径
 修改相关状态后必须使混合缓存失效。后端成功执行整个计划后才能提交新缓存，执行失败
-时必须使缓存失效。顶点更新函数 `0x00420a60`、Vulkan 状态实现及 GPU 像素对照仍未完成；
+时必须使缓存失效。Vulkan 状态实现及 GPU 像素对照仍未完成；
 提交顺序的原版对照通过不等于游戏已出帧。
+
+## 精灵顶点生成
+
+`native/render/dc_sprite_vertices.c` 重建 `0x00420a60` 的顶点更新行为，生成左上、左下、
+右上、右下排列的四个 32 字节顶点。包括尺寸／缩放、支点、旋转、Z、RHW、UV、ARGB
+diffuse 和固定 specular。无旋转时，先把支点调整后的左上角截断到整数，再加上宽高；
+不能将此行为替换成四角分别取整。颜色同原版截断 `255*channel` 后取低八位，不做 clamp。
+
+`tools/oracle_sprite_vertices.py` 隔离执行固定输入中的顶点函数、两个构造辅助函数和
+浮点转整数函数。原版可执行指令限制在这四个已分析函数的指令边界内。Lock／Unlock、
+128 字节复制均为有界合成入口，不调用图形设备。旋转矩阵／向量变换交给固定摘要的
+微软 x64 `D3DX9_43.dll` 数学函数，**未执行原 x86 D3DX 实现**，两类证据分别记录：
+
+- 128 组正零／负零角度输入，四个顶点的完整 128 字节与隔离原函数逐字节一致。
+- 256 组非零旋转输入，除 XY 坐标外的字段逐字节一致，XY 通过绝对误差 `0.001`
+  加相对误差 `1e-6` 的检查；本机最大绝对误差为 `0.00048828125`。
+- 原版更新只写合成栈，通过有界复制提取输出；输入结构、输出前后哨兵和最终返回均核对。
+
+自制输入含负尺寸缩放、分数坐标、不同支点、UV 和越过 0..1 的颜色值。公开夹具保留
+48 组代表性输入／原版输出数值，不含原版指令或资源。数值范围不等于完整浮点输入空间；
+原生 API 明确拒绝非有限值和越过 int32 截断范围的输入，不模仿原版的未定义越界行为。
+旋转使用平台 libm，不声称恢复了原版三角函数的位级精度。
+
+```powershell
+python tools/oracle_sprite_vertices.py --exe research/target.exe --dll-dir .tools/d3dx-reference/build/native/release/bin/x64 --output research/native-core/sprite-vertices-oracle.json --vectors tests/fixtures/sprite-vertices-original-vectors.json
+python -m unittest discover -s tests -p test_native_sprite.py -v
+```
+
+本地新增四项顶点测试检查原函数数值夹具、旋转与支点、UV／颜色／顺序、负缩放、
+非有限值和错误时不修改输出。iPhoneOS 构建清单已纳入模块，ARM64 执行待本轮新提交
+验证。仍需将顶点与提交计划接到真实 Vulkan／MoltenVK，原生游戏流程尚未完成。

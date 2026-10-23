@@ -55,6 +55,34 @@ typedef struct dc_sprite_plan {
 DC_API dc_status dc_sprite_build_plan(const dc_sprite_draw *draw,
                                       uint32_t cached_mode, dc_sprite_plan *out);
 
+typedef struct dc_sprite_pose {
+    float width, height;
+    float x, y, z;
+    float origin_x, origin_y;
+    float scale_x, scale_y;
+    float alpha, rotation;
+    float red, green, blue;
+    float u0, u1, v0, v1;
+} dc_sprite_pose;
+
+typedef struct dc_sprite_vertex {
+    float x, y, z, rhw;
+    uint32_t diffuse, specular;
+    float u, v;
+} dc_sprite_vertex;
+
+/* Build the observed TL, BL, TR, BR triangle strip (0x00420a60).
+ * width/height already include the creation-time scale; scale_x/y are the
+ * later sprite scale. Zero rotation truncates the pivot-adjusted top-left
+ * toward zero before adding width/height. Nonzero rotation uses radians and
+ * rotates about (x,y). ARGB channels truncate 255*channel and retain low eight
+ * bits, matching the original's wrapping rather than clamping.
+ * Finite inputs and int32-range color/truncation intermediates are required.
+ * All output coordinates must be finite. Error leaves vertices unchanged.
+ * Rotated math is portable libm; bit-identical D3DX trigonometry is not claimed. */
+DC_API dc_status dc_sprite_build_vertices(const dc_sprite_pose *pose,
+                                          dc_sprite_vertex vertices[4]);
+
 #ifdef __cplusplus
 }
 #endif

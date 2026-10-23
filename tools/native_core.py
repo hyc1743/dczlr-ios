@@ -39,6 +39,17 @@ class SpriteDraw(C.Structure):
                 ("point_filter", C.c_uint8), ("software_vertex", C.c_uint8)]
 
 
+class SpritePose(C.Structure):
+    _fields_ = [(name, C.c_float) for name in (
+        "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
+        "alpha", "rotation", "red", "green", "blue", "u0", "u1", "v0", "v1")]
+
+
+class SpriteVertex(C.Structure):
+    _fields_ = [("x", C.c_float), ("y", C.c_float), ("z", C.c_float), ("rhw", C.c_float),
+                ("diffuse", C.c_uint32), ("specular", C.c_uint32), ("u", C.c_float), ("v", C.c_float)]
+
+
 class SpriteCommand(C.Structure):
     _fields_ = [("kind", C.c_uint32), ("argument_count", C.c_uint32),
                 ("arguments", C.c_size_t * 4)]
@@ -73,7 +84,7 @@ def compiler_command():
 def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c",
-               ROOT / "native/render/dc_sprite.c"]
+               ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h"]
     digest = hashlib.sha256("\0".join(command).encode())
@@ -90,7 +101,7 @@ def library():
         env = dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(ROOT / ".tools/zig-cache"))
         result = subprocess.run(command + ["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
             "-DDC_NATIVE_SHARED", *shared_flags, "-I" + str(ROOT / "native/include"),
-            *(str(p) for p in sources), "-o", str(target)], env=env,
+            *(str(p) for p in sources), *(["-lm"] if sys.platform != "win32" else []), "-o", str(target)], env=env,
             capture_output=True, text=True, timeout=180)
         if result.returncode:
             raise RuntimeError("Native C compilation failed:\n" + result.stderr[-8000:])
@@ -120,6 +131,8 @@ def library():
     lib.dc_image_decode.restype = C.c_int
     lib.dc_sprite_build_plan.argtypes = [C.POINTER(SpriteDraw), C.c_uint32, C.POINTER(SpritePlan)]
     lib.dc_sprite_build_plan.restype = C.c_int
+    lib.dc_sprite_build_vertices.argtypes = [C.POINTER(SpritePose), C.POINTER(SpriteVertex)]
+    lib.dc_sprite_build_vertices.restype = C.c_int
     return lib
 
 
