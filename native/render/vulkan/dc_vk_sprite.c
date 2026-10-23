@@ -544,7 +544,9 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         .vertexBindingDescriptionCount = 1, .pVertexBindingDescriptions = &vertex_binding,
         .vertexAttributeDescriptionCount = 3, .pVertexAttributeDescriptions = attributes};
     VkPipelineInputAssemblyStateCreateInfo assembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP};
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, .primitiveRestartEnable = VK_TRUE};
+    /* All draws are non-indexed, so restart cannot alter their four vertices.
+     * Enabling it admits Metal portability devices that cannot disable restart. */
     VkViewport viewport = {0, 0, (float)r->width, (float)r->height, 0, 1};
     VkRect2D scissor = {{0, 0}, {r->width, r->height}};
     VkPipelineViewportStateCreateInfo view = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,

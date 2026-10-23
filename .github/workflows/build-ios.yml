@@ -60,6 +60,16 @@ jobs:
           path: |
             ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app
             ios/Resources/DczlrData.manifest.json
+      - name: Launch the Vulkan sprite scene on iPhone simulator
+        timeout-minutes: 8
+        run: |
+          python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --output out/ios-sprite
+      - name: Upload simulator Vulkan execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-simulator-vulkan-scene
+          path: out/ios-sprite/
 
   unsigned-ipa:
     needs: portable
