@@ -110,7 +110,18 @@ EMA 外层为两个 little-endian 32 位尺寸与五字节 `.bmp\0`／`.tga\0` �
 RGBA 分配，返回持有独立像素数据的 `DCDecodedImage`。iOS 资源检查每个包最多解码
 一个候选图像，并将图像失败与归档失败分开报告。Apple 适配器新增合成像素、大小
 限制和非法输入检查，`native-core.yml` 纳入 ARM64 测试及 iPhoneOS 图像模块编译。
-这些 Apple 改动本轮尚待云端实际编译／执行，不将本地 Windows 结果当作 Apple 通过。
+提交 `d2233fe` 已在云端 run `39900492387` 通过 ARM64 macOS 的 15 项原生 C 测试、
+iPhoneOS ARM64 核心编译，以及实际 Apple 文件／图像适配器执行。日志包含
+`PORTLAB_APPLE_ARCHIVE_ADAPTER_OK` 和 `PORTLAB_APPLE_IMAGE_ADAPTER_OK`。
+这证明 Apple 主机上的适配器行为；物理 iPhone 上的执行仍未验证。
+
+同一提交的 run `39900423338` 已通过 Ubuntu 全套测试、模拟器 App 和设备 IPA 构建。
+下载产物已检查为 ARM64/iPhoneOS 可执行映像，包含 `dc_image_probe`、`dc_image_decode`、
+`dc_pp_open`、`DCDecodedImage` 和 `DCArchive` 符号；云端核心报告中的两份 C 源码摘要
+与本地一致，没有打包原始 EXE、DLL、PP 或资源分卷。
+本地阶段包 `out/PortLab-native-images-unsigned.ipa` 为 118,969 字节，SHA-256 为
+`742eb0874f409081850ac9552f86e1917ba3fd5661a52e2e4633cbfcadf54796`。
+包内仍是诊断 Metal 场景，不是可游玩游戏；图像解码和构建通过不证明游戏渲染或逻辑完成。
 
 下一步仍需恢复原生渲染及游戏状态机：明确模型和内嵌纹理布局、着色器与渲染状态，
 将解码后的图像上传真实 Vulkan/MoltenVK，再验证游戏入口、输入、音频和存档流程。
