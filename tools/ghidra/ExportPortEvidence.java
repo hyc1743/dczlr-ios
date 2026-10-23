@@ -3,6 +3,11 @@
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
+import ghidra.program.model.listing.Data;
+import ghidra.program.model.listing.DataIterator;
+import ghidra.program.model.listing.Instruction;
+import ghidra.program.model.listing.InstructionIterator;
+import ghidra.program.model.symbol.Reference;
 import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolIterator;
 import java.io.File;
@@ -32,6 +37,41 @@ public class ExportPortEvidence extends GhidraScript {
                 String name = symbol.getName();
                 if (name == null || !interesting(name)) continue;
                 symbols.printf("%s\t%s\t%s\t%s%n", symbol.getAddress(), name, symbol.getSource(), symbol.getSymbolType());
+            }
+        }
+        try (PrintWriter strings = new PrintWriter(new FileWriter(new File(out, "resource-string-xrefs.tsv"), false))) {
+            strings.println("string_address\tfrom_address\tfunction_entry\tfunction_name\tvalue");
+            DataIterator iterator = currentProgram.getListing().getDefinedData(true);
+            while (iterator.hasNext() && !monitor.isCancelled()) {
+                Data item = iterator.next();
+                Object value = item.getValue();
+                if (!(value instanceof String)) continue;
+                String text = (String)value;
+                String lower = text.toLowerCase();
+                if (!(lower.contains(".pp") || lower.contains(".xx") || lower.contains(".xa")
+                        || lower.contains(".cam") || lower.contains(".plst"))) continue;
+                for (Reference reference : getReferencesTo(item.getAddress())) {
+                    Function function = getFunctionContaining(reference.getFromAddress());
+                    strings.printf("%s\t%s\t%s\t%s\t%s%n", item.getAddress(),
+                        reference.getFromAddress(), function == null ? "" : function.getEntryPoint(),
+                        function == null ? "" : function.getName(),
+                        text.replace("\t", " ").replace("\r", " ").replace("\n", " "));
+                }
+            }
+        }
+        try (PrintWriter sites = new PrintWriter(new FileWriter(new File(out, "byte-transform-sites.tsv"), false))) {
+            sites.println("address\tfunction_entry\tfunction_name\tinstruction");
+            InstructionIterator iterator = currentProgram.getListing().getInstructions(true);
+            while (iterator.hasNext() && !monitor.isCancelled()) {
+                Instruction instruction = iterator.next();
+                String mnemonic = instruction.getMnemonicString();
+                if (!(mnemonic.equals("NEG") || mnemonic.equals("NOT"))) continue;
+                byte[] bytes = instruction.getBytes();
+                if (bytes.length == 0 || (bytes[0] & 255) != 0xf6) continue;
+                Function function = getFunctionContaining(instruction.getAddress());
+                sites.printf("%s\t%s\t%s\t%s%n", instruction.getAddress(),
+                    function == null ? "" : function.getEntryPoint(),
+                    function == null ? "" : function.getName(), instruction);
             }
         }
         println("Exported static port evidence to " + out.getAbsolutePath());
