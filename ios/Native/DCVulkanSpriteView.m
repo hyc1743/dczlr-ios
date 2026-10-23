@@ -123,11 +123,15 @@ static const char dcRenderQueueKey;
     float scale = originalCard ? fminf((float)_width / sourceWidth, (float)_height / sourceHeight)
                                : fminf(_width, _height) * 0.4f / 2;
     float quadWidth = sourceWidth * scale, quadHeight = sourceHeight * scale;
-    float left = (_width - quadWidth) * 0.5f + x * _width * 0.3f;
-    float top = (_height - quadHeight) * 0.5f - y * _height * 0.3f;
+    float originX = originalCard ? 0 : 0.5f;
+    float originY = originalCard ? 0 : 0.5f;
+    float spriteX = originalCard ? (_width - quadWidth) * 0.5f + x * _width * 0.3f
+                                 : _width * (0.5f + x * 0.3f);
+    float spriteY = originalCard ? (_height - quadHeight) * 0.5f - y * _height * 0.3f
+                                 : _height * (0.5f - y * 0.3f);
     dc_vk_sprite_item draw = {.texture = originalCard ? _startupTexture : _texture, .blend_mode = 3, .point_filter = 0,
-        .pose = {.width = quadWidth, .height = quadHeight, .x = left, .y = top,
-            .z = 0, .origin_x = 0, .origin_y = 0, .scale_x = 1, .scale_y = 1,
+        .pose = {.width = quadWidth, .height = quadHeight, .x = spriteX, .y = spriteY,
+            .z = 0, .origin_x = originX, .origin_y = originY, .scale_x = 1, .scale_y = 1,
             .alpha = 1, .red = 1, .green = 1, .blue = 1,
             .rotation = originalCard ? 0 : (float)fmod(time * 0.35, 6.283185307179586),
             .u0 = 0, .u1 = 1, .v0 = 0, .v1 = 1}};
