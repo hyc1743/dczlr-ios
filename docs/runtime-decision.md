@@ -50,6 +50,18 @@ contains 177 ARM64 Mach-O objects and the no-JIT backend assertion compiled.
 frontend, with interpreter startup separated from JIT preflight checks.
 That app build is not yet evidence of guest execution.
 
+The actual interpreter App gate has passed in run `39877459414`. The inspected
+IPA is an iOS-device ARM64 executable; its interpreter backend symbol and
+non-JIT launch path are linked. No Wine root filesystem or original game is
+bundled. This still does not establish phone startup or game playability.
+
+The first Wine console experiment, run `39877142723`, did not emit the required
+marker within its deadline. It loaded the pinned Wine root archive and produced
+X11 window events. This is a failed boot gate, not a successful Wine test. The
+next run enables Wine exception diagnostics and uses a console-only profile
+that disables optional HTML/.NET installation prompts. That profile is confined
+to the console test; it is not a claim of general game compatibility.
+
 The independent `runtime-wine-boot.yml` gate runs the real macOS interpreter
 host without test-only flags. It downloads the hash-pinned upstream Wine 11
 runtime and asks `cmd.exe` to emit an exact output line. Only guest output

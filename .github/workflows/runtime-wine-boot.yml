@@ -33,14 +33,20 @@ jobs:
             -DBOXEDVN_ENABLE_MIDI=ON -DBOXEDVN_ENABLE_GUEST_X64=OFF \
             -DBOXEDVN_ENABLE_FEX64=OFF -DBOXEDVN_SDL2_ROOT="$(brew --prefix sdl2)"
           cmake --build "$RUNNER_TEMP/wine-boot-build" --target portlab_wine_host --parallel 3 -- -k 0
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/TinyCore15Wine11.0.zip
+          key: wine11-rootfs-41835c49ce0e582a1d7a610243a8e4a95bc59996fb780c09705dc476bb9b6493
       - name: Fetch and authenticate the upstream Wine runtime
         timeout-minutes: 6
         shell: bash
         run: |
           set -euo pipefail
           target="$RUNNER_TEMP/TinyCore15Wine11.0.zip"
-          curl --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 300 \
-            https://boxedwine.org/v2/7/TinyCore15Wine11.0.zip -o "$target"
+          if [ ! -f "$target" ]; then
+            curl --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 300 \
+              https://boxedwine.org/v2/7/TinyCore15Wine11.0.zip -o "$target"
+          fi
           echo "41835c49ce0e582a1d7a610243a8e4a95bc59996fb780c09705dc476bb9b6493  $target" | shasum -a 256 -c -
       - name: Execute real Wine and require cmd.exe output
         timeout-minutes: 5

@@ -25,7 +25,8 @@ def run(host, rootfs, output, seconds):
     prefix = output / "prefix"
     prefix.mkdir(exist_ok=True)
     args = [str(host.resolve()), "-root", str(prefix.resolve()), "-zip", str(rootfs.resolve()),
-            "-nozip", "-novideo", "-nosound", "-env", "WINEDEBUG=-all",
+            "-nozip", "-novideo", "-nosound", "-env", "WINEDEBUG=err+all,warn+all,+seh",
+            "-env", "WINEDLLOVERRIDES=mscoree,mshtml=;winemenubuilder.exe=d",
             "/bin/wine", "cmd.exe", "/d", "/c", "echo", MARKER]
     master, slave = pty.openpty()
     process = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=slave, stderr=slave,
@@ -48,6 +49,8 @@ def run(host, rootfs, output, seconds):
     started = time.monotonic()
     observed = False
     natural_exit = False
+    output_limit = False
+    logged_bytes = 0
     try:
         with (output / "wine-console.log").open("w", encoding="utf-8") as log:
             while time.monotonic() - started < seconds:
@@ -58,6 +61,11 @@ def run(host, rootfs, output, seconds):
                         break
                     continue
                 if line is None:
+                    break
+                logged_bytes += len(line.encode("utf-8"))
+                if logged_bytes > 16 * 1024 * 1024:
+                    log.write("OUTPUT_LIMIT_REACHED\n")
+                    output_limit = True
                     break
                 log.write(line)
                 log.flush()
@@ -85,6 +93,8 @@ def run(host, rootfs, output, seconds):
         "elapsed_seconds": round(time.monotonic() - started, 2),
         "host_shutdown": "returned_normally" if natural_exit else "stopped_by_bounded_harness",
         "host_exit_code": process.returncode,
+        "boot_profile": "console only; optional HTML/.NET installers disabled",
+        "diagnostic_output_limit_reached": output_limit,
         "graphics": "not_tested", "audio": "not_tested",
         "ios_execution": "not_tested", "game_playability": "not_verified",
     }

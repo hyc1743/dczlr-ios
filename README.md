@@ -1,6 +1,10 @@
 # iOS PortLab
 
-This repository contains the staged iOS host and conversion research for the supplied Windows PE32 game. The current public workflow builds an unsigned PortLab test IPA; it does not yet contain a runnable native guest or a signed release.
+This repository contains an experimental iOS interpreter runtime and a separate diagnostic host. There is no verified playable game release yet.
+
+The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and guest boot and target-device playability remain unverified.
+
+The default `build-ios.yml` and `release-ios.yml` workflows still produce the earlier diagnostic `PortLab-unsigned.ipa`. Those are platform tests, not the interpreter runtime or a playable game release.
 
 The host already has the resource import contract needed for a future port. A bundled manifest describes 132 local `Data` files split into three release assets, each no larger than 1 GB. The assets are intentionally outside Git history and the IPA.
 
