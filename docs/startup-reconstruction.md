@@ -14,6 +14,8 @@ callback `0x00511f20`. That callback installs update `0x00512050`, sprite draw
 loads card 1 after card 0, or releases the current card and replaces the update
 callback with `0x00512370` after card 1. The native planner represents that last
 boundary as `ENTER_NEXT`; it does not pretend the next state is implemented.
+The host schedules the new callback for the following update and clears the
+startup draw/cleanup callbacks; it must not invoke next-state setup immediately.
 
 When timing is unlocked, elapsed adds the supplied delta and compares against
 2,000 for card 0 or 30,000 for card 1. Exact input byte 3 requests external state

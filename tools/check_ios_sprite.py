@@ -34,6 +34,8 @@ def check(app, output, runtime):
     app = app.resolve(strict=True)
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    if (app / "Resources").exists() or (app / "Contents").exists():
+        raise ValueError("iOS flat bundle contains a reserved macOS-style directory")
     with (app / "Info.plist").open("rb") as source:
         info = plistlib.load(source)
     if info.get("CFBundleIdentifier") != "org.example.portlab" or not info.get("CFBundleExecutable"):

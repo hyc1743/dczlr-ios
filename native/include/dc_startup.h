@@ -22,6 +22,8 @@ enum dc_startup_action_kind {
     DC_STARTUP_REQUEST_TRANSITION = 1,
     DC_STARTUP_LOAD_CARD = 2,
     DC_STARTUP_RELEASE_CARD = 3,
+    /* Replace the update callback and clear startup draw/cleanup callbacks.
+     * Next-state setup runs on the following update, not inside this plan. */
     DC_STARTUP_ENTER_NEXT = 4
 };
 typedef struct dc_startup_action { uint32_t kind, value; } dc_startup_action;

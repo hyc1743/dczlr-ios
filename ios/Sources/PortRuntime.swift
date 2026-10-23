@@ -84,7 +84,7 @@ struct BundleResourceStore: ResourceStore {
     let bundle: Bundle
 
     func data(for resource: ResourceId) throws -> Data {
-        guard let url = bundle.url(forResource: resource.rawValue, withExtension: "bin", subdirectory: "Resources") else {
+        guard let url = bundle.url(forResource: resource.rawValue, withExtension: "bin") else {
             throw NSError(domain: "PortRuntime.ResourceStore", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "缺少资源：\(resource.rawValue)"])
         }

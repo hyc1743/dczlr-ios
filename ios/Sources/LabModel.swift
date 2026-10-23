@@ -38,7 +38,7 @@ final class LabModel: ObservableObject {
     }
 
     private func importResourcePacksIfPresent() {
-        guard let manifest = Bundle.main.url(forResource: "DczlrData.manifest", withExtension: "json", subdirectory: "Resources") else { return }
+        guard let manifest = Bundle.main.url(forResource: "DczlrData.manifest", withExtension: "json") else { return }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         let hasParts = names.contains { $0.hasPrefix("DczlrData.part") && $0.hasSuffix(".dczdata") }
             || ((try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("ResourcePacks").path)) ?? []).contains { $0.hasSuffix(".dczdata") }

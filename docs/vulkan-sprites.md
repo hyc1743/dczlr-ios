@@ -70,3 +70,14 @@ For local iOS builds, run this tool with
 `ios/Generated/sprite-shaders` before running XcodeGen. The Apple CI job runs the
 same numeric pixel gate offscreen and with an actual CAMetalLayer swapchain.
 An API presentation success does not by itself prove a user inspected the screen.
+
+A separate local integration check decoded the two original 1024x768 startup
+EMA entries from the native PP reader and uploaded/drew them on the Intel Vulkan
+GPU. With explicitly selected texel-center UVs, both complete RGBA readbacks
+matched the independently computed blend exactly. These images and the detailed
+report remain local (`research/native-core/startup-texture-upload.json`). The
+unadjusted 0..1 UV trial for the first image did not match a direct pixel copy:
+integer-center sprite geometry places point samples on texel boundaries. Both
+the mismatch and successful center-sampling trial are retained. This check proves
+the resource-to-texture path for those inputs, not original D3D9 sampling
+equivalence or an integrated startup screen.
