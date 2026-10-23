@@ -38,5 +38,7 @@ and counts; original script bytes are not uploaded. The `%C` actor-command and
 backlog/replay branches remain outside the admitted profile and fail explicitly.
 
 CP932 text layout, body control execution, typewriter timing, voice playback,
-branching and new-game callback dispatch still require reconstruction and
-runtime tests. Parser equivalence does not establish playability.
+branching and subsequent gameplay callbacks still require reconstruction and
+runtime tests. The first new-game chapter is connected through the partial
+Apple adapter described in `intro-host.md`. Parser equivalence does not
+establish playability.

@@ -11,5 +11,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)detachRenderer;
 - (nullable NSString *)attachRenderer:(dc_vk_sprite *)renderer;
 - (nullable NSString *)drawAtTick:(uint32_t)tick touching:(BOOL)touching width:(uint32_t)width height:(uint32_t)height;
+/* Shared original transition model continues after startup. Query before
+ * request/update; external scenes supply sprites beneath the projected mesh. */
+- (dc_status)queryTransitionReady:(uint32_t *)ready;
+- (dc_status)requestTransition:(uint32_t)request tick:(uint32_t)tick;
+- (nullable NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
+    tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height;
 @end
 NS_ASSUME_NONNULL_END

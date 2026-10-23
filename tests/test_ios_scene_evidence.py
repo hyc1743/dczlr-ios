@@ -4,10 +4,17 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_intro_requires_complete_order_and_its_own_audio_marker(self):
+        lines=['2026-10-24T12:00:00Z PORTLAB_SCENE_PRESENTED='+scene+' submitted' for scene in ('startup','warning','title','intro')]
+        audio='2026-10-24T12:00:40Z PORTLAB_INTRO_AUDIO_ADVANCED submitted'
+        for invalid in (lines,lines[:-1]+[audio],lines+[audio.replace(' PORTLAB',' echo PORTLAB')],lines+[audio.replace('ADVANCED','ADVANCED_pending')]):
+            with self.assertRaises(ValueError):new_game_evidence('\n'.join(invalid))
+        self.assertEqual(new_game_evidence('\n'.join(lines+[audio]))['complete_game'],'not verified')
+
     def test_pose_requires_changed_transform_marker_and_presented_scene(self):
         log="2026-10-24T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
         self.assertFalse(scene_ready(log,"checker",require_pose=True))

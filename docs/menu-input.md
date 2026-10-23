@@ -21,11 +21,11 @@ precision, hover, press and toggle behavior. Public replay stores only a digest;
 original code and game resources remain separate local analysis inputs.
 
 The Apple title view uses this module for pointer hover/release and selection
-audio, with edit/extra availability read from existing save metadata. It does
-not yet dispatch all title actions, open the load screen or start gameplay.
-The original title driver and post-transition callbacks have been located;
-their host connections remain separate work. CPU oracle tests do not establish
-UIKit input or complete-game behavior.
+audio, with edit/extra availability read from existing save metadata. New Game
+now dispatches the first intro chapter through the verified planner. The other
+destinations and subsequent gameplay remain unfinished. See `intro-host.md`
+for adapter and validation limits. CPU oracle tests do not establish UIKit
+input or complete-game behavior.
 
 `dc_title_build_plan` now restores the ordered routing at `0x005129c0` and
 `0x0052b830`. It first resolves a pending transition, including the selection
@@ -42,4 +42,5 @@ of actions, waiting/query/busy flags, escape codes, hover and menu results.
 External menu/audio/transition/initialization calls are synthetic boundaries;
 callback writes and callback clearing execute in the original functions.
 The Windows Alt-F4 path is held inactive. This adds verified native routing;
-Apple callback destinations and intro rendering remain unfinished.
+Apple New Game dispatch now uses this planner; other callback destinations
+and original intro text-rendering equivalence remain unfinished.

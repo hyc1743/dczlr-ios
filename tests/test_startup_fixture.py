@@ -12,9 +12,25 @@ from startup_fixture import resources,install
 from native_core import library,PPArchive,XXModel,Viewport,SpriteVertex,Matrix,StartupPlan,StartupState,StartupInput,MaterialValue
 from scene_cases import matrix
 from check_ios_sprite import startup_evidence
+from script_decode_cases import native_result
 
 
 class StartupFixtureTests(unittest.TestCase):
+    def test_new_game_fixture_resolves_pending_media_and_three_records(self):
+        files=resources();lib=library()
+        with PPArchive(files['RPP_16.pp']) as archive:data=archive.read(0)
+        cursor=0
+        for frame in range(3):
+            result=native_result(lib,{'hex':data.hex(),'cursor':cursor,'frame':frame,'controls':[['#C',2],['#P',5]]})
+            self.assertGreater(result['cursor'],cursor);cursor=result['cursor']
+            if frame==0:
+                for key,filename,extension in (('background','RPP_02.pp',b'.ema'),('music','RPP_01.pp',b'.wav'),('sound','RPP_14.pp',b'.wav')):
+                    name=bytes.fromhex(result[key]).split(b'\0')[0]+extension
+                    with PPArchive(files[filename]) as archive:
+                        self.assertIn(name.lower(),[archive.entry(i).name_bytes.lower() for i in range(archive.count)])
+                voice=bytes.fromhex(result['controls'])[37:74].split(b'\0')[0]+b'.wav'
+                with PPArchive(files['RPP_00.pp']) as archive:self.assertEqual(archive.entry(0).name_bytes,voice)
+
     def test_generated_archives_drive_both_cards_and_transition_geometry(self):
         files=resources();lib=library()
         with PPArchive(files['RPP_17.pp']) as archive:xx,xa=archive.read(0),archive.read(1)
@@ -50,10 +66,10 @@ class StartupFixtureTests(unittest.TestCase):
     def test_fixture_install_is_explicit_and_never_overwrites_existing_data(self):
         with tempfile.TemporaryDirectory() as root:
             destination=Path(root)/'Data';report=install(destination)
-            self.assertEqual(set(report['files']),{'RPP_01.pp','RPP_02.pp','RPP_14.pp','RPP_17.pp'})
+            self.assertEqual(set(report['files']),{'RPP_00.pp','RPP_01.pp','RPP_02.pp','RPP_14.pp','RPP_16.pp','RPP_17.pp'})
             with self.assertRaises(ValueError):install(destination)
             with PPArchive(destination/'RPP_02.pp') as cards:
-                self.assertEqual(cards.count,11)
+                self.assertEqual(cards.count,12)
             with PPArchive(destination/'RPP_01.pp') as audio:
                 with wave.open(io.BytesIO(audio.read(0)),'rb') as source:
                     self.assertEqual((source.getnchannels(),source.getsampwidth(),source.getframerate()),(1,2,22050))

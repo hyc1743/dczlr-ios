@@ -51,6 +51,8 @@
     _selection.currentTime=0;
     return [_selection play];
 }
+- (BOOL)selectionBusy { return _selection.isPlaying; }
+- (void)stopTitleMusic { [_music stop]; }
 - (void)pause { [_music pause];[_selection stop]; }
 - (void)dealloc { [_music stop];[_selection stop]; }
 @end

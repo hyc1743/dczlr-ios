@@ -68,10 +68,10 @@ jobs:
         timeout-minutes: 8
         run: |
           python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --output out/ios-sprite
-      - name: Exercise the two-card startup with generated resources
+      - name: Exercise startup and New Game with generated resources
         timeout-minutes: 8
         run: |
-          python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene title --startup-fixture --output out/ios-startup
+          python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene intro --startup-fixture --exercise-new-game --output out/ios-startup
       - name: Upload simulator Vulkan execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -122,7 +122,7 @@ jobs:
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'not_embedded',
               'native_resource_module': 'PP, BMP/TGA/EMA, XA clip/material/node keys and XX readers linked; device execution unverified',
-              'graphics_backend': 'self-authored XA/XX decoded into animation, material and local pose sampling driving Vulkan sprite through MoltenVK; game not integrated',
+              'graphics_backend': 'native startup/title transition and first intro adapter through Vulkan/MoltenVK; complete gameplay and original text timing unfinished',
               'game_playability': 'not_claimed',
               'resource_manifest': 'embedded',
               'resource_parts': 'external local user files; not bundled or published by this workflow',

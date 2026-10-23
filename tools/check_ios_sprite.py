@@ -10,14 +10,14 @@ import os
 
 
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
-          "title": "title-screen background and menu layers"}
+          "title": "title-screen background and menu layers", "intro": "first new-game script record and text adapter"}
 
 
 def presented_scenes(log):
     # LabModel prefixes every app-authored record with its timestamp. Require
     # the exact marker at the start of that message, not an echoed command or
     # prose saying an asset was merely loaded.
-    return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(checker|startup|warning|title)(?= |$)", log)
+    return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(checker|startup|warning|title|intro)(?= |$)", log)
 
 
 def startup_evidence(log,require_audio=False):
@@ -39,6 +39,15 @@ def startup_evidence(log,require_audio=False):
             'first_to_second_seconds':first,'second_to_title_seconds':second,
             'title_audio':'playback clock advanced; audible output unverified' if require_audio else 'not required by this profile',
             'original_resources':'not exercised; generated fixtures only','game_playability':'not verified'}
+
+
+def new_game_evidence(log):
+    if presented_scenes(log)!=['startup','warning','title','intro'] or not re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log):
+        raise ValueError('New-game route or intro audio clocks were not verified')
+    return {'route':'startup/title pointer hover, press, release/transition and sound wait/intro',
+        'resources':'self-authored generated PP/script/image/audio only','intro_audio_clocks':'music/sound/voice advanced',
+        'text_adapter':'Apple fallback font, complete-record preview; glyph timing equivalence pending',
+        'physical_device':'not tested','complete_game':'not verified'}
 
 
 def animation_advanced(log):
@@ -107,7 +116,9 @@ def select_device(output, runtime):
     return phone
 
 
-def check(app, output, runtime, expected_scene="checker", startup_fixture=False):
+def check(app, output, runtime, expected_scene="checker", startup_fixture=False, exercise_new_game=False):
+    if exercise_new_game and (not startup_fixture or expected_scene!='intro'):
+        raise ValueError('New-game exercise requires generated startup fixture and intro target')
     require_animation = expected_scene == "checker"
     require_xa = expected_scene == "checker"
     require_material = expected_scene == "checker"
@@ -145,7 +156,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
     except (RuntimeError, subprocess.TimeoutExpired) as error:
         (output / "container-error.txt").write_text(str(error), encoding="utf-8")
     if startup_fixture:
-        if expected_scene!='title' or container is None:
+        if expected_scene not in ('title','intro') or container is None:
             raise ValueError('Startup fixture requires title target and resolved app container')
         from startup_fixture import install
         profile=install(container/'Documents/game/Data')
@@ -153,6 +164,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
     try:
         launch_environment=dict(os.environ)
         if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
+        if exercise_new_game:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_NEW_GAME']='1'
         launch_process = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
             device, "org.example.portlab"], capture_output=True, text=True, timeout=60,env=launch_environment)
         launch = launch_process.stdout + launch_process.stderr
@@ -175,6 +187,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
                         captured.add(scene)
             scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
             audio_ok=not startup_fixture or bool(re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log))
+            if exercise_new_game:audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log))
             if (scene_ok and audio_ok) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
@@ -230,6 +243,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
             name=f'startup-card-{index}.png'
             shutil.copyfile(container/'Documents'/name,output/name)
         report['startup_pixels']=verify((output/'startup-card-0.png').read_bytes(),(output/'startup-card-1.png').read_bytes())
+    if exercise_new_game:
+        report['new_game']=new_game_evidence(log)
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")
@@ -243,10 +258,11 @@ if __name__ == "__main__":
     parser.add_argument("--expected-scene", choices=SCENES, default="checker")
     parser.add_argument("--boot-only", action="store_true")
     parser.add_argument("--startup-fixture", action="store_true")
+    parser.add_argument("--exercise-new-game", action="store_true")
     args = parser.parse_args()
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game)
     else:
         parser.error("--app is required unless --boot-only is selected")

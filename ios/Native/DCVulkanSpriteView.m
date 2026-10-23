@@ -10,6 +10,7 @@
 #import "DCArchive.h"
 #import "DCStartupScene.h"
 #import "DCGameAudio.h"
+#import "DCIntroScene.h"
 #include "dc_menu.h"
 #include "dc_save.h"
 #include <math.h>
@@ -32,6 +33,9 @@ static void dc_write_float_le(uint8_t *out, float value) {
     uintptr_t _texture;
     DCStartupScene *_startupScene;
     DCGameAudio *_gameAudio;
+    DCIntroScene *_introScene;
+    dc_title_state _titleState;
+    BOOL _titleStateInitialized;
     dc_menu_state _titleMenu;
     BOOL _titleMenuInitialized,_previousTitleTouch;
     BOOL _titleUnlocksLoaded,_editUnlocked,_extraUnlocked;
@@ -80,6 +84,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
 - (void)releaseRenderer {
     dispatch_async(_renderQueue, ^{
         [self->_gameAudio pause];
+        [self->_introScene pause];
         self->_previousTitleTouch=NO;
         [self destroyRenderer];
     });
@@ -132,6 +137,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     return YES;
 }
 - (void)destroyRenderer {
+    [_introScene detachRenderer];
     [_startupScene detachRenderer];
     dc_vk_sprite_destroy(_renderer);
     _renderer = NULL;
@@ -222,6 +228,15 @@ static void dc_write_float_le(uint8_t *out, float value) {
     BOOL titleReady = _startupScene.finished && [self tryLoadTitleSceneFromDirectory:directory];
     BOOL showTitle = titleReady;
     if (_startupScene.finished && !titleReady) return @"Startup completed but title resources are unavailable";
+    double sceneMilliseconds=time*1000.0;
+    if(!isfinite(sceneMilliseconds) || sceneMilliseconds<0)return @"Invalid scene animation time";
+    uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
+    if(_introScene) {
+        NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
+            touching:touching width:_width height:_height];
+        if(failure)return failure;
+        _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
+    }
     dc_vk_sprite_item draws[5] = {0};
     size_t drawCount = 0;
     BOOL animationMoved = NO;
@@ -255,11 +270,20 @@ static void dc_write_float_le(uint8_t *out, float value) {
         }
         NSString *audioError=[_gameAudio startTitleMusic];
         if(audioError)return audioError;
+        if(!_titleStateInitialized) {
+            _titleState=(dc_title_state){.waiting=1,.hover=255};
+            if([_startupScene requestTransition:4 tick:sceneTick]!=DC_OK)return @"Title entry transition failed";
+            _titleStateInitialized=YES;
+        }
+        uint32_t transitionReady=0;
+        if([_startupScene queryTransitionReady:&transitionReady]!=DC_OK)return @"Title transition query failed";
         /* The original title assets and hit regions use 1024x768 coordinates. */
         float scale = fminf((float)_width / 1024.0f, (float)_height / 768.0f);
         float offsetX = ((float)_width - 1024.0f * scale) * 0.5f;
         float offsetY = ((float)_height - 768.0f * scale) * 0.5f;
-        if (touching || _previousTitleTouch) {
+        int32_t menuResult=-1,menuRow=-1;
+        BOOL acceptsInput=!_titleState.waiting || (_titleState.action==0 && transitionReady);
+        if (acceptsInput && (touching || _previousTitleTouch)) {
             float screenX = (x + 1.0f) * 0.5f * _width;
             float screenY = (1.0f - y) * 0.5f * _height;
             float gameX = (screenX - offsetX) / scale;
@@ -276,9 +300,40 @@ static void dc_write_float_le(uint8_t *out, float value) {
             dc_status menuStatus=dc_menu_step(&_titleMenu,buttons,5,(int32_t)gameX,(int32_t)gameY,1,input,&result);
             if(menuStatus!=DC_OK)return @"Title menu update failed";
             _selectedTitleOption=_titleMenu.active ? _titleMenu.hover+2 : -1;
-            if(result==1 && ![_gameAudio playMenuSelection])return @"Menu selection audio failed";
+            menuResult=result;menuRow=_titleMenu.hover;
         }
         _previousTitleTouch=touching;
+        dc_title_input titleInput={.transition_ready=transitionReady,.selection_busy=_gameAudio.selectionBusy,
+            .menu_result=menuResult,.menu_row=menuRow};
+        dc_title_plan titlePlan;
+        if(dc_title_build_plan(&_titleState,&titleInput,&titlePlan)!=DC_OK)return @"Title action planning failed";
+        for(uint32_t i=0;i<titlePlan.count;++i) {
+            dc_title_command command=titlePlan.commands[i];
+            if(command.kind==DC_TITLE_PLAY_SELECTION) {
+                if(![_gameAudio playMenuSelection])return @"Menu selection audio failed";
+            } else if(command.kind==DC_TITLE_TRANSITION) {
+                if([_startupScene requestTransition:command.value tick:sceneTick]!=DC_OK)return @"Title selection transition failed";
+            } else if(command.kind==DC_TITLE_CLEANUP || command.kind==DC_TITLE_STOP_MUSIC) {
+                [_gameAudio stopTitleMusic];
+            } else if(command.kind==DC_TITLE_ENTER) {
+                if(command.value!=1)return [NSString stringWithFormat:@"Title destination %u is not implemented",command.value];
+            } else if(command.kind==DC_TITLE_INIT_GAME) {
+                NSString *introError=nil;
+                _introScene=[[DCIntroScene alloc] initWithDirectory:directory error:&introError];
+                if(!_introScene)return introError ?: @"New-game initialization failed";
+                if([_startupScene requestTransition:3 tick:sceneTick]!=DC_OK ||
+                   [_startupScene requestTransition:4 tick:sceneTick]!=DC_OK)return @"Intro entry transition failed";
+            } else if(command.kind==DC_TITLE_QUIT) {
+                return @"Game session ended";
+            } else return @"Title destination adapter is not implemented";
+        }
+        _titleState=titlePlan.next;
+        if(_introScene) {
+            NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
+                touching:touching width:_width height:_height];
+            if(failure)return failure;
+            _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
+        }
 #define ADD_TITLE_LAYER(index_, x_, y_) do { \
     dc_vk_sprite_item *item = &draws[drawCount++]; \
     item->texture = _titleTextures[(index_)]; item->blend_mode = 3; \
@@ -408,7 +463,9 @@ static void dc_write_float_le(uint8_t *out, float value) {
             .u0 = 0, .u1 = 1, .v0 = 0, .v1 = 1};
     }
     const uint8_t clear[] = {10,15,26,255};
-    if (dc_vk_sprite_render(_renderer, draws, drawCount, clear, NULL, 0) != DC_OK) {
+    NSString *titleFailure=showTitle ? [_startupScene drawSprites:draws count:drawCount tick:sceneTick width:_width height:_height] : nil;
+    if (titleFailure || (!showTitle && dc_vk_sprite_render(_renderer, draws, drawCount, clear, NULL, 0) != DC_OK)) {
+        if(titleFailure)return titleFailure;
         NSString *message = [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
         [self destroyRenderer];
         return message;
@@ -437,7 +494,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
             BOOL advanced = self->_diagnosticAnimationAdvanced;
             BOOL materialAdvanced = self->_diagnosticMaterialAdvanced;
             BOOL poseAdvanced = self->_diagnosticPoseAdvanced;
-            BOOL musicAdvanced = self->_gameAudio.musicAdvanced;
+            BOOL musicAdvanced = self->_introScene ? self->_introScene.audioAdvanced : self->_gameAudio.musicAdvanced;
             dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced); });
         }
     });

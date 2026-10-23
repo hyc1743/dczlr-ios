@@ -33,6 +33,8 @@ final class SpritePresenter: NSObject {
     private var reportedMaterialAdvance = false
     private var reportedPoseAdvance = false
     private var reportedMusicAdvance = false
+    private var reportedIntroAudioAdvance = false
+    private var testTitleTime: CFTimeInterval?
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -61,8 +63,21 @@ final class SpritePresenter: NSObject {
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
         renderPending = true
-        view.requestDraw(atX: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start,
-            touching: model.touchActive) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced in
+        var pointerX = model.x, pointerY = model.y, touching = model.touchActive
+        // CI supplies generated resources and exercises the same menu input
+        // adapter. Normal launches continue to use the user's pointer state.
+        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
+           let titleTime = testTitleTime, lastReportedScene == .title {
+            let elapsed = CACurrentMediaTime() - titleTime
+            let scale = min(view.bounds.width / 1024, view.bounds.height / 768)
+            let px = (view.bounds.width - 1024 * scale) / 2 + 830 * scale
+            let py = (view.bounds.height - 768 * scale) / 2 + 424 * scale
+            pointerX = Float(2 * px / view.bounds.width - 1)
+            pointerY = Float(1 - 2 * py / view.bounds.height)
+            touching = elapsed >= 6 && elapsed < 6.4
+        }
+        view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
+            touching: touching) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced in
                 guard let self = self else { return }
                 self.renderPending = false
                 if let error = error {
@@ -85,8 +100,11 @@ final class SpritePresenter: NSObject {
                     case .startupTransition:
                         self.model.record("启动过场模型已完成呈现", event: "PORTLAB_STARTUP_TRANSITION_PRESENTED")
                     case .title:
+                        if self.testTitleTime == nil { self.testTitleTime = CACurrentMediaTime() }
                         self.model.record("双卡启动状态已完成并进入标题呈现", event: "PORTLAB_STARTUP_COMPLETED")
                         self.model.record("Vulkan / MoltenVK 已显示标题画面（\(device)）；后续游戏逻辑尚未接入", event: "PORTLAB_SCENE_PRESENTED=title")
+                    case .intro:
+                        self.model.record("New-game intro record presented; later gameplay remains unfinished", event: "PORTLAB_SCENE_PRESENTED=intro")
                     @unknown default:
                         self.model.record("Vulkan 返回未知场景编号：\(scene.rawValue)")
                     }
@@ -108,6 +126,10 @@ final class SpritePresenter: NSObject {
                 if scene == .title, musicAdvanced, !self.reportedMusicAdvance {
                     self.reportedMusicAdvance = true
                     self.model.record("标题音乐播放时钟已推进；声音输出仍需设备确认", event: "PORTLAB_TITLE_AUDIO_ADVANCED")
+                }
+                if scene == .intro, musicAdvanced, !self.reportedIntroAudioAdvance {
+                    self.reportedIntroAudioAdvance = true
+                    self.model.record("Intro music, sound and voice playback clocks advanced", event: "PORTLAB_INTRO_AUDIO_ADVANCED")
                 }
             }
     }

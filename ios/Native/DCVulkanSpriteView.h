@@ -6,7 +6,8 @@ typedef NS_ENUM(NSInteger, DCVulkanSpriteScene) {
     DCVulkanSpriteSceneStartupCard = 1,
     DCVulkanSpriteSceneTitle = 2,
     DCVulkanSpriteSceneStartupWarning = 3,
-    DCVulkanSpriteSceneStartupTransition = 4
+    DCVulkanSpriteSceneStartupTransition = 4,
+    DCVulkanSpriteSceneIntro = 5
 };
 /* Native sprite integration scene. This view does not run the game. */
 @interface DCVulkanSpriteView : UIView

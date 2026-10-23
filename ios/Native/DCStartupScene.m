@@ -149,10 +149,42 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     status=dc_model_tick(_model,delta,tick,&world);
     if (status!=DC_OK) return [NSString stringWithFormat:@"Startup model update failed: %d",status];
     _tickInitialized=YES;_lastTick=tick;_wasTouching=touching;
+    return [self renderSprites:NULL count:0 width:width height:height];
+}
+- (dc_status)queryTransitionReady:(uint32_t *)ready {
+    uint32_t clip;
+    return dc_model_query(_model,&clip,ready);
+}
+- (dc_status)requestTransition:(uint32_t)request tick:(uint32_t)tick {
+    return dc_model_request(_model,request,tick);
+}
+- (NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
+        tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height {
+    uint32_t delta=_tickInitialized ? tick-_lastTick : 0;
+    dc_matrix world=dcStartupIdentity();
+    dc_status status=dc_model_tick(_model,delta,tick,&world);
+    if(status!=DC_OK)return @"Scene transition model update failed";
+    _tickInitialized=YES;_lastTick=tick;
+    return [self renderSprites:items count:count width:width height:height];
+}
+- (NSString *)renderSprites:(const dc_vk_sprite_item *)items count:(size_t)itemCount
+        width:(uint32_t)width height:(uint32_t)height {
+    if(itemCount>8 || (itemCount && !items))return @"Scene sprite profile rejected";
+    dc_status status;uint32_t clip,ready;
     float scale=fminf((float)width/1024,(float)height/768);
     dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
-    dc_vk_geometry_item draws[17]={0};
+    dc_vk_geometry_item draws[25]={0};
     dc_sprite_vertex card[6];size_t count=0;
+    dc_sprite_vertex sprites[8][6];
+    const unsigned order[6]={0,1,2,2,1,3};
+    for(size_t i=0;i<itemCount;++i) {
+        dc_sprite_vertex corners[4];
+        status=dc_sprite_build_vertices(&items[i].pose,corners);
+        if(status!=DC_OK)return @"Scene sprite projection failed";
+        for(unsigned j=0;j<6;++j)sprites[i][j]=corners[order[j]];
+        draws[count++]=(dc_vk_geometry_item){.vertices=sprites[i],.vertex_count=6,
+            .texture=items[i].texture,.blend_mode=items[i].blend_mode,.point_filter=items[i].point_filter};
+    }
     if (_card<2) {
         dc_sprite_pose pose={.width=viewport.width,.height=viewport.height,.x=viewport.x,.y=viewport.y,.z=.5f,
             .scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1};
