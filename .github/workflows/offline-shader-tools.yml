@@ -1,0 +1,127 @@
+name: Build and verify offline shader conversion tools
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-tools:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake libtool pkg-config flex bison libjson-perl \
+            libvulkan-dev spirv-headers spirv-tools cmake ninja-build \
+            gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix
+      - name: Fetch hash-pinned tool sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/shader-tools/source"
+          cd "$RUNNER_TEMP/shader-tools/source"
+          curl --fail --location --retry 2 -o vkd3d.tar.xz \
+            https://dl.winehq.org/vkd3d/source/vkd3d-1.17.tar.xz
+          curl --fail --location --retry 2 -o spirv-tools.tar.gz \
+            https://codeload.github.com/KhronosGroup/SPIRV-Tools/tar.gz/refs/tags/vulkan-sdk-1.4.304.0
+          curl --fail --location --retry 2 -o spirv-headers.tar.gz \
+            https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/refs/tags/vulkan-sdk-1.4.304.0
+          echo 'bc61cb9e84d5045cbcaffbdd707940d399d8bf62874663dfe5809a0bfb87e9b6  vkd3d.tar.xz' | sha256sum -c
+          echo 'ad6e8922538c498e7131bcd82a8d6d9f9863b8d7431c5bfa27dd98e26435be07  spirv-tools.tar.gz' | sha256sum -c
+          echo '162b864ebaf339d66953fc2c4ad974bc4f453e0f04155cd3755a85e33f408eee  spirv-headers.tar.gz' | sha256sum -c
+          tar -xf vkd3d.tar.xz
+          tar -xf spirv-tools.tar.gz
+          tar -xf spirv-headers.tar.gz
+      - name: Build native Linux compiler and check self-authored shaders
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/shader-tools"
+          mkdir -p "$root/native"
+          cd "$root/native"
+          "$root/source/vkd3d-1.17/configure" --disable-tests --disable-demos \
+            --without-opengl --without-xcb --without-ncurses --without-metal --without-spirv-tools
+          make -j2 include/private/vkd3d_version.h vkd3d-compiler
+          cd "$GITHUB_WORKSPACE"
+          python3 tools/smoke_shader_converter.py --compiler "$root/native/vkd3d-compiler" \
+            --validator /usr/bin/spirv-val --output out/offline-tools/native-smoke
+      - name: Cross-compile Windows x64 converter
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/shader-tools"
+          mkdir -p "$root/cross" "$root/headers"
+          cp -R /usr/include/vulkan /usr/include/spirv "$root/headers/"
+          cd "$root/cross"
+          CC=x86_64-w64-mingw32-gcc-posix CFLAGS='-O2 -static-libgcc' \
+            LDFLAGS='-static-libgcc' CPPFLAGS="-I$root/headers" \
+            "$root/source/vkd3d-1.17/configure" --host=x86_64-w64-mingw32 \
+            --disable-tests --disable-demos --without-opengl --without-xcb \
+            --without-ncurses --without-metal --without-spirv-tools
+          make -j2 include/private/vkd3d_version.h vkd3d-compiler.exe
+      - name: Cross-compile Windows x64 SPIR-V validator
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/shader-tools"
+          cmake -S "$root/source/SPIRV-Tools-vulkan-sdk-1.4.304.0" -B "$root/spirv-cross" -G Ninja \
+            -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc-posix \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++-posix -DCMAKE_BUILD_TYPE=Release \
+            -DPython3_EXECUTABLE=/usr/bin/python3 -DCMAKE_EXE_LINKER_FLAGS=-static \
+            -DSPIRV-Headers_SOURCE_DIR="$root/source/SPIRV-Headers-vulkan-sdk-1.4.304.0" \
+            -DSPIRV_SKIP_TESTS=ON -DSPIRV_WERROR=OFF -DBUILD_SHARED_LIBS=OFF
+          cmake --build "$root/spirv-cross" --target spirv-val -j2
+      - name: Stage Windows tools, source and provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/shader-tools"
+          mkdir -p out/offline-tools/windows/licenses out/offline-tools/windows/source
+          cp "$root/cross/.libs/vkd3d-compiler.exe" "$root/cross/.libs/libvkd3d-shader-1.dll" \
+            "$root/spirv-cross/tools/spirv-val.exe" out/offline-tools/windows/
+          cp "$root/source/vkd3d-1.17/COPYING" out/offline-tools/windows/licenses/vkd3d-COPYING
+          cp "$root/source/vkd3d-1.17/LICENSE" out/offline-tools/windows/licenses/vkd3d-LICENSE
+          cp "$root/source/SPIRV-Tools-vulkan-sdk-1.4.304.0/LICENSE" out/offline-tools/windows/licenses/SPIRV-Tools-LICENSE
+          cp "$root/source/SPIRV-Headers-vulkan-sdk-1.4.304.0/LICENSE" out/offline-tools/windows/licenses/SPIRV-Headers-LICENSE
+          cp "$root/source/"*.tar.* out/offline-tools/windows/source/
+          cp out/offline-tools/native-smoke/conversion-report.json out/offline-tools/windows/native-reference.json
+          x86_64-w64-mingw32-objdump -p out/offline-tools/windows/*.exe | grep 'DLL Name' > out/offline-tools/windows/imports.txt
+          python3 - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          root=Path('out/offline-tools/windows')
+          report={'source_revision':os.environ['GITHUB_SHA'], 'vkd3d_version':'1.17',
+              'spirv_tools_tag':'vulkan-sdk-1.4.304.0', 'original_game_inputs_used':False,
+              'sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in root.iterdir() if p.suffix in ('.exe','.dll')}}
+          (root/'build-report.json').write_text(json.dumps(report,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-shader-tools-windows-x64
+          path: out/offline-tools/windows/
+
+  windows-smoke:
+    needs: build-tools
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: offline-shader-tools-windows-x64
+          path: out/offline-tools/windows
+      - name: Execute the actual Windows converter and validator
+        shell: pwsh
+        run: |
+          python tools/smoke_shader_converter.py --compiler out/offline-tools/windows/vkd3d-compiler.exe --validator out/offline-tools/windows/spirv-val.exe --output out/offline-tools/windows-smoke --reference out/offline-tools/windows/native-reference.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: offline-shader-tools-windows-verification
+          path: out/offline-tools/windows-smoke/conversion-report.json

@@ -11,13 +11,18 @@ import urllib.parse
 import urllib.request
 
 
-def credential(directory):
+def credential(directory, username=None):
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
     if token:
         return token.strip()
+    if username and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,63}", username):
+        raise ValueError("Invalid GitHub credential username")
+    query = "protocol=https\nhost=github.com\n"
+    if username:
+        query += "username=" + username + "\n"
     result = subprocess.run(
         ["git", "-c", "credential.interactive=false", "credential", "fill"],
-        cwd=directory, input="protocol=https\nhost=github.com\n\n",
+        cwd=directory, input=query + "\n",
         capture_output=True, text=True, timeout=30,
         env=dict(os.environ, GCM_INTERACTIVE="Never", GIT_TERMINAL_PROMPT="0"))
     values = dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)
@@ -68,6 +73,7 @@ def push(token, repository, root):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--credential-dir", type=Path)
+    parser.add_argument("--credential-user", help="Select an existing account when the credential store has multiple GitHub accounts")
     parser.add_argument("action", choices=["identity", "ensure-public", "push", "runs", "jobs", "artifacts", "job-log", "artifact"])
     parser.add_argument("--repo", default="hyc1743/dczlr-ios")
     parser.add_argument("--id", type=int)
@@ -75,7 +81,7 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.repo):
         raise ValueError("Expected owner/repository")
-    token = credential(args.credential_dir)
+    token = credential(args.credential_dir, args.credential_user)
     prefix = "/repos/" + args.repo
     if args.action == "identity":
         user = request(token, "GET", "/user")
