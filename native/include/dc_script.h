@@ -20,6 +20,27 @@ typedef struct dc_script_record {
  * control-flow execution or rendering. Failure leaves output unchanged. */
 DC_API dc_status dc_script_find(const void *bytes,size_t length,size_t cursor,
     uint32_t frame,dc_script_record *out);
+
+#define DC_SCRIPT_CONTROL_LIMIT 11u
+typedef struct dc_script_control {
+    uint8_t key[16]; /* NUL terminated, nonempty; matched in caller order. */
+    uint32_t parameter_bytes; /* 1..35; original fixed-size header copy. */
+} dc_script_control;
+typedef struct dc_script_decoded {
+    dc_script_record record;
+    uint8_t background[20],music[20],sound[20],message[20];
+    uint8_t controls[DC_SCRIPT_CONTROL_LIMIT][37];
+} dc_script_decoded;
+/* Normal sequential branch of original 0x592590: scans pre-record #cg,
+ * #MS, #bg (three-byte comparison), #SE in their original per-iteration
+ * order, accumulating names after '#'. Header controls copy fixed bytes
+ * plus an optional A/B/C suffix. Command names have 19-byte capacity;
+ * configured control results have 36-byte capacity plus NUL. Malformed or
+ * overflowing input fails atomically. %C actor commands are not admitted.
+ * Encoded text stays opaque. Playback/backlog branches and glyph/body
+ * interpretation remain outside this API. Input/output cannot overlap. */
+DC_API dc_status dc_script_decode(const void *bytes,size_t length,size_t cursor,
+    uint32_t frame,const dc_script_control *controls,size_t count,dc_script_decoded *out);
 #ifdef __cplusplus
 }
 #endif

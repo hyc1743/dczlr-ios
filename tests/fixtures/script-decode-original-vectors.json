@@ -1,0 +1,12 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 761,
+  "output_sha256": "d59e39bcd11c34847113dbbd194586d16a6b618f09a9875b0c9752e7a17cb4c7",
+  "original_function_sha256": {
+    "0x592590": "7beecb3248c480559d57cc34e2f011b691a4d237bcc572eee245300f2edd983c"
+  },
+  "original_game_resources_used": false,
+  "coverage": "normal sequential branch; pre-record command accumulation/order; fixed header controls; speaker/body/cursor; no actor commands, backlog, glyph/voice or scene execution",
+  "execution": "isolated original x86; CRT strings/format/memory functions intercepted",
+  "game_playability": "not verified"
+}

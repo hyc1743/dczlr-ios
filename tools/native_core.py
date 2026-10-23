@@ -167,6 +167,14 @@ class ScriptRecord(C.Structure):
                 ("marker_offset",C.c_size_t),("next_offset",C.c_size_t),("frame",C.c_uint32)]
 
 
+class ScriptControl(C.Structure):
+    _fields_ = [('key',C.c_uint8*16),('parameter_bytes',C.c_uint32)]
+
+
+class ScriptDecoded(C.Structure):
+    _fields_ = [('record',ScriptRecord)]+[(n,C.c_uint8*20) for n in ('background','music','sound','message')]+[('controls',(C.c_uint8*37)*11)]
+
+
 class SceneNode(C.Structure):
     _fields_ = [("parent", C.c_uint32), ("modifier", C.c_uint32),
                 ("hidden", C.c_uint8), ("billboard", C.c_uint8), ("reserved", C.c_uint8 * 2),
@@ -370,6 +378,8 @@ def library():
     lib.dc_menu_step.restype = C.c_int
     lib.dc_title_build_plan.argtypes = [C.POINTER(TitleState),C.POINTER(TitleInput),C.POINTER(TitlePlan)]
     lib.dc_title_build_plan.restype = C.c_int
+    lib.dc_script_decode.argtypes = [C.c_void_p,C.c_size_t,C.c_size_t,C.c_uint32,C.POINTER(ScriptControl),C.c_size_t,C.POINTER(ScriptDecoded)]
+    lib.dc_script_decode.restype = C.c_int
     lib.dc_scene_update.argtypes = [C.POINTER(SceneNode), C.c_size_t, C.POINTER(Matrix), C.POINTER(Matrix), C.c_size_t]
     lib.dc_scene_update.restype = C.c_int
     lib.dc_pose_select.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_float, C.POINTER(PoseSelection)]

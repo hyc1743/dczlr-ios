@@ -21,7 +21,22 @@ four bytes. Reports retain hashes and counts, not original text. This is a
 framing comparison against local data and static exports, not execution of
 the original parser or proof of dialogue/gameplay equivalence.
 
-The parser's pre-record CG/music/sound state accumulation, custom header
-controls, CP932 text layout, typewriter timing, voice handling, branching and
-new-game callback dispatch still require their own reconstruction and tests.
-This reader is deliberately separate from those runtime responsibilities.
+`dc_script_decode` adds the parser's normal sequential branch: background,
+music, sound and message accumulation before the selected marker, followed by
+up to 11 configured fixed-width header controls and their optional A/B/C suffix.
+The scan retains original command check order and case sensitivity, including
+the three-byte `#bg` comparison. Multiple pending names concatenate rather
+than replacing one another. A repeated header control without a suffix retains
+the previous suffix byte, matching the original fixed-width copy. Limits and
+truncated header parameters fail without changing the caller's output.
+
+An isolated execution of original `0x00592590`, with synthetic CRT boundaries,
+matches 761 self-authored cases. A separate private audit also matches all 434
+records from the 19 local scripts for pending commands, controls, speaker/body
+bytes and next cursor. The local audit stores only source/comparison hashes
+and counts; original script bytes are not uploaded. The `%C` actor-command and
+backlog/replay branches remain outside the admitted profile and fail explicitly.
+
+CP932 text layout, body control execution, typewriter timing, voice playback,
+branching and new-game callback dispatch still require reconstruction and
+runtime tests. Parser equivalence does not establish playability.
