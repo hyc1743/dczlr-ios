@@ -16,6 +16,9 @@ struct PortLabApp: App {
                             guard geometry.size.width > 0, geometry.size.height > 0 else { return }
                             model.x = Float(min(1, max(-1, 2 * event.location.x / geometry.size.width - 1)))
                             model.y = Float(min(1, max(-1, 1 - 2 * event.location.y / geometry.size.height)))
+                            model.touchActive = true
+                        }.onEnded { _ in
+                            model.touchActive = false
                         })
                 }
                 HStack {

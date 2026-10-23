@@ -66,6 +66,13 @@ Apple 适配器实测已在 run `39898499168` 通过，日志记录
 
 ## 本地复验命令
 
+2026-10-23 的重新审计仍识别 72 个 PP 包中的 71 个，共 5,011 个条目。
+`audit_native_pp.py` 现在同时统计后缀与载荷大小；当前识别出的条目中有
+3,195 个 WAV、83 个 XX、81 个 XA，以及 1,409 个独立 BMP/TGA/EMA。
+完整格式分布保留在本地 `research/native-core/native-pp-audit-current.json`。
+后缀统计仅表示资源清单，不证明相应的音频、模型、动画解码或游戏运行兼容性；
+XX 内嵌纹理和未识别包中的内容不在独立图像计数内。
+
 ```powershell
 python -m unittest discover -s tests -p test_native_pp.py -v
 python tools/audit_native_pp.py --data Data --output research/native-core/native-pp-audit.json

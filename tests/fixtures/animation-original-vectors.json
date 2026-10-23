@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 2916,
+  "output_sha256": "042a7c994a885536a66a7382e445449726f5242f129d38a701671bfa4b1af659",
+  "original_function_sha256": {
+    "0x4046c0": "4202d12bf6f59668ad67532b22732dfca8bebf7b321afb8ebff824dd2ff24f33",
+    "0x464ab0": "938f8e3cffc0145fd4b3a03679caab6bcbf0d20fa4a3d48bdffd2afb96f28c9d"
+  },
+  "execution": "isolated Unicorn x86 request/query with synthetic memset and clock",
+  "query_calls": 5832,
+  "clock_reads": 1296,
+  "coverage": "request and current-clip loop-byte query only; XA loading, frame advancement, poses, materials and GPU excluded",
+  "original_game_resources_used": false,
+  "game_playability": "not_verified"
+}

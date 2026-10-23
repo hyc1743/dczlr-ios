@@ -27,7 +27,7 @@ final class SpritePresenter: NSObject {
     private let model: LabModel
     private weak var view: DCVulkanSpriteView?
     private var displayLink: CADisplayLink?
-    private var reportedFirstFrame = false
+    private var lastReportedScene: DCVulkanSpriteScene?
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -56,19 +56,26 @@ final class SpritePresenter: NSObject {
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
         renderPending = true
-        view.requestDraw(atX: model.x, y: model.y,
-            time: ProcessInfo.processInfo.systemUptime - start) { [weak self] error, device, startupCardLoaded in
+        view.requestDraw(atX: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start,
+            touching: model.touchActive) { [weak self] error, device, scene in
                 guard let self = self else { return }
                 self.renderPending = false
                 if let error = error {
                     self.failed = true
                     self.displayLink?.isPaused = true
                     self.model.record("Vulkan 初始化或绘制失败：\(error)")
-                } else if !self.reportedFirstFrame {
-                    self.reportedFirstFrame = true
-                    self.model.record(startupCardLoaded
-                        ? "Vulkan / MoltenVK 已显示原始 illusion.ema 首屏（\(device)）；后续状态仍未接入"
-                        : "Vulkan / MoltenVK 已显示自制检查精灵（\(device)）；请导入资源包以显示游戏首屏")
+                } else if self.lastReportedScene != scene {
+                    self.lastReportedScene = scene
+                    switch scene {
+                    case .diagnostic:
+                        self.model.record("PORTLAB_SCENE_PRESENTED=checker Vulkan / MoltenVK 已显示自制检查精灵（\(device)）")
+                    case .startupCard:
+                        self.model.record("PORTLAB_SCENE_PRESENTED=startup Vulkan / MoltenVK 已显示原始 illusion.ema 启动卡（\(device)）")
+                    case .title:
+                        self.model.record("PORTLAB_SCENE_PRESENTED=title Vulkan / MoltenVK 已显示标题画面（\(device)）；后续游戏逻辑尚未接入")
+                    @unknown default:
+                        self.model.record("Vulkan 返回未知场景编号：\(scene.rawValue)")
+                    }
                 }
             }
     }

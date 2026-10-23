@@ -76,6 +76,25 @@ simulator frame on iOS 18.5. The screenshot and app log show the self-authored
 checker sprite on the Vulkan surface; the simulator app contained no original
 game assets. This confirms simulator rendering, not physical iPhone behavior.
 
+The clean view lifecycle and corrected fallback pivot passed again in run
+`39950383413`, revision `768c1da`: the app launched, presented its Vulkan frame
+and produced a screenshot. Its collected Unity log contains no SwiftUI
+"Publishing changes from within view updates" warnings. The Apple Simulator
+also no longer terminated `SimMetalHost` during texture descriptor updates.
+The fallback remains the self-authored checker because the cloud app contains
+no original game data.
+
+Presentation reporting now distinguishes the checker, startup card and title
+preview. The native completion returns an explicit scene only after a successful
+Vulkan render/present; Swift records each scene change with
+`PORTLAB_SCENE_PRESENTED=checker`, `startup` or `title`. Texture loading alone
+does not emit a presentation marker. The simulator checker requires a selected
+scene (`--expected-scene`, default `checker`); a fallback frame cannot satisfy a
+startup/title requirement. Its report records the observed scenes and leaves
+resource-content inspection, physical-device behavior and playability separate.
+The cloud gate still uses only the self-authored checker and supplies no game
+resources. These reporting changes require their own Apple build/runtime check.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.

@@ -32,7 +32,8 @@ Mesa lavapipe (zero validation errors), a local Intel UHD 630 GPU, and MoltenVK
 on an Apple Paravirtual GPU. The Apple gate also exercises actual Metal surface
 acquire/blit/present. The iOS host uses this route for a self-authored sprite
 scene, and the iOS 18.5 iPhone 16 Pro simulator has presented its first Vulkan
-frame. Physical iPhone execution remains unverified. Original effect integration and
+frame. The clean run also removed the SwiftUI lifecycle warnings. Physical iPhone
+execution remains unverified. Original effect integration and
 game flow remain incomplete; this is not a playable release. See
 [vulkan-sprites.md](docs/vulkan-sprites.md).
 
@@ -41,6 +42,12 @@ planner. Its 5,600 isolated original-function comparisons pass, including exact
 skip input, ordered transition actions and unsigned timer wrap. It is not yet
 connected to the view's game flow; the external transition controller and next
 states remain incomplete. See [startup-reconstruction.md](docs/startup-reconstruction.md).
+
+The external animation controller's request and current-record query now have
+native C implementations matching 2,916 isolated original-function cases. The
+query tests the current record's loop byte; it is not a timer-completion event.
+XA loading, frame advancement and transition rendering remain incomplete. See
+[animation-reconstruction.md](docs/animation-reconstruction.md).
 
 ## Previous interpreter experiment
 

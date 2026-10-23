@@ -15,6 +15,8 @@ typedef struct dc_startup_state {
 } dc_startup_state;
 typedef struct dc_startup_input {
     int32_t delta, transition_state;
+    /* Exact 0x00464ab0 return: current animation clip's loop byte != 0.
+     * This is not a host timer-completion event or the pending clip's flag. */
     uint32_t transition_complete;
     uint8_t skip_code; /* Only original input code 3 triggers skipping. */
 } dc_startup_input;

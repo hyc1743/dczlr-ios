@@ -61,6 +61,22 @@ class StartupPlan(C.Structure):
                 "actions": [[a.kind, a.value] for a in self.actions[:self.count]]}
 
 
+class AnimationClip(C.Structure):
+    _fields_ = [("first_frame", C.c_float), ("last_frame", C.c_float),
+                ("blend_duration", C.c_uint32), ("loop", C.c_uint8),
+                ("iterations", C.c_uint8), ("reverse", C.c_uint8), ("reserved", C.c_uint8)]
+
+
+class AnimationState(C.Structure):
+    _fields_ = [("previous", C.c_uint32), ("current", C.c_uint32), ("pending", C.c_uint32),
+                ("blend_start", C.c_uint32), ("blend_end", C.c_uint32),
+                ("blend", C.c_float), ("frame", C.c_float), ("pending_frame", C.c_float),
+                ("fixed_frame", C.c_uint8)]
+
+    def record(self):
+        return {name: getattr(self, name) for name, _ in self._fields_}
+
+
 class SpritePose(C.Structure):
     _fields_ = [(name, C.c_float) for name in (
         "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
@@ -107,9 +123,10 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c",
                ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
-                        ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h"]
+                        ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
+                        ROOT / "native/include/dc_animation.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -162,6 +179,12 @@ def library():
     lib.dc_startup_begin_plan.restype = C.c_int
     lib.dc_startup_build_plan.argtypes = [C.POINTER(StartupState), C.POINTER(StartupInput), C.POINTER(StartupPlan)]
     lib.dc_startup_build_plan.restype = C.c_int
+    lib.dc_animation_request.argtypes = [C.POINTER(AnimationState), C.POINTER(AnimationClip),
+        C.c_size_t, C.c_uint32, C.c_uint8, C.c_uint32]
+    lib.dc_animation_request.restype = C.c_int
+    lib.dc_animation_query.argtypes = [C.POINTER(AnimationState), C.POINTER(AnimationClip),
+        C.c_size_t, C.POINTER(C.c_uint32), C.POINTER(C.c_uint32)]
+    lib.dc_animation_query.restype = C.c_int
     return lib
 
 

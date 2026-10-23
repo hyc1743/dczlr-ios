@@ -2,9 +2,33 @@
 import argparse
 import json
 import plistlib
+import re
 from pathlib import Path
 import subprocess
 import time
+
+
+SCENES = {"checker": "self-authored checker sprite", "startup": "original startup-card sprite",
+          "title": "original title-screen background and menu layers"}
+
+
+def presented_scenes(log):
+    # LabModel prefixes every app-authored record with its timestamp. Require
+    # the exact marker at the start of that message, not an echoed command or
+    # prose saying an asset was merely loaded.
+    return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(checker|startup|title)(?= |$)", log)
+
+
+def scene_evidence(log, expected):
+    if expected not in SCENES:
+        raise ValueError("Unknown expected scene: " + expected)
+    observed = presented_scenes(log)
+    if expected not in observed:
+        raise ValueError("Expected scene was not reported as presented: " + expected)
+    return {"scene": SCENES[expected], "required_scene": expected, "observed_scenes": observed,
+            "resource_content": "not inspected by this presentation check",
+            "vulkan_first_present": "reported_by_native_view_after_successful_present",
+            "physical_iphone": "not tested", "game_playability": "not verified"}
 
 
 def run(*command, timeout=120):
@@ -30,7 +54,7 @@ def select_device(output, runtime):
     return phone
 
 
-def check(app, output, runtime):
+def check(app, output, runtime, expected_scene="checker"):
     app = app.resolve(strict=True)
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -73,13 +97,11 @@ def check(app, output, runtime):
     (output / "launch.txt").write_text(launch + "\n", encoding="utf-8")
     deadline = time.monotonic() + 60
     log = ""
-    markers = ("Vulkan / MoltenVK 已显示原始 illusion.ema 首屏",
-               "Vulkan / MoltenVK 已显示自制检查精灵")
     while time.monotonic() < deadline:
         path = container / "Documents/log.txt" if container else None
         if path and path.exists():
             log = path.read_text(encoding="utf-8")
-            if any(marker in log for marker in markers) or "Vulkan 初始化或绘制失败" in log:
+            if expected_scene in presented_scenes(log) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
     (output / "app.log").write_text(log, encoding="utf-8")
@@ -111,7 +133,7 @@ def check(app, output, runtime):
     except subprocess.TimeoutExpired as error:
         screenshot_log = str(error)
     (output / "screenshot-command.txt").write_text(screenshot_log, encoding="utf-8")
-    if not any(marker in log for marker in markers):
+    if expected_scene not in presented_scenes(log):
         try:
             process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
                 capture_output=True, text=True, timeout=30)
@@ -123,12 +145,8 @@ def check(app, output, runtime):
             raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified_log[-1500:])
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame; launch_timed_out=" +
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
-    original_card = markers[0] in log
     report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,
-              "scene": "original illusion.ema startup card" if original_card else "self-authored checker sprite",
-              "original_game_assets_in_app": False,
-              "vulkan_first_present": "reported_by_native_view_after_successful_present",
-              "physical_iphone": "not tested", "game_playability": "not verified"}
+              **scene_evidence(log, expected_scene)}
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")
@@ -139,11 +157,12 @@ if __name__ == "__main__":
     parser.add_argument("--app", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--runtime")
+    parser.add_argument("--expected-scene", choices=SCENES, default="checker")
     parser.add_argument("--boot-only", action="store_true")
     args = parser.parse_args()
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime)
+        check(args.app, args.output, args.runtime, args.expected_scene)
     else:
         parser.error("--app is required unless --boot-only is selected")

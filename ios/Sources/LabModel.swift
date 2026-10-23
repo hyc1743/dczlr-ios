@@ -5,6 +5,7 @@ import Foundation
 final class LabModel: ObservableObject {
     @Published var x: Float = 0
     @Published var y: Float = 0
+    @Published var touchActive = false
     @Published var active = true
     @Published var status = "等待 Vulkan 初始化"
     private var player: AVAudioPlayer?

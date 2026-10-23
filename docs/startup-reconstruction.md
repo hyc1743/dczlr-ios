@@ -24,6 +24,13 @@ and lock timing pending another completed transition. Loading the replacement
 card requests external state 4. These numeric states are preserved rather than
 assigning unverified animation semantics to them.
 
+The external query is now separately recovered: `0x00464ab0` returns the current
+animation record's loop byte as a boolean, not a timer-expiry event. Its matching
+native request/query operations and 2,916 isolated comparisons are documented in
+[animation-reconstruction.md](animation-reconstruction.md). Frame advancement,
+XA loading and the actual transition composition remain missing, so this does
+not yet connect the startup planner to the Vulkan view.
+
 The original comparisons use unsigned carry branches. Decompiler output alone
 misrepresents their signedness. The native implementation uses explicit unsigned
 32-bit wrap, including negative delta bit patterns. A completed transition is
