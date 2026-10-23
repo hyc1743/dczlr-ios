@@ -10,6 +10,8 @@ Those four self-authored PE32 checks passed on ARM64 macOS in run `39879664469`,
 
 The app with the bundled check and persistent-report viewer built successfully in run `39880869873` from revision `45f7976`. Its downloaded IPA was checked as ARM64/iPhoneOS, and its PE32 probe matches the compiler artifact from that same run. IPA SHA-256: `32d5bf3f971814c616c6900ac516421abb26a5f8d52e4a1e3d15843c3d1a5040`. The probe also passed a native Windows control run and wrote all six report lines. Follow [runtime-device-check.md](docs/runtime-device-check.md) for the remaining phone verification.
 
+The persistent-report variant also passed the real no-JIT Wine gate in run `39881581198`: all four subsystem markers, the final guest-output marker and the guest-written report's six lines were verified. The Win32 run's elapsed time was 36.82 seconds including harness cleanup; this is not a phone performance result. Normal host shutdown, device execution, D3D9 and playability remain unverified.
+
 The default `build-ios.yml` and `release-ios.yml` workflows still produce the earlier diagnostic `PortLab-unsigned.ipa`. Those are platform tests, not the interpreter runtime or a playable game release.
 
 The host already has the resource import contract needed for a future port. A bundled manifest describes 132 local `Data` files split into three release assets, each no larger than 1 GB. The assets are intentionally outside Git history and the IPA.

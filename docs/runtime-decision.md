@@ -96,6 +96,16 @@ same self-authored probe and offers a dedicated compatibility-check button,
 using its own scratch directory and prefix. It does not apply the probe's
 installer overrides to other launch profiles. Device execution remains open.
 
+The persistent-report variant passed in run `39881581198`. Both the console
+gate and the self-authored Win32 gate emitted their required markers. The
+artifact additionally contains `portlab-win32-result.txt`, written by the
+guest into the mounted probe directory, with all six expected lines. The
+Win32 harness reports 36.82 seconds including shutdown handling. The host was
+still stopped by the harness, so clean exit remains open. The iOS build that
+bundles this report-writing probe and its report viewer passed in run
+`39880869873` (source `45f7976`); downloaded IPA contents and PE32 identity
+were verified, with physical iOS execution still pending.
+
 ## Correction to the earlier shader investigation
 
 The previous token scanner undercounted both comments and instructions by one
