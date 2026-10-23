@@ -45,7 +45,7 @@ jobs:
           mkdir -p "$root/native"
           cd "$root/native"
           "$root/source/vkd3d-1.17/configure" --disable-tests --disable-demos \
-            --without-opengl --without-xcb --without-ncurses --without-metal --without-spirv-tools
+            --without-opengl --without-xcb --without-ncurses --without-spirv-tools
           make -j2 include/private/vkd3d_version.h vkd3d-compiler
           cd "$GITHUB_WORKSPACE"
           python3 tools/smoke_shader_converter.py --compiler "$root/native/vkd3d-compiler" \
@@ -62,7 +62,7 @@ jobs:
             LDFLAGS='-static-libgcc' CPPFLAGS="-I$root/headers" \
             "$root/source/vkd3d-1.17/configure" --host=x86_64-w64-mingw32 \
             --disable-tests --disable-demos --without-opengl --without-xcb \
-            --without-ncurses --without-metal --without-spirv-tools
+            --without-ncurses --without-spirv-tools
           make -j2 include/private/vkd3d_version.h vkd3d-compiler.exe
       - name: Cross-compile Windows x64 SPIR-V validator
         shell: bash
