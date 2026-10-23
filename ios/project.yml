@@ -11,6 +11,8 @@ targets:
       - Native
       - path: ../native/resource
       - path: ../native/render
+        excludes:
+          - vulkan
       - path: Resources
         type: folder
         buildPhase: resources

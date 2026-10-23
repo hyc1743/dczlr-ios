@@ -6,3 +6,28 @@ target_compile_features(portlab_native PUBLIC c_std_11)
 if(NOT WIN32)
   target_link_libraries(portlab_native PUBLIC m)
 endif()
+
+option(PORTLAB_VULKAN_SPRITES "Build actual Vulkan sprite backend and pixel gate" OFF)
+if(PORTLAB_VULKAN_SPRITES)
+  find_package(Vulkan REQUIRED)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  find_program(GLSLANG_VALIDATOR glslangValidator REQUIRED)
+  find_program(SPIRV_VALIDATOR spirv-val REQUIRED)
+  set(SPRITE_GENERATED "${CMAKE_CURRENT_BINARY_DIR}/sprite-shaders")
+  add_custom_command(OUTPUT "${SPRITE_GENERATED}/dc_sprite_spv.h"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/build_sprite_shaders.py"
+      --glslang "${GLSLANG_VALIDATOR}" --validator "${SPIRV_VALIDATOR}" --output "${SPRITE_GENERATED}"
+    DEPENDS render/vulkan/shaders/sprite.vert render/vulkan/shaders/sprite.frag ../tools/build_sprite_shaders.py
+    VERBATIM)
+  add_library(portlab_vk_sprite STATIC render/vulkan/dc_vk_sprite.c)
+  target_include_directories(portlab_vk_sprite PUBLIC render/vulkan)
+  target_link_libraries(portlab_vk_sprite PUBLIC portlab_native Vulkan::Vulkan)
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(portlab_vk_sprite PRIVATE -Wall -Wextra -Werror)
+  endif()
+  add_executable(vulkan_sprite_gate ../tests/native/test_vk_sprite.c "${SPRITE_GENERATED}/dc_sprite_spv.h")
+  target_include_directories(vulkan_sprite_gate PRIVATE "${SPRITE_GENERATED}")
+  target_link_libraries(vulkan_sprite_gate PRIVATE portlab_vk_sprite)
+  enable_testing()
+  add_test(NAME vulkan_sprite_pixels COMMAND vulkan_sprite_gate)
+endif()
