@@ -14,7 +14,23 @@ def run(*command, timeout=120):
     return result.stdout.strip()
 
 
-def check(app, output):
+def select_device(output, runtime):
+    output.mkdir(parents=True, exist_ok=True)
+    inventory = run("xcrun", "simctl", "list", "devices", "available", "--json")
+    (output / "simulators.json").write_text(inventory + "\n", encoding="utf-8")
+    devices = json.loads(inventory)["devices"]
+    phones = [{**device, "runtime": key} for key, entries in devices.items()
+              if not runtime or key.endswith(runtime)
+              for device in entries if device["name"].startswith("iPhone")]
+    if not phones:
+        raise ValueError("No available iPhone simulator for runtime " + str(runtime))
+    phone = next((device for device in phones if device["state"] == "Booted"), phones[0])
+    if phone["state"] != "Booted":
+        run("xcrun", "simctl", "boot", phone["udid"])
+    return phone
+
+
+def check(app, output, runtime):
     app = app.resolve(strict=True)
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -31,14 +47,8 @@ def check(app, output):
         run("codesign", "--force", "--sign", "-", "--timestamp=none", str(binary))
     run("codesign", "--force", "--sign", "-", "--timestamp=none", str(app))
     run("codesign", "--verify", "--strict", str(app))
-    devices = json.loads(run("xcrun", "simctl", "list", "devices", "available", "--json"))["devices"]
-    phones = [device for entries in devices.values() for device in entries if device["name"].startswith("iPhone")]
-    if not phones:
-        raise ValueError("No available iPhone simulator")
-    phone = next((device for device in phones if device["state"] == "Booted"), phones[0])
+    phone = select_device(output, runtime)
     device = phone["udid"]
-    if phone["state"] != "Booted":
-        run("xcrun", "simctl", "boot", device)
     run("xcrun", "simctl", "bootstatus", device, "-b", timeout=240)
     run("xcrun", "simctl", "install", device, str(app))
     run("xcrun", "simctl", "launch", "--terminate-running-process", device, "org.example.portlab")
@@ -57,7 +67,7 @@ def check(app, output):
     run("xcrun", "simctl", "io", device, "screenshot", str(output / "sprite-scene.png"))
     if marker not in log:
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame: " + log[-2000:])
-    report = {"simulator": phone["name"], "udid": device, "scene": "self-authored checker sprite",
+    report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device, "scene": "self-authored checker sprite",
               "vulkan_first_present": "reported_by_native_view_after_successful_present",
               "physical_iphone": "not tested", "game_playability": "not verified"}
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -67,7 +77,14 @@ def check(app, output):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, required=True)
+    parser.add_argument("--app", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--runtime")
+    parser.add_argument("--boot-only", action="store_true")
     args = parser.parse_args()
-    check(args.app, args.output)
+    if args.boot_only:
+        print(json.dumps(select_device(args.output, args.runtime)))
+    elif args.app:
+        check(args.app, args.output, args.runtime)
+    else:
+        parser.error("--app is required unless --boot-only is selected")

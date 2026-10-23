@@ -35,7 +35,9 @@ jobs:
 
   ios:
     needs: portable
-    runs-on: macos-latest
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
@@ -44,6 +46,8 @@ jobs:
         run: |
           python3 tools/bootstrap_moltenvk.py --notices-output ios/Generated/MoltenVKNotices
           python3 tools/build_sprite_shaders.py --output ios/Generated/sprite-shaders
+      - name: Start the pinned simulator while building
+        run: python3 tools/check_ios_sprite.py --boot-only --runtime iOS-18-5 --output out/ios-sprite
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate --spec project.yml
@@ -52,7 +56,7 @@ jobs:
         run: |
           xcodebuild -project PortLab.xcodeproj -scheme PortLab -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO build
+            -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO build
       - name: Upload simulator app and manifest
         uses: actions/upload-artifact@v4
         with:
@@ -63,7 +67,7 @@ jobs:
       - name: Launch the Vulkan sprite scene on iPhone simulator
         timeout-minutes: 8
         run: |
-          python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --output out/ios-sprite
+          python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --output out/ios-sprite
       - name: Upload simulator Vulkan execution evidence
         if: always()
         uses: actions/upload-artifact@v4
