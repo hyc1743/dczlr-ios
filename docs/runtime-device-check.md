@@ -1,5 +1,8 @@
 # 在 iPhone 上验证解释器
 
+此页保留此前解释器实验的验证步骤。当前主目标已改为 AArch64 原生执行与直接 Metal，
+见 [原生架构说明](native-runtime-design.md)；推进该路线不需要先完成本页的 Wine 测试。
+
 这个验证包运行的是自制的 `probes/win32_smoke.c` 测试程序，用来检查 Windows
 运行时。它还不是已验证可玩的游戏包，也不需要手动启用 JIT。
 

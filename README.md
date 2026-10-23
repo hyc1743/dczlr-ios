@@ -1,6 +1,10 @@
 # iOS PortLab
 
-This repository contains an experimental iOS interpreter runtime and a separate diagnostic host. There is no verified playable game release yet.
+The intended architecture is now native AArch64 game execution with a focused Apple-platform host, a direct Metal graphics implementation and offline-translated original shaders. See [native-runtime-design.md](docs/native-runtime-design.md) for the requirements and the current missing input: the supplied main executable is PE32 x86, and no usable AArch64 version or source build has been established. There is no verified playable game release yet.
+
+The existing interpreter IPA belongs to an earlier experiment and does not satisfy this native architecture. Its phone checks are optional historical diagnostics, not a prerequisite for the native route.
+
+## Previous interpreter experiment
 
 The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.
 

@@ -1,9 +1,14 @@
 # Execution runtime investigation
 
+The current goal is native AArch64 execution with direct Metal and offline
+shader translation, as defined in `native-runtime-design.md`. The interpreter
+work below is retained as a historical experiment; it is not the chosen
+delivery architecture and its phone tests are not a prerequisite.
+
 The preferred research constraint is ordinary sideloading with no manual JIT
 step. Personal device information is not part of this public source document.
 
-The existing PortLab IPA builds but contains no Windows loader or x86 engine.
+The original diagnostic PortLab IPA built without a Windows loader or x86 engine.
 Game data and shader conversion alone cannot make its Windows PE32 input run.
 The Switch reference already starts from ARM64 code, a different execution
 problem. A game-specific port still needs its own implementation and tests.
