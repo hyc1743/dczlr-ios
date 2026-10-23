@@ -5,7 +5,11 @@ NS_ASSUME_NONNULL_BEGIN
 @interface DCVulkanSpriteView : UIView
 @property(nonatomic, readonly) NSString *deviceName;
 @property(nonatomic, readonly) uint64_t presentedFrames;
-- (nullable NSString *)drawAtX:(float)x y:(float)y time:(double)time NS_SWIFT_NAME(renderSprite(x:y:time:));
+@property(nonatomic, readonly) BOOL startupCardLoaded;
+@property(nonatomic, copy, nullable) NSString *startupDataDirectory;
+- (void)requestDrawAtX:(float)x y:(float)y time:(double)time
+            completion:(void (^)(NSString * _Nullable error, NSString *deviceName, BOOL startupCardLoaded))completion
+    NS_SWIFT_NAME(requestDraw(atX:y:time:completion:));
 - (void)releaseRenderer;
 @end
 NS_ASSUME_NONNULL_END

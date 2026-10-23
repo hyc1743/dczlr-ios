@@ -9,6 +9,7 @@ struct VulkanSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> DCVulkanSpriteView {
         model.record("Vulkan UIView creation")
         let view = DCVulkanSpriteView(frame: .zero)
+        view.startupDataDirectory = model.gameDataDirectory.path
         context.coordinator.attach(view)
         return view
     }
@@ -29,6 +30,7 @@ final class SpritePresenter: NSObject {
     private var displayLink: CADisplayLink?
     private var reportedFirstFrame = false
     private var reportedFirstTick = false
+    private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
 
@@ -55,18 +57,26 @@ final class SpritePresenter: NSObject {
     }
 
     @objc private func draw() {
-        guard model.active, !failed, let view = view else { return }
+        guard model.active, !failed, !renderPending, let view = view else { return }
         if !reportedFirstTick {
             reportedFirstTick = true
             model.record("Vulkan display tick; attached=\(view.window != nil), bounds=\(view.bounds)")
         }
-        if let error = view.renderSprite(x: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start) {
-            failed = true
-            displayLink?.isPaused = true
-            model.record("Vulkan 初始化或绘制失败：\(error)")
-        } else if !reportedFirstFrame && view.presentedFrames > 0 {
-            reportedFirstFrame = true
-            model.record("Vulkan / MoltenVK 已提交精灵首帧（\(view.deviceName)）；当前为自制渲染测试，游戏尚未接入")
-        }
+        renderPending = true
+        view.requestDraw(atX: model.x, y: model.y,
+            time: ProcessInfo.processInfo.systemUptime - start) { [weak self] error, device, startupCardLoaded in
+                guard let self = self else { return }
+                self.renderPending = false
+                if let error = error {
+                    self.failed = true
+                    self.displayLink?.isPaused = true
+                    self.model.record("Vulkan 初始化或绘制失败：\(error)")
+                } else if !self.reportedFirstFrame {
+                    self.reportedFirstFrame = true
+                    self.model.record(startupCardLoaded
+                        ? "Vulkan / MoltenVK 已显示原始 illusion.ema 首屏（\(device)）；后续状态仍未接入"
+                        : "Vulkan / MoltenVK 已显示自制检查精灵（\(device)）；请导入资源包以显示游戏首屏")
+                }
+            }
     }
 }

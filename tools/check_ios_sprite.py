@@ -53,17 +53,25 @@ def check(app, output, runtime):
     device = phone["udid"]
     run("xcrun", "simctl", "bootstatus", device, "-b", timeout=240)
     run("xcrun", "simctl", "install", device, str(app))
-    launch = run("xcrun", "simctl", "launch", "--terminate-running-process", device, "org.example.portlab")
+    try:
+        launch_process = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
+            device, "org.example.portlab"], capture_output=True, text=True, timeout=60)
+        launch = launch_process.stdout + launch_process.stderr
+        launch_timed_out = launch_process.returncode != 0
+    except subprocess.TimeoutExpired as error:
+        launch_timed_out = True
+        launch = "launch timed out after 60s; stdout=" + str(error.stdout)[-1000:] + "; stderr=" + str(error.stderr)[-1000:]
     (output / "launch.txt").write_text(launch + "\n", encoding="utf-8")
     container = Path(run("xcrun", "simctl", "get_app_container", device, "org.example.portlab", "data"))
     deadline = time.monotonic() + 60
     log = ""
-    marker = "Vulkan / MoltenVK 已提交精灵首帧"
+    markers = ("Vulkan / MoltenVK 已显示原始 illusion.ema 首屏",
+               "Vulkan / MoltenVK 已显示自制检查精灵")
     while time.monotonic() < deadline:
         path = container / "Documents/log.txt"
         if path.exists():
             log = path.read_text(encoding="utf-8")
-            if marker in log or "Vulkan 初始化或绘制失败" in log:
+            if any(marker in log for marker in markers) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
     (output / "app.log").write_text(log, encoding="utf-8")
@@ -85,13 +93,14 @@ def check(app, output, runtime):
         for crash in diagnostic_reports.glob("*PortLab*.ips"):
             shutil.copyfile(crash, crash_dir / crash.name)
     run("xcrun", "simctl", "io", device, "screenshot", str(output / "sprite-scene.png"))
-    if marker not in log:
+    if not any(marker in log for marker in markers):
         process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
             capture_output=True, text=True, timeout=30)
         (output / "processes.log").write_text(process.stdout + process.stderr, encoding="utf-8")
         if unified.returncode:
             raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified.stderr[-1500:])
-        raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame: " + log[-2000:])
+        raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame; launch_timed_out=" +
+            str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
     report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device, "scene": "self-authored checker sprite",
               "vulkan_first_present": "reported_by_native_view_after_successful_present",
               "physical_iphone": "not tested", "game_playability": "not verified"}

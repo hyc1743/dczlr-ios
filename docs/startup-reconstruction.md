@@ -52,6 +52,14 @@ python tools/oracle_startup.py --exe research/target.exe \
 python -m unittest discover -s tests -p test_native_startup.py -v
 ```
 
+The iOS Vulkan view now looks for `RPP_02.pp` in the restored user data folder,
+decodes `illusion.ema` with the native archive/image modules, and uploads that
+texture through Vulkan. It keeps the self-authored checker visible while the
+user imports the resource pack. The archived original card is fit to the view;
+the original 1024x768 size, origin `(0,0)`, neutral color, zero rotation and
+mode-3 alpha are taken from the isolated loader path. D3D9 texture sampling
+equivalence and the external fades still need separate evidence.
+
 The full local suite has 54 tests. Run `39937228160` at revision `7a3597e`
 also passed the native tests on ARM64 macOS, compiled the new startup object for
 iPhoneOS and exercised the Apple file adapter. Startup's resource operations, initial

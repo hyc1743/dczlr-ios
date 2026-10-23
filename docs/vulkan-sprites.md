@@ -42,8 +42,10 @@ filtering and repeat, native state transitions, hidden sprites, rejected frames,
 stale handles and repeated rendering. It requires zero validation errors.
 This checks real Vulkan execution against independent expected pixel values;
 it does not establish equivalence with original D3D9 GPU output or iPhone GPU
-behavior. The iOS host now uses this backend for a self-authored checker sprite,
-replacing the direct Metal triangle. It submits no original game state or effect.
+behavior. The iOS host uses this backend for a self-authored checker while a
+user imports data. Once `RPP_02.pp` is available, the native archive/image path
+uploads and draws its original `illusion.ema` startup card. Later game states
+and the original transition effects remain unimplemented.
 Readback can be omitted for presentation; the initial backend serializes frames
 and waits for completion, so it is a correctness foundation, not a tuned renderer.
 No playable build is established by this gate.

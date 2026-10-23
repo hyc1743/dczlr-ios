@@ -10,9 +10,9 @@ Native reconstruction has started with the indexed PP resource reader in `native
 
 The native image layer now decodes standalone BMP, TGA (including RLE) and EMA
 entries into bounded, top-left RGBA8 buffers. All 1,409 such entries in recognized
-local archives match Pillow pixel-for-pixel. The Apple archive adapter exposes
-these decoded buffers to future texture uploads; game rendering and game logic
-remain incomplete. This comparison does not cover textures embedded in models
+local archives match Pillow pixel-for-pixel. The Apple archive adapter uploads
+the first original startup EMA to the Vulkan sprite view when its user resource
+pack has been imported. Later game screens and logic remain incomplete. This comparison does not cover textures embedded in models
 or original D3DX sampling and resizing behavior.
 
 The offline effect reader now restores the seven original effect record graphs,

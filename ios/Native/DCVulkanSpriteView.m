@@ -3,14 +3,21 @@
 #import <QuartzCore/CAMetalLayer.h>
 #include "dc_vk_sprite.h"
 #include "dc_sprite_spv.h"
+#import "DCArchive.h"
 #include <math.h>
+
+static const char dcRenderQueueKey;
 
 @implementation DCVulkanSpriteView {
     dc_vk_sprite *_renderer;
     uintptr_t _texture;
+    uintptr_t _startupTexture;
     uint32_t _width, _height;
+    uint32_t _startupWidth, _startupHeight;
+    CFTimeInterval _lastStartupScan;
     NSString *_deviceName;
     uint64_t _presentedFrames;
+    dispatch_queue_t _renderQueue;
 }
 + (Class)layerClass { return CAMetalLayer.class; }
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -21,34 +28,76 @@
         layer.framebufferOnly = NO;
         self.opaque = YES;
         _deviceName = @"";
+        _renderQueue = dispatch_queue_create("org.example.portlab.vulkan-render", DISPATCH_QUEUE_SERIAL);
+        dispatch_queue_set_specific(_renderQueue, &dcRenderQueueKey, (void *)&dcRenderQueueKey, NULL);
     }
     return self;
 }
 - (NSString *)deviceName { return _deviceName; }
 - (uint64_t)presentedFrames { return _presentedFrames; }
+- (BOOL)startupCardLoaded { return _startupTexture != 0; }
 - (void)releaseRenderer {
+    dispatch_async(_renderQueue, ^{
+        dc_vk_sprite_destroy(self->_renderer);
+        self->_renderer = NULL;
+        self->_texture = 0;
+        self->_startupTexture = 0;
+        self->_width = self->_height = 0;
+    });
+}
+- (BOOL)tryLoadStartupCardFromDirectory:(NSString *)directory {
+    if (_startupTexture || directory.length == 0 || CACurrentMediaTime() - _lastStartupScan < 1)
+        return _startupTexture != 0;
+    _lastStartupScan = CACurrentMediaTime();
+    NSString *archivePath = [directory stringByAppendingPathComponent:@"RPP_02.pp"];
+    NSURL *archiveURL = [NSURL fileURLWithPath:archivePath];
+    NSError *error = nil;
+    DCArchive *archive = [[DCArchive alloc] initWithURL:archiveURL error:&error];
+    if (!archive) return NO; /* The user may still be importing the resource pack. */
+    uint32_t index = UINT32_MAX;
+    for (uint32_t i = 0; i < archive.entryCount; ++i) {
+        if ([[archive asciiNameAtIndex:i] caseInsensitiveCompare:@"illusion.ema"] == NSOrderedSame) {
+            index = i;
+            break;
+        }
+    }
+    if (index == UINT32_MAX) return NO;
+    DCDecodedImage *image = [archive decodeImageAtIndex:index inputLimit:8 * 1024 * 1024
+        outputLimit:64 * 1024 * 1024 error:&error];
+    if (!image) return NO;
+    if (dc_vk_sprite_upload(_renderer, image.width, image.height, image.rgba.bytes,
+            image.rgba.length, &_startupTexture) != DC_OK) {
+        _startupTexture = 0;
+        return NO;
+    }
+    _startupWidth = image.width;
+    _startupHeight = image.height;
+    return YES;
+}
+- (void)destroyRenderer {
     dc_vk_sprite_destroy(_renderer);
     _renderer = NULL;
     _texture = 0;
+    _startupTexture = 0;
     _width = _height = 0;
 }
-- (void)dealloc { [self releaseRenderer]; }
+- (void)dealloc {
+    if (dispatch_get_specific(&dcRenderQueueKey)) [self destroyRenderer];
+    else dispatch_sync(_renderQueue, ^{ [self destroyRenderer]; });
+}
 - (void)layoutSubviews {
     [super layoutSubviews];
     CGFloat scale = self.window.screen.scale ?: UIScreen.mainScreen.scale;
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     layer.contentsScale = scale;
     layer.drawableSize = CGSizeMake(ceil(self.bounds.size.width * scale), ceil(self.bounds.size.height * scale));
-    if (_renderer && (_width != (uint32_t)layer.drawableSize.width || _height != (uint32_t)layer.drawableSize.height))
-        [self releaseRenderer];
 }
-- (nullable NSString *)drawAtX:(float)x y:(float)y time:(double)time {
-    if (!self.window) return @"Vulkan sprite view is not attached to a window";
-    if (self.bounds.size.width <= 0 || self.bounds.size.height <= 0) return @"Vulkan sprite view has empty bounds";
-    CAMetalLayer *layer = (CAMetalLayer *)self.layer;
+- (NSString *)drawAtX:(float)x y:(float)y time:(double)time
+                layer:(CAMetalLayer *)layer width:(uint32_t)width height:(uint32_t)height
+         dataDirectory:(NSString *)directory {
+    if (!width || !height) return @"CAMetalLayer has empty drawable size";
+    if (_renderer && (_width != width || _height != height)) [self destroyRenderer];
     if (!_renderer) {
-        uint32_t width = (uint32_t)layer.drawableSize.width, height = (uint32_t)layer.drawableSize.height;
-        if (!width || !height) return @"CAMetalLayer has empty drawable size";
         dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 16, .initial_filter = 2,
             .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
             .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv),
@@ -67,19 +116,44 @@
         _deviceName = [NSString stringWithUTF8String:info.device_name];
         _width = width; _height = height;
     }
-    float side = fminf(_width, _height) * 0.4f;
-    dc_vk_sprite_item draw = {.texture = _texture, .blend_mode = 3, .point_filter = 1,
-        .pose = {.width = side, .height = side, .x = _width * (0.5f + x * 0.3f), .y = _height * (0.5f - y * 0.3f),
-            .z = 0.5f, .origin_x = 0.5f, .origin_y = 0.5f, .scale_x = 1, .scale_y = 1,
-            .alpha = 1, .red = 1, .green = 1, .blue = 1, .rotation = (float)fmod(time * 0.35, 6.283185307179586),
+    [self tryLoadStartupCardFromDirectory:directory];
+    BOOL originalCard = _startupTexture != 0;
+    float sourceWidth = originalCard ? _startupWidth : 2;
+    float sourceHeight = originalCard ? _startupHeight : 2;
+    float scale = originalCard ? fminf((float)_width / sourceWidth, (float)_height / sourceHeight)
+                               : fminf(_width, _height) * 0.4f / 2;
+    float width = sourceWidth * scale, height = sourceHeight * scale;
+    float left = (_width - width) * 0.5f + x * _width * 0.3f;
+    float top = (_height - height) * 0.5f - y * _height * 0.3f;
+    dc_vk_sprite_item draw = {.texture = originalCard ? _startupTexture : _texture, .blend_mode = 3, .point_filter = 0,
+        .pose = {.width = width, .height = height, .x = left, .y = top,
+            .z = 0, .origin_x = 0, .origin_y = 0, .scale_x = 1, .scale_y = 1,
+            .alpha = 1, .red = 1, .green = 1, .blue = 1,
+            .rotation = originalCard ? 0 : (float)fmod(time * 0.35, 6.283185307179586),
             .u0 = 0, .u1 = 1, .v0 = 0, .v1 = 1}};
     const uint8_t clear[] = {10,15,26,255};
     if (dc_vk_sprite_render(_renderer, &draw, 1, clear, NULL, 0) != DC_OK) {
         NSString *message = [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
-        [self releaseRenderer];
+        [self destroyRenderer];
         return message;
     }
     ++_presentedFrames;
     return nil;
+}
+- (void)requestDrawAtX:(float)x y:(float)y time:(double)time
+            completion:(void (^)(NSString *, NSString *, BOOL))completion {
+    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", self.deviceName, self.startupCardLoaded); return; }
+    CAMetalLayer *layer = (CAMetalLayer *)self.layer;
+    CGSize drawableSize = layer.drawableSize;
+    uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
+    NSString *directory = [self.startupDataDirectory copy] ?: @"";
+    dispatch_async(_renderQueue, ^{
+        @autoreleasepool {
+            NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory];
+            NSString *device = self->_deviceName ?: @"";
+            BOOL startup = self->_startupTexture != 0;
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, startup); });
+        }
+    });
 }
 @end

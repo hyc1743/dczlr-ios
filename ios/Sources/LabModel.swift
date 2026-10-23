@@ -9,6 +9,7 @@ final class LabModel: ObservableObject {
     @Published var status = "等待 Vulkan 初始化"
     private var player: AVAudioPlayer?
     private let root: URL
+    var gameDataDirectory: URL { root.appendingPathComponent("game/Data", isDirectory: true) }
     private var logReady = false
     private var auditingResources = false
 
