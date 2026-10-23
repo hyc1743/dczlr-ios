@@ -1,0 +1,22 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "original_function_sha256": {
+    "0x58eb30": "d719077fa7adf94aad328dea18df526a3a85f9d33bb74b6b5bf85a50509c57af",
+    "0x61e344": "5333b186c02836974c6f792303aeb2c00d856316b93ccbbe65f51def6ae661b4",
+    "0x591310": "00b14ab6c6a9214ec41086f3fcb8f86ca5ac0dbb94e73e9fa0373ad4a3e7ec54"
+  },
+  "results": {
+    "tick": {
+      "cases": 1950,
+      "output_sha256": "e34e6b5c1c235d53d2fe679aaef356383c449997744d51473a4d10af3ebec1a9"
+    },
+    "advance": {
+      "cases": 1440,
+      "output_sha256": "06c588ba95c259ff421ef6f9a004c0b1c2b37ee67d431246a743d11349ee1916"
+    }
+  },
+  "coverage": "normal byte-pair layout/fade and forward input; actual original x87 truncation; font draw/clock/CRT/parser synthetic",
+  "original_game_resources_used": false,
+  "game_playability": "not verified",
+  "excluded": "texture mode/backlog, rasterized font and other scene logic"
+}

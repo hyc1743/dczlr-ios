@@ -2,10 +2,12 @@
 #include "dc_vk_sprite.h"
 NS_ASSUME_NONNULL_BEGIN
 @class DCStartupScene;
-/* First new-game script host. Numeric initialization/parser are reconstructed;
- * text uses Apple's font adapter. Later game-scene dispatch remains pending. */
+/* Numbered new-game script host with original numeric layout/fade and chapter
+ * routing. CP936 uses Apple's font rasterizer. Nonscript scenes are pending. */
 @interface DCIntroScene : NSObject
 @property(nonatomic,readonly) uint32_t frame;
+@property(nonatomic,readonly) uint32_t chapter;
+@property(nonatomic,readonly) NSString *presentationState;
 @property(nonatomic,readonly) BOOL completed;
 @property(nonatomic,readonly) BOOL audioAdvanced;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;

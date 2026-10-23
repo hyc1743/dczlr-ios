@@ -106,3 +106,66 @@ dc_status dc_script_decode(const void *bytes,size_t length,size_t cursor,uint32_
     }
     *out=decoded;return DC_OK;
 }
+
+static dc_status intro_valid(const dc_intro_state *s,const dc_intro_descriptor *table,size_t count,dc_intro_plan *out) {
+    if (!s || !table || !out) return DC_ARGUMENT;
+    if (count!=DC_INTRO_CHAPTERS || s->chapter>26 || s->action>7 || s->waiting>1 || s->progress>255) return DC_RANGE;
+    for (size_t i=0;i<count;++i) {
+        if (table[i].script < -1 || table[i].script>99 || table[i].last_frame < -1 || table[i].last_frame>9999 ||
+            (table[i].script==-1 ? table[i].last_frame!=-1 : table[i].last_frame<0)) return DC_RANGE;
+    }
+    return DC_OK;
+}
+static void intro_command(dc_intro_plan *p,uint32_t kind,uint32_t value) {
+    p->commands[p->count++]=(dc_intro_command){kind,value};
+}
+dc_status dc_intro_finish(const dc_intro_state *state,const dc_intro_descriptor *table,size_t count,dc_intro_plan *out) {
+    dc_status status=intro_valid(state,table,count,out);if (status!=DC_OK) return status;
+    if (state->waiting) return DC_RANGE;
+    dc_intro_plan p={0};p.next=*state;
+    intro_command(&p,DC_INTRO_RESET_TEXT,0);
+    if (p.next.chapter<25) {
+        ++p.next.chapter;int32_t script=table[p.next.chapter].script;
+        if (script==1 || script==5 || script==8 || script==13 || script==-1) {
+            p.next.waiting=1;p.next.action=script==-1 ? 1 : 4;
+            intro_command(&p,DC_INTRO_TRANSITION,2);
+        } else intro_command(&p,DC_INTRO_LOAD_SCRIPT,p.next.chapter);
+    } else {
+        p.next.waiting=1;p.next.action=1;
+        intro_command(&p,DC_INTRO_TRANSITION,2);
+        p.next.action=6;intro_command(&p,DC_INTRO_CLEAR_FINISH,0);
+    }
+    *out=p;return DC_OK;
+}
+dc_status dc_intro_transition(const dc_intro_state *state,const dc_intro_descriptor *table,size_t count,
+        uint32_t ready,dc_intro_plan *out) {
+    dc_status status=intro_valid(state,table,count,out);if (status!=DC_OK) return status;
+    if (ready>1 || (state->chapter==26 && (state->action==1 || state->action==4))) return DC_RANGE;
+    dc_intro_plan p={0};p.next=*state;
+    if (p.next.waiting && ready) {
+        uint32_t action=p.next.action;
+        if (!action) p.next.waiting=0;
+        else if (action==4) {
+            if (table[p.next.chapter].script<0) return DC_FORMAT;
+            p.next.action=0;
+            intro_command(&p,DC_INTRO_TRANSITION,4);
+            intro_command(&p,DC_INTRO_LOAD_SCRIPT,p.next.chapter);
+        } else if (action==3) {
+            intro_command(&p,DC_INTRO_CLEANUP,0);intro_command(&p,DC_INTRO_QUIT,0);p.departed=1;
+        } else if (action==1) {
+            intro_command(&p,DC_INTRO_CLEANUP,0);intro_command(&p,DC_INTRO_ENTER_CHAPTER,p.next.chapter);p.departed=1;
+            if (!p.next.progress && p.next.chapter==24) {
+                p.next.progress=1;intro_command(&p,DC_INTRO_UNLOCK_PROGRESS,1);
+            }
+        } else if (action==6) {
+            intro_command(&p,DC_INTRO_CLEANUP,0);intro_command(&p,DC_INTRO_ENTER_AUX,6);
+            p.next.action=0;p.departed=1;
+        } else {
+            intro_command(&p,DC_INTRO_BACKUP,action==5 ? 2 : 1);
+            intro_command(&p,DC_INTRO_ENTER_AUX,action);
+            intro_command(&p,DC_INTRO_STOP_AUDIO,2);intro_command(&p,DC_INTRO_STOP_AUDIO,0);intro_command(&p,DC_INTRO_STOP_AUDIO,1);
+            p.next.action=0;p.departed=1;
+        }
+    }
+    *out=p;return DC_OK;
+}

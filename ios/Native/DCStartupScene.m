@@ -149,7 +149,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     status=dc_model_tick(_model,delta,tick,&world);
     if (status!=DC_OK) return [NSString stringWithFormat:@"Startup model update failed: %d",status];
     _tickInitialized=YES;_lastTick=tick;_wasTouching=touching;
-    return [self renderSprites:NULL count:0 width:width height:height];
+    return [self renderSprites:NULL count:0 width:width height:height readback:nil];
 }
 - (dc_status)queryTransitionReady:(uint32_t *)ready {
     uint32_t clip;
@@ -160,16 +160,21 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
 }
 - (NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
         tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height {
+    return [self drawSprites:items count:count tick:tick width:width height:height readback:nil];
+}
+- (NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
+        tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height readback:(NSMutableData *)readback {
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;
     dc_matrix world=dcStartupIdentity();
     dc_status status=dc_model_tick(_model,delta,tick,&world);
     if(status!=DC_OK)return @"Scene transition model update failed";
     _tickInitialized=YES;_lastTick=tick;
-    return [self renderSprites:items count:count width:width height:height];
+    return [self renderSprites:items count:count width:width height:height readback:readback];
 }
 - (NSString *)renderSprites:(const dc_vk_sprite_item *)items count:(size_t)itemCount
-        width:(uint32_t)width height:(uint32_t)height {
+        width:(uint32_t)width height:(uint32_t)height readback:(NSMutableData *)readback {
     if(itemCount>8 || (itemCount && !items))return @"Scene sprite profile rejected";
+    if(readback && readback.length!=(size_t)width*height*4)return @"Scene readback capacity rejected";
     dc_status status;uint32_t clip,ready;
     float scale=fminf((float)width/1024,(float)height/768);
     dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
@@ -232,7 +237,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     if (status!=DC_OK) return @"Startup animation query failed";
     BOOL stableCard=_card<2 && !_startup.waiting && clip==1 && ready;
     BOOL capture=_captureEnabled && stableCard && !_capturedCards[_card];
-    NSMutableData *pixels=capture ? [NSMutableData dataWithLength:(size_t)width*height*4] : nil;
+    NSMutableData *pixels=readback ?: (capture ? [NSMutableData dataWithLength:(size_t)width*height*4] : nil);
     status=dc_vk_geometry_render(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length);
     if (status!=DC_OK) return [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
     _cardReady=stableCard;

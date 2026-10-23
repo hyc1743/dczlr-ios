@@ -41,6 +41,37 @@ typedef struct dc_script_decoded {
  * interpretation remain outside this API. Input/output cannot overlap. */
 DC_API dc_status dc_script_decode(const void *bytes,size_t length,size_t cursor,
     uint32_t frame,const dc_script_control *controls,size_t count,dc_script_decoded *out);
+
+#define DC_INTRO_CHAPTERS 26u
+typedef struct dc_intro_descriptor { int32_t script,last_frame; } dc_intro_descriptor;
+typedef struct dc_intro_state { uint32_t chapter,action,waiting,progress; } dc_intro_state;
+enum dc_intro_operation {
+    DC_INTRO_RESET_TEXT=1,DC_INTRO_TRANSITION=2,DC_INTRO_LOAD_SCRIPT=3,
+    DC_INTRO_CLEAR_FINISH=4,DC_INTRO_CLEANUP=5,DC_INTRO_ENTER_CHAPTER=6,
+    DC_INTRO_BACKUP=7,DC_INTRO_ENTER_AUX=8,DC_INTRO_STOP_AUDIO=9,
+    DC_INTRO_QUIT=10,DC_INTRO_UNLOCK_PROGRESS=11
+};
+typedef struct dc_intro_command { uint32_t kind,value; } dc_intro_command;
+typedef struct dc_intro_plan {
+    dc_intro_state next;
+    uint32_t count,departed;
+    dc_intro_command commands[6];
+} dc_intro_plan;
+/* End-of-script branch of 0x606440. LOAD_SCRIPT value is chapter index; host
+ * resolves its descriptor and resets the text controller. Transition cases
+ * continue through 0x52bcf0 below. finish is admitted only while not waiting. */
+DC_API dc_status dc_intro_finish(const dc_intro_state *state,
+    const dc_intro_descriptor *table,size_t count,dc_intro_plan *out);
+/* Original pending-action helper. BACKUP value 1 is save/load, 2 options.
+ * ENTER_AUX values: 2 save,5 options,6 title,7 load. STOP_AUDIO order is
+ * 2 music,0 voice,1 effects. ENTER_CHAPTER installs callback/selector/stage
+ * from the host's chapter table and clears active callbacks. Progress refers
+ * to context+0x1355b; chapter 24 promotes all three corresponding flags from
+ * zero to one. CLEAR_FINISH clears separate context bytes +0x21f70..72.
+ * Only departed replaces the update callback. Host operations execute in
+ * order before committing next; failures require scene recovery. */
+DC_API dc_status dc_intro_transition(const dc_intro_state *state,
+    const dc_intro_descriptor *table,size_t count,uint32_t ready,dc_intro_plan *out);
 #ifdef __cplusplus
 }
 #endif

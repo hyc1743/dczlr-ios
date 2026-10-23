@@ -44,9 +44,12 @@ def startup_evidence(log,require_audio=False):
 def new_game_evidence(log):
     if presented_scenes(log)!=['startup','warning','title','intro'] or not re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log):
         raise ValueError('New-game route or intro audio clocks were not verified')
+    records=re.findall(r'(?m)^\S+ PORTLAB_INTRO_RECORD=(\d+:\d+)(?= |$)',log)
+    if records!=['0:0','0:1','0:2','1:0'] or not re.search(r'(?m)^\S+ PORTLAB_TEXT_FADE_ADVANCED(?= |$)',log):
+        raise ValueError('Original text state advancement and first chapter reload were not verified')
     return {'route':'startup/title pointer hover, press, release/transition and sound wait/intro',
         'resources':'self-authored generated PP/script/image/audio only','intro_audio_clocks':'music/sound/voice advanced',
-        'text_adapter':'Apple fallback font, complete-record preview; glyph timing equivalence pending',
+        'records':records,'text_adapter':'original numeric byte-pair layout/fade/forward input; CP936 Apple font rasterization',
         'physical_device':'not tested','complete_game':'not verified'}
 
 
@@ -187,7 +190,9 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
                         captured.add(scene)
             scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
             audio_ok=not startup_fixture or bool(re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log))
-            if exercise_new_game:audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log))
+            if exercise_new_game:
+                audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log))
+                audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_RECORD=1:0(?= |$)',log))
             if (scene_ok and audio_ok) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
@@ -245,6 +250,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         report['startup_pixels']=verify((output/'startup-card-0.png').read_bytes(),(output/'startup-card-1.png').read_bytes())
     if exercise_new_game:
         report['new_game']=new_game_evidence(log)
+        import shutil
+        from startup_pixels import verify_intro
+        shutil.copyfile(container/'Documents/intro-first-record.png',output/'intro-first-record.png')
+        report['intro_pixels']=verify_intro((output/'intro-first-record.png').read_bytes())
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")

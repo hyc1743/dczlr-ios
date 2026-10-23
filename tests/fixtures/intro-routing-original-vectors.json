@@ -1,0 +1,20 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "original_function_sha256": {
+    "0x606440": "2443e6c54e09af2239435c86fc0afd254de5a0c2bd06c2c4658575554ecb7c3b",
+    "0x52bcf0": "a4302abf6852533a8923f155a3a15f5f49ae93aa8d14b5caf06883e668a5769f"
+  },
+  "results": {
+    "finish": {
+      "cases": 567,
+      "output_sha256": "5cdcd8b1df7c3e8ba0130a518aedcf6d51aa0c2d920ab8c60fa7b59d2d1e5ef4"
+    },
+    "transition": {
+      "cases": 2568,
+      "output_sha256": "bc6194c0178833da2c17b5ae5e41316067877e23eb65819d8ac3789cae9e44aa"
+    }
+  },
+  "coverage": "end-of-script chapter routing and transition dispatcher; synthetic descriptors/callback identities and host operations; selector/backup/progress writes verified",
+  "original_game_resources_used": false,
+  "game_playability": "not verified"
+}

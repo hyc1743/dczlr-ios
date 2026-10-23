@@ -17,5 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (dc_status)requestTransition:(uint32_t)request tick:(uint32_t)tick;
 - (nullable NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
     tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height;
+- (nullable NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
+    tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height readback:(nullable NSMutableData *)readback;
 @end
 NS_ASSUME_NONNULL_END

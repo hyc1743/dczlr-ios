@@ -37,8 +37,9 @@ bytes and next cursor. The local audit stores only source/comparison hashes
 and counts; original script bytes are not uploaded. The `%C` actor-command and
 backlog/replay branches remain outside the admitted profile and fail explicitly.
 
-CP932 text layout, body control execution, typewriter timing, voice playback,
-branching and subsequent gameplay callbacks still require reconstruction and
-runtime tests. The first new-game chapter is connected through the partial
-Apple adapter described in `intro-host.md`. Parser equivalence does not
-establish playability.
+The normal byte-pair text controller and forward input are now reconstructed;
+the actual local encoding is CP936, confirmed by font setup and resource
+decoding. See `text-controller.md`. Backlog, broader body controls, voice
+gating and subsequent gameplay callbacks still need reconstruction and runtime
+tests. The opening script chapters use the partial Apple adapter described in
+`intro-host.md`. Parser equivalence does not establish playability.

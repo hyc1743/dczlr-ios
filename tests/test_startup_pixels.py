@@ -5,7 +5,7 @@ import unittest
 import zlib
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
-from startup_pixels import decode,verify
+from startup_pixels import decode,verify,verify_intro
 
 
 def png(color):
@@ -15,6 +15,18 @@ def png(color):
 
 
 class StartupPixelTests(unittest.TestCase):
+    def test_intro_requires_background_and_body_region_pixels(self):
+        def sample(body):
+            def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
+            width,height=320,240;pixels=bytearray(bytes((30,130,70,255))*width*height)
+            if body:
+                for y in range(207,213):
+                    for x in range(50,80):pixels[(y*width+x)*4:(y*width+x)*4+4]=bytes((255,255,255,255))
+            raw=b''.join(b'\0'+pixels[y*width*4:(y+1)*width*4] for y in range(height))
+            return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+        self.assertEqual(verify_intro(sample(True))['matched_background_samples'],9)
+        with self.assertRaises(ValueError):verify_intro(sample(False))
+
     def test_correct_order_and_swapped_or_repeated_cards(self):
         first,second=png((20,110,180)),png((180,80,20))
         self.assertEqual(decode(first)[:3],(8,8,4))

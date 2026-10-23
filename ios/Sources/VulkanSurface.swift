@@ -35,6 +35,10 @@ final class SpritePresenter: NSObject {
     private var reportedMusicAdvance = false
     private var reportedIntroAudioAdvance = false
     private var testTitleTime: CFTimeInterval?
+    private var testIntroTime: CFTimeInterval?
+    private var introChapter = 0
+    private var lastIntroRecord: String?
+    private var reportedTextFade = false
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -76,8 +80,13 @@ final class SpritePresenter: NSObject {
             pointerY = Float(1 - 2 * py / view.bounds.height)
             touching = elapsed >= 6 && elapsed < 6.4
         }
+        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
+           let introTime = testIntroTime, lastReportedScene == .intro, introChapter == 0 {
+            let elapsed = CACurrentMediaTime() - introTime
+            touching = (elapsed >= 2 && elapsed < 2.2) || (elapsed >= 3 && elapsed < 3.2) || (elapsed >= 4 && elapsed < 4.2)
+        }
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
-            touching: touching) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced in
+            touching: touching) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState in
                 guard let self = self else { return }
                 self.renderPending = false
                 if let error = error {
@@ -104,6 +113,7 @@ final class SpritePresenter: NSObject {
                         self.model.record("双卡启动状态已完成并进入标题呈现", event: "PORTLAB_STARTUP_COMPLETED")
                         self.model.record("Vulkan / MoltenVK 已显示标题画面（\(device)）；后续游戏逻辑尚未接入", event: "PORTLAB_SCENE_PRESENTED=title")
                     case .intro:
+                        if self.testIntroTime == nil { self.testIntroTime = CACurrentMediaTime() }
                         self.model.record("New-game intro record presented; later gameplay remains unfinished", event: "PORTLAB_SCENE_PRESENTED=intro")
                     @unknown default:
                         self.model.record("Vulkan 返回未知场景编号：\(scene.rawValue)")
@@ -130,6 +140,21 @@ final class SpritePresenter: NSObject {
                 if scene == .intro, musicAdvanced, !self.reportedIntroAudioAdvance {
                     self.reportedIntroAudioAdvance = true
                     self.model.record("Intro music, sound and voice playback clocks advanced", event: "PORTLAB_INTRO_AUDIO_ADVANCED")
+                }
+                if scene == .intro {
+                    let fields = introState.split(separator: ":")
+                    if fields.count == 3, let chapter = Int(fields[0]), let frame = Int(fields[1]), let fade = Int(fields[2]) {
+                        self.introChapter = chapter
+                        let record = "\(chapter):\(frame)"
+                        if record != self.lastIntroRecord {
+                            self.lastIntroRecord = record
+                            self.model.record("Numbered intro record composited", event: "PORTLAB_INTRO_RECORD=\(record)")
+                        }
+                        if fade > 0, !self.reportedTextFade {
+                            self.reportedTextFade = true
+                            self.model.record("Original numeric text fade advanced", event: "PORTLAB_TEXT_FADE_ADVANCED")
+                        }
+                    }
                 }
             }
     }

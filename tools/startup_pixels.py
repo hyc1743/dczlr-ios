@@ -58,3 +58,22 @@ def verify(first,second):
         results.append({'card':index,'width':width,'height':height,'matched_center_samples':matched})
     return {'method':'native GPU readback saved on each stable card frame; generated color profile check',
             'cards':results,'original_gpu_equivalence':'not established'}
+
+
+def verify_intro(data):
+    width,height,channels,pixels=decode(data);matched=0
+    for fx in (.4,.5,.6):
+        for fy in (.4,.5,.6):
+            at=(int(height*fy)*width+int(width*fx))*channels;r,g,b=pixels[at:at+3]
+            matched+=g>r+40 and g>b+25
+    if matched!=9:raise ValueError('Generated intro background is absent from exact GPU capture')
+    scale=min(width/1024,height/768);ox=(width-1024*scale)/2;oy=(height-768*scale)/2
+    white=0
+    for y in range(max(0,int(oy+652*scale)),min(height,int(oy+700*scale))):
+        for x in range(max(0,int(ox+135*scale)),min(width,int(ox+400*scale))):
+            at=(y*width+x)*channels
+            white+=min(pixels[at:at+3])>=210
+    if white<max(20,int(50*scale*scale)):raise ValueError('Generated intro body text is absent from exact GPU capture')
+    return {'method':'native GPU readback after record0 fade; generated background and text-region pixel presence',
+        'width':width,'height':height,'matched_background_samples':matched,'bright_body_pixels':white,
+        'font_or_character_identity':'requires screenshot inspection; no OCR or original-font equivalence claim'}

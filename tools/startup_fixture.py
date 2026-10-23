@@ -52,11 +52,18 @@ def resources():
     cards=[(b'illusion.ema',ema((20,110,180))),(b'warning.ema',ema((180,80,20)))]
     cards += [(n,ema((20+i*12,60+i*7,30+i*6))) for i,n in enumerate(TITLE_NAMES)]
     cards += [(b'cg-demo.ema',ema((30,130,70)))]
-    intro=b'#cg-demo\n#bgm014\n#SE000\n#T0000#C00#Pdemo0\nLab\nSelf-authored intro fixture.\n$END\n#T0001\nLab\nSecond record.\n$END\n#T0002\nLab\nThird record.\n$END'
+    def script(chapter,last):
+        out=bytearray(b'#cg-demo\r\n#bgm014\r\n#SE000\r\n' if chapter==0 else b'')
+        for frame in range(last+1):
+            out+=f'#T{frame:04d}#C00'.encode()+(b'#Pdemo0' if chapter==0 and frame==0 else b'')+b'\r\n'
+            out+='测试'.encode('gbk')+b'\r\n'
+            out+=('移植文字测试。'.encode('gbk') if chapter==0 and frame==0 else f'Chapter {chapter}, record {frame}.'.encode())+b'\r\n$END\r\n'
+        return bytes(out)
     return {'RPP_02.pp':pp(cards),'RPP_17.pp':pp([(b'mm_B_W.xx',xx),(b'mm_B_W.xa',xa)]),
             'RPP_01.pp':pp([(b'bgm000.wav',wave(220,2)),(b'bgm014.wav',wave(330,2))]),
             'RPP_14.pp':pp([(b'se100.wav',wave(440,.08)),(b'SE000.wav',wave(550,.4))]),
-            'RPP_00.pp':pp([(b'demo0.wav',wave(660,1))]),'RPP_16.pp':pp([(b'00.txt',intro)])}
+            'RPP_00.pp':pp([(b'demo0.wav',wave(660,1))]),
+            'RPP_16.pp':pp([(f'{i:02d}.txt'.encode(),script(i,last)) for i,last in enumerate((2,31,9))])}
 
 
 def wave(frequency,seconds):

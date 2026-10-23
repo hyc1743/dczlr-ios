@@ -158,6 +158,25 @@ class TitlePlan(C.Structure):
                 'departed':self.departed,'commands':[[c.kind,c.value] for c in self.commands[:self.count]]}
 
 
+class TextState(C.Structure):
+    _fields_ = [(n,C.c_uint32) for n in ('columns','max_lines','visible_lines','body_bytes')]+[(n,C.c_int32) for n in ('current_line','wait_state','wait_glyph','frame','last_frame')]+[(n,C.c_uint32) for n in ('last_fade_row','wait_line','wait_duration','wait_stamp','fade_index','active')]+[(n,C.c_int32) for n in ('x','y','font_size')]+[('scale',C.c_float),('rgb',C.c_uint32),('alpha',C.c_uint32*200),('line_lengths',C.c_uint32*5)]
+
+    def record(self):
+        return {n:list(getattr(self,n)) if n in ('alpha','line_lengths') else getattr(self,n) for n,_ in self._fields_}
+
+
+class TextGlyph(C.Structure):
+    _fields_ = [('x',C.c_int32),('y',C.c_int32),('color',C.c_uint32),('bytes',C.c_uint8*2),('reserved',C.c_uint8*2)]
+
+
+class TextPlan(C.Structure):
+    _fields_ = [('next',TextState),('count',C.c_uint32),('glyphs',TextGlyph*200)]
+
+
+class TextAdvancePlan(C.Structure):
+    _fields_ = [('next',TextState),('load_record',C.c_uint32),('finished',C.c_uint32)]
+
+
 class ScriptSpan(C.Structure):
     _fields_ = [("offset",C.c_size_t),("length",C.c_size_t)]
 
@@ -173,6 +192,26 @@ class ScriptControl(C.Structure):
 
 class ScriptDecoded(C.Structure):
     _fields_ = [('record',ScriptRecord)]+[(n,C.c_uint8*20) for n in ('background','music','sound','message')]+[('controls',(C.c_uint8*37)*11)]
+
+
+class IntroDescriptor(C.Structure):
+    _fields_ = [('script',C.c_int32),('last_frame',C.c_int32)]
+
+
+class IntroState(C.Structure):
+    _fields_ = [(n,C.c_uint32) for n in ('chapter','action','waiting','progress')]
+
+
+class IntroCommand(C.Structure):
+    _fields_ = [('kind',C.c_uint32),('value',C.c_uint32)]
+
+
+class IntroPlan(C.Structure):
+    _fields_ = [('next',IntroState),('count',C.c_uint32),('departed',C.c_uint32),('commands',IntroCommand*6)]
+
+    def record(self):
+        return {'state':[getattr(self.next,n) for n,_ in self.next._fields_],
+            'departed':self.departed,'commands':[[v.kind,v.value] for v in self.commands[:self.count]]}
 
 
 class SceneNode(C.Structure):
@@ -265,10 +304,10 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c",
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -378,8 +417,16 @@ def library():
     lib.dc_menu_step.restype = C.c_int
     lib.dc_title_build_plan.argtypes = [C.POINTER(TitleState),C.POINTER(TitleInput),C.POINTER(TitlePlan)]
     lib.dc_title_build_plan.restype = C.c_int
+    lib.dc_text_build_plan.argtypes = [C.POINTER(TextState),C.c_void_p,C.c_size_t,C.c_int32,C.c_uint32,C.c_uint32,C.POINTER(TextPlan)]
+    lib.dc_text_build_plan.restype = C.c_int
+    lib.dc_text_advance.argtypes = [C.POINTER(TextState),C.c_uint32,C.POINTER(TextAdvancePlan)]
+    lib.dc_text_advance.restype = C.c_int
     lib.dc_script_decode.argtypes = [C.c_void_p,C.c_size_t,C.c_size_t,C.c_uint32,C.POINTER(ScriptControl),C.c_size_t,C.POINTER(ScriptDecoded)]
     lib.dc_script_decode.restype = C.c_int
+    lib.dc_intro_finish.argtypes = [C.POINTER(IntroState),C.POINTER(IntroDescriptor),C.c_size_t,C.POINTER(IntroPlan)]
+    lib.dc_intro_finish.restype = C.c_int
+    lib.dc_intro_transition.argtypes = [C.POINTER(IntroState),C.POINTER(IntroDescriptor),C.c_size_t,C.c_uint32,C.POINTER(IntroPlan)]
+    lib.dc_intro_transition.restype = C.c_int
     lib.dc_scene_update.argtypes = [C.POINTER(SceneNode), C.c_size_t, C.POINTER(Matrix), C.POINTER(Matrix), C.c_size_t]
     lib.dc_scene_update.restype = C.c_int
     lib.dc_pose_select.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_float, C.POINTER(PoseSelection)]

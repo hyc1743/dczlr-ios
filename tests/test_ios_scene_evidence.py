@@ -13,7 +13,11 @@ class SceneEvidenceTests(unittest.TestCase):
         audio='2026-10-24T12:00:40Z PORTLAB_INTRO_AUDIO_ADVANCED submitted'
         for invalid in (lines,lines[:-1]+[audio],lines+[audio.replace(' PORTLAB',' echo PORTLAB')],lines+[audio.replace('ADVANCED','ADVANCED_pending')]):
             with self.assertRaises(ValueError):new_game_evidence('\n'.join(invalid))
-        self.assertEqual(new_game_evidence('\n'.join(lines+[audio]))['complete_game'],'not verified')
+        records=['2026-10-24T12:00:41Z PORTLAB_INTRO_RECORD='+record+' submitted' for record in ('0:0','0:1','0:2','1:0')]
+        fade='2026-10-24T12:00:41Z PORTLAB_TEXT_FADE_ADVANCED submitted'
+        self.assertEqual(new_game_evidence('\n'.join(lines+[audio,fade]+records))['complete_game'],'not verified')
+        for missing in range(4):
+            with self.assertRaises(ValueError):new_game_evidence('\n'.join(lines+[audio,fade]+records[:missing]+records[missing+1:]))
 
     def test_pose_requires_changed_transform_marker_and_presented_scene(self):
         log="2026-10-24T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
