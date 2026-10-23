@@ -144,19 +144,33 @@ dc_status dc_model_tick(dc_model *m,uint32_t delta,uint32_t now,const dc_matrix 
     memcpy(m->materials,m->scratch_materials,m->info.materials*sizeof(*m->materials));
     m->animation=state;memcpy(m->clips,clips,sizeof(clips));return DC_OK;
 }
-dc_status dc_model_get_info(const dc_model *m,dc_xx_info *out) { if(!m||!output_allowed(m,out,sizeof(*out)))return DC_ARGUMENT;*out=m->info;return DC_OK; }
+dc_status dc_model_get_info(const dc_model *m,dc_xx_info *out) {
+    if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
+    *out=m->info;
+    return DC_OK;
+}
 dc_status dc_model_material(const dc_model *m,uint32_t index,dc_material_value *out) {
-    if(!m||!output_allowed(m,out,sizeof(*out)))return DC_ARGUMENT;if(index>=m->info.materials)return DC_RANGE;*out=m->materials[index];return DC_OK;
+    if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
+    if (index>=m->info.materials) return DC_RANGE;
+    *out=m->materials[index];
+    return DC_OK;
 }
 dc_status dc_model_global(const dc_model *m,uint32_t index,dc_matrix *out) {
-    if(!m||!output_allowed(m,out,sizeof(*out)))return DC_ARGUMENT;if(index>=m->info.nodes)return DC_RANGE;*out=m->globals[index];return DC_OK;
+    if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
+    if (index>=m->info.nodes) return DC_RANGE;
+    *out=m->globals[index];
+    return DC_OK;
 }
 dc_status dc_model_mesh(const dc_model *m,uint32_t index,dc_xx_submesh *out) {
-    if(!m||!output_allowed(m,out,sizeof(*out)))return DC_ARGUMENT;if(index>=m->info.submeshes)return DC_RANGE;*out=m->meshes[index].info;return DC_OK;
+    if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
+    if (index>=m->info.submeshes) return DC_RANGE;
+    *out=m->meshes[index].info;
+    return DC_OK;
 }
 dc_status dc_model_project(const dc_model *m,uint32_t mesh,const dc_matrix *vp,const dc_viewport *viewport,
         uint32_t diffuse,dc_sprite_vertex *out,size_t capacity) {
-    if(!m||!vp)return DC_ARGUMENT;if(mesh>=m->info.submeshes)return DC_RANGE;
+    if (!m || !vp) return DC_ARGUMENT;
+    if (mesh>=m->info.submeshes) return DC_RANGE;
     const mesh_data *data=&m->meshes[mesh];dc_matrix mvp;
     if (!output_allowed(m,out,data->info.index_count*sizeof(*out))) return DC_ARGUMENT;
     dc_status status=dc_matrix_multiply(&m->globals[data->info.node],vp,&mvp);
