@@ -42,6 +42,7 @@ jobs:
           tar -xf vkd3d.tar.xz
           tar -xf spirv-tools.tar.gz
           tar -xf spirv-headers.tar.gz
+          python3 "$GITHUB_WORKSPACE/tools/patch_vkd3d_texmatrix.py" --source "$RUNNER_TEMP/shader-tools/source/vkd3d-2.1"
       - name: Build native Linux compiler and check self-authored shaders
         shell: bash
         run: |
@@ -55,6 +56,13 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           python3 tools/smoke_shader_converter.py --compiler "$root/native/vkd3d-compiler" \
             --validator /usr/bin/spirv-val --output out/offline-tools/native-smoke
+      - name: Retain the native conversion report even when a regression fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-shader-native-smoke-report
+          path: out/offline-tools/native-smoke/conversion-report.json
+          if-no-files-found: ignore
       - name: Cross-compile Windows x64 converter
         shell: bash
         run: |
@@ -86,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/shader-tools"
-          mkdir -p out/offline-tools/windows/licenses out/offline-tools/windows/source
+          mkdir -p out/offline-tools/windows/licenses out/offline-tools/windows/source/patches
           cp "$root/cross/.libs/vkd3d-compiler.exe" "$root/cross/.libs/libvkd3d-shader-1.dll" \
             "$root/spirv-cross/tools/spirv-val.exe" out/offline-tools/windows/
           cp "$root/source/vkd3d-2.1/COPYING" out/offline-tools/windows/licenses/vkd3d-COPYING
@@ -94,13 +102,16 @@ jobs:
           cp "$root/source/SPIRV-Tools-vulkan-sdk-1.4.304.0/LICENSE" out/offline-tools/windows/licenses/SPIRV-Tools-LICENSE
           cp "$root/source/SPIRV-Headers-vulkan-sdk-1.4.304.0/LICENSE" out/offline-tools/windows/licenses/SPIRV-Headers-LICENSE
           cp "$root/source/"*.tar.* out/offline-tools/windows/source/
+          cp tools/patch_vkd3d_texmatrix.py out/offline-tools/windows/source/
+          cp tools/patches/vkd3d-2.1-texm3x2.c out/offline-tools/windows/source/patches/
+          cp "$root/source/vkd3d-2.1/portlab-patch-report.json" out/offline-tools/windows/
           cp out/offline-tools/native-smoke/conversion-report.json out/offline-tools/windows/native-reference.json
           x86_64-w64-mingw32-objdump -p out/offline-tools/windows/*.exe | grep 'DLL Name' > out/offline-tools/windows/imports.txt
           python3 - <<'PY'
           import hashlib,json,os
           from pathlib import Path
           root=Path('out/offline-tools/windows')
-          report={'source_revision':os.environ['GITHUB_SHA'], 'vkd3d_version':'2.1',
+          report={'source_revision':os.environ['GITHUB_SHA'], 'vkd3d_version':'2.1+PortLab-texm3x2',
               'spirv_tools_tag':'vulkan-sdk-1.4.304.0', 'original_game_inputs_used':False,
               'sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()
                   for p in root.iterdir() if p.suffix in ('.exe','.dll')}}

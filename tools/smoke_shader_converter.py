@@ -45,6 +45,8 @@ if __name__ == "__main__":
     audit = {"artifact_sha256": hashlib.sha256(data).hexdigest(), "failed": 0, "shaders": records}
     report = convert(audit, folder, args.compiler.resolve(strict=True), args.validator.resolve(strict=True), args.output)
     if report["failed"] or report["passed"] != 8:
+        print(json.dumps([{"source_sha256": row["source_sha256"], "profile": row["profile"],
+                           "reason": row.get("reason")} for row in report["shaders"] if row["status"] == "failed"]), flush=True)
         raise SystemExit("Self-authored shader conversion/validation failed")
     # Host/compiler binaries differ; compare only SPIR-V for identical inputs.
     if args.reference:

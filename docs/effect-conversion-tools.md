@@ -126,12 +126,18 @@ python -m unittest discover -s tests -p test_dx9_effect.py -v
 已将全部结果保留在 `research/effect-parser/spirv-vkd3d-1.17/conversion-report.json`，
 不能用简单自制 shader 通过推断覆盖本游戏。
 
-官方 vkd3d 2.1 源码已核对含这些旧指令的降级路径，归档 SHA-256 为
+官方 vkd3d 2.1 源码已核对含 `lrp`／`nrm`／`rep` 及部分旧式采样的降级路径，归档 SHA-256 为
 `7510146aff2adfb4ae07ab890701a607e5ff7c66e57100cfc9f630ec92eeda6a`。
 工作流已切换此版本，并增加五个自行编写、经微软汇编／长度／反汇编核对的回归 shader，
 覆盖 `nrm`、`lrp`、`rep`、`texcoord`、`texm3x2*`、`texbem`、ps_1_4 和 `_bx2`。
-新增夹具已在 1.17 上复现失败；新版本实际构建及完整原版转换仍待后续验证。
-这些汇编源码和生成字节码均为自制，不含原游戏 shader。
+新增夹具已在 1.17 上复现失败。2.1 的 run `39926214795` 构建成功，但新增 Linux
+兼容回归未通过；静态源码仍明确拒绝 `texm3x2pad/texm3x2tex`。目前新增的
+`tools/patches/vkd3d-2.1-texm3x2.c` 扩展只处理成对、连续 stage、2D、非投影和非比较
+采样的 ps_1_x 纹理矩阵指令，生成两次 DP3 和目的 stage 的采样；其他情况明确失败。
+应用脚本核对固定 `ir.c` 摘要后才修改，并记录修改前后摘要。它保留 LGPL 许可，
+仅进入离线转换工具，对应源码和应用脚本随产物保留。扩展尚待新一轮构建／回归，
+完整原版转换与 GPU 数值一致性仍待验证。这些汇编源码和生成字节码均为自制，
+不含原游戏 shader。
 
 `tools/convert_effect_shaders.py` 在运行转换器前核对全部本地输入摘要；输出先写入独立
 临时文件，通过入口 stage 检查和 Vulkan 1.0 的 `spirv-val` 后才写入正式 `.spv`。
