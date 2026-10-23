@@ -178,3 +178,40 @@ dc_status dc_xa_load_material_keys(const void *bytes, size_t length,
     }
     return DC_OK;
 }
+
+dc_status dc_xa_pose_track_at(const void *bytes, size_t length, uint32_t index, dc_xa_pose_track *out) {
+    if (!bytes || !out || overlaps(bytes, length, out, sizeof(*out))) return DC_ARGUMENT;
+    dc_xa_info info;
+    dc_status status = dc_xa_probe(bytes, length, &info);
+    if (status != DC_OK) return status;
+    if (index >= info.bone_tracks) return DC_NOT_FOUND;
+    cursor c = {(const uint8_t *)bytes, length, info.clip_table_offset + DC_XA_CLIP_COUNT * DC_XA_CLIP_RECORD_BYTES + 4};
+    for (uint32_t i = 0; i <= index; ++i) {
+        dc_xa_pose_track track = {0};
+        REQUIRE(integer(&c, &track.name_length));
+        track.name_offset = c.position;
+        REQUIRE(skip(&c, track.name_length) && integer(&c, &track.key_count) && integer(&c, &track.mode));
+        track.keys_offset = c.position;
+        REQUIRE(array(&c, track.key_count, 52));
+        if (i == index) { *out = track; return DC_OK; }
+    }
+    return DC_NOT_FOUND;
+}
+
+dc_status dc_xa_load_pose_keys(const void *bytes, size_t length, uint32_t index, dc_pose_key *keys, size_t capacity) {
+    dc_xa_pose_track track;
+    dc_status status = dc_xa_pose_track_at(bytes, length, index, &track);
+    if (status != DC_OK) return status;
+    if (capacity < track.key_count || (track.key_count && sizeof(*keys) > SIZE_MAX / track.key_count)) return DC_RANGE;
+    if (!track.key_count) return DC_OK;
+    if (!keys || overlaps(bytes, length, keys, track.key_count * sizeof(*keys))) return DC_ARGUMENT;
+    const uint8_t *record = (const uint8_t *)bytes + track.keys_offset;
+    for (uint32_t i = 0; i < track.key_count; ++i, record += 52) {
+        dc_pose_key key;
+        uint32_t bits = word(record);
+        memcpy(&key.frame, &bits, 4);
+        for (uint32_t j = 0; j < 12; ++j) key.values[j] = real(record + 4 + j*4);
+        keys[i] = key;
+    }
+    return DC_OK;
+}

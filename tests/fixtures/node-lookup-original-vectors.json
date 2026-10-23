@@ -1,0 +1,74 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 12,
+  "vectors": [
+    {
+      "depth": 0,
+      "query_hex": "73796e7468657469632d6e6f646500",
+      "selected": 0
+    },
+    {
+      "depth": 0,
+      "query_hex": "73796e7468657469632d6e6f64650069676e6f726564",
+      "selected": 0
+    },
+    {
+      "depth": 0,
+      "query_hex": "53796e7468657469632d6e6f646500",
+      "selected": null
+    },
+    {
+      "depth": 0,
+      "query_hex": "6f7468657200",
+      "selected": null
+    },
+    {
+      "depth": 1,
+      "query_hex": "73796e7468657469632d6e6f646500",
+      "selected": 1
+    },
+    {
+      "depth": 1,
+      "query_hex": "73796e7468657469632d6e6f64650069676e6f726564",
+      "selected": 1
+    },
+    {
+      "depth": 1,
+      "query_hex": "53796e7468657469632d6e6f646500",
+      "selected": null
+    },
+    {
+      "depth": 1,
+      "query_hex": "6f7468657200",
+      "selected": null
+    },
+    {
+      "depth": 4,
+      "query_hex": "73796e7468657469632d6e6f646500",
+      "selected": 4
+    },
+    {
+      "depth": 4,
+      "query_hex": "73796e7468657469632d6e6f64650069676e6f726564",
+      "selected": 4
+    },
+    {
+      "depth": 4,
+      "query_hex": "53796e7468657469632d6e6f646500",
+      "selected": null
+    },
+    {
+      "depth": 4,
+      "query_hex": "6f7468657200",
+      "selected": null
+    }
+  ],
+  "original_function_sha256": {
+    "0x4131f0": "c33472a9127016a38eee8b45d379f47e13b76a471c77b01b9ab043006e0fe921",
+    "0x413270": "813da8a2b4917430d5c2e7f3c2ecaf2634a8b29b0ed8a7292c5bb4f40b78a121"
+  },
+  "execution": "isolated original recursive node lookup; synthetic bounded exact-equality strcmp",
+  "original_game_resources_used": false,
+  "gpu": "not executed",
+  "game_playability": "not verified"
+}

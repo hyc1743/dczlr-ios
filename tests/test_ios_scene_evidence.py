@@ -8,6 +8,17 @@ from check_ios_sprite import presented_scenes, scene_evidence, scene_ready
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_pose_requires_changed_transform_marker_and_presented_scene(self):
+        log="2026-10-24T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
+        self.assertFalse(scene_ready(log,"checker",require_pose=True))
+        for marker in ("command echo PORTLAB_NATIVE_POSE_ADVANCED","PORTLAB_NATIVE_POSE_ADVANCED_pending"):
+            self.assertFalse(scene_ready(log+"2026-10-24T12:00:01Z "+marker+"\n","checker",require_pose=True))
+        with self.assertRaises(ValueError):scene_evidence(log,"checker",require_pose=True)
+        log+="2026-10-24T12:00:01Z PORTLAB_NATIVE_POSE_ADVANCED submitted\n"
+        self.assertEqual(scene_evidence(log,"checker",require_pose=True)['native_pose_sampling'],
+                         'changed self-authored XA node transform and presentation reported')
+        self.assertFalse(scene_ready(log,"title",require_pose=True))
+
     def test_xx_requires_its_own_exact_marker_and_scene(self):
         log = "2026-10-24T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
         self.assertFalse(scene_ready(log, "checker", require_xx=True))

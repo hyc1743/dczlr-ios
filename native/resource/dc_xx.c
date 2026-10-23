@@ -218,6 +218,38 @@ dc_status dc_xx_material_baseline(const dc_xx *model, uint32_t index, dc_materia
     return DC_OK;
 }
 
+dc_status dc_xx_find_node_encoded(const dc_xx *model, const void *name_bytes, size_t length, uint32_t *index) {
+    if (!model || !name_bytes || !index) return DC_ARGUMENT;
+    if (overlap(model->data, model->length, index, sizeof(*index))) return DC_ARGUMENT;
+    size_t query;
+    if (!string_length(name_bytes, length, &query)) return DC_FORMAT;
+    uint32_t selected = UINT32_MAX;
+    for (uint32_t i = 0; i < model->info.nodes; ++i) {
+        dc_xx_span span = model->nodes[i].name;
+        size_t candidate;
+        if (!string_length(model->data + span.offset, span.length, &candidate)) return DC_FORMAT;
+        if (candidate == query && !memcmp(model->data + span.offset, name_bytes, query)) selected = i;
+    }
+    if (selected == UINT32_MAX) return DC_NOT_FOUND;
+    *index = selected;
+    return DC_OK;
+}
+
+dc_status dc_xx_node_matrix(const dc_xx *model, uint32_t index, dc_matrix *out) {
+    if (!model || !out) return DC_ARGUMENT;
+    if (overlap(model->data, model->length, out, sizeof(*out))) return DC_ARGUMENT;
+    if (index >= model->info.nodes) return DC_RANGE;
+    dc_matrix value;
+    const uint8_t *p = model->data + model->nodes[index].matrix_offset;
+    for (uint32_t i = 0; i < 16; ++i) {
+        uint32_t bits = word(p + i*4);
+        memcpy(&value.values[i], &bits, 4);
+        if (!isfinite(value.values[i])) return DC_RANGE;
+    }
+    *out = value;
+    return DC_OK;
+}
+
 static dc_status image_format(const dc_xx *model, uint32_t index, dc_image_format *out) {
     if (!model) return DC_ARGUMENT;
     if (index >= model->info.textures) return DC_RANGE;

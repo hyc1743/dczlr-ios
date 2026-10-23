@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from native_core import library, XXModel, XXInfo, XXNode, MaterialValue, MaterialKey, ImageInfo, XAMaterialTrack
+from native_core import library, XXModel, XXInfo, XXNode, MaterialValue, MaterialKey, ImageInfo, XAMaterialTrack, Matrix
 from xx_cases import fixture, node, u32, name, material_tables, diagnostic_fixture
 
 
@@ -35,6 +35,20 @@ class NativeXXTests(unittest.TestCase):
     def test_baseline_negates_16_components_and_preserves_power(self):
         with XXModel(fixture()) as model:
             self.assertEqual(list(model.baseline(0).components), [0.25 + i * 0.125 for i in range(16)] + [7.5])
+
+    def test_recorded_original_last_node_name_match_and_serialized_matrix(self):
+        reference=json.loads((ROOT/'tests/fixtures/node-lookup-original-vectors.json').read_text())
+        for row in reference['vectors']:
+            with XXModel(fixture(depth=row['depth'])) as model:
+                name=bytes(b^255 for b in bytes.fromhex(row['query_hex']));result=C.c_uint32(0xffffffff)
+                status=self.lib.dc_xx_find_node_encoded(model.handle,name,len(name),C.byref(result))
+                if row['selected'] is None:
+                    self.assertEqual((status,result.value),(6,0xffffffff))
+                else:
+                    self.assertEqual((status,result.value),(0,row['selected']))
+                    matrix=Matrix()
+                    self.assertEqual(self.lib.dc_xx_node_matrix(model.handle,result.value,C.byref(matrix)),0)
+                    self.assertEqual(bytes(matrix),model.data[model.at('node',result.value).matrix_offset:][:64])
 
     def test_recorded_original_material_loader_outputs(self):
         reference = json.loads((ROOT / "tests/fixtures/xx-material-original-vectors.json").read_text())
@@ -161,6 +175,10 @@ class NativeXXTests(unittest.TestCase):
                 C.cast(model.source, C.POINTER(C.c_uint32))), 1)
             self.assertEqual(self.lib.dc_xx_image_probe(model.handle, 0,
                 C.cast(model.source, C.POINTER(ImageInfo))), 1)
+            self.assertEqual(self.lib.dc_xx_node_matrix(model.handle,0,
+                C.cast(model.source,C.POINTER(Matrix))),1)
+            self.assertEqual(self.lib.dc_xx_find_node_encoded(model.handle,b'\xff',1,
+                C.cast(model.source,C.POINTER(C.c_uint32))),1)
             self.assertEqual(model.source.raw, before)
 
 

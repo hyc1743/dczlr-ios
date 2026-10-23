@@ -43,10 +43,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
     dc_animation_timing _diagnosticTiming;
     dc_material_key _diagnosticMaterialKeys[2];
     dc_material_value _diagnosticMaterial, _diagnosticBaseline;
+    dc_pose_key _diagnosticPoseKeys[2];
+    dc_matrix _diagnosticPose;
     uint32_t _lastDiagnosticTick;
     BOOL _diagnosticTickInitialized;
     BOOL _diagnosticAnimationAdvanced;
     BOOL _diagnosticMaterialAdvanced;
+    BOOL _diagnosticPoseAdvanced;
     dispatch_queue_t _renderQueue;
 }
 + (Class)layerClass { return CAMetalLayer.class; }
@@ -81,6 +84,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         self->_diagnosticTickInitialized = NO;
         self->_diagnosticAnimationAdvanced = NO;
         self->_diagnosticMaterialAdvanced = NO;
+        self->_diagnosticPoseAdvanced = NO;
         self->_width = self->_height = 0;
     });
 }
@@ -169,6 +173,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     _diagnosticTickInitialized = NO;
     _diagnosticAnimationAdvanced = NO;
     _diagnosticMaterialAdvanced = NO;
+    _diagnosticPoseAdvanced = NO;
     _width = _height = 0;
 }
 - (void)dealloc {
@@ -223,6 +228,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     size_t drawCount = 0;
     BOOL animationMoved = NO;
     BOOL materialMoved = NO;
+    BOOL poseMoved = NO;
     if (showTitle) {
         /* The original title assets and hit regions use 1024x768 coordinates. */
         float scale = fminf((float)_width / 1024.0f, (float)_height / 768.0f);
@@ -285,7 +291,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
              * path. No original names, keys or game payloads are supplied. */
             const uint8_t target[] = {0x9b,0x96,0x9e,0x98,0x91,0x90,0x8c,0x8b,0x96,0x9c,0xff};
             const size_t keysOffset = 13 + sizeof(target), tableOffset = 160 + sizeof(target);
-            NSMutableData *fixture = [NSMutableData dataWithLength:tableOffset + 4 + DC_XA_CLIP_COUNT * DC_XA_CLIP_RECORD_BYTES];
+            const size_t poseOffset = tableOffset + DC_XA_CLIP_COUNT * DC_XA_CLIP_RECORD_BYTES;
+            const uint8_t nodeTarget[] = {0x8c,0x86,0x91,0x8b,0x97,0x9a,0x8b,0x96,0x9c,0xd2,0x91,0x90,0x9b,0x9a,0xff};
+            const size_t poseKeysOffset = poseOffset + 16 + sizeof(nodeTarget);
+            NSMutableData *fixture = [NSMutableData dataWithLength:poseKeysOffset + 2 * 52];
             uint8_t *bytes = fixture.mutableBytes;
             bytes[0] = 1;
             dc_write_word_le(bytes + 1, 1);
@@ -302,6 +311,21 @@ static void dc_write_float_le(uint8_t *out, float value) {
             dc_write_float_le(bytes + tableOffset + 64, 18.0f);
             dc_write_float_le(bytes + tableOffset + 76, 6.283185307179586f);
             bytes[tableOffset + 80] = 1;
+            dc_write_word_le(bytes + poseOffset, 1);
+            dc_write_word_le(bytes + poseOffset + 4, sizeof(nodeTarget));
+            memcpy(bytes + poseOffset + 8, nodeTarget, sizeof(nodeTarget));
+            dc_write_word_le(bytes + poseOffset + 8 + sizeof(nodeTarget), 2);
+            for (uint32_t key = 0; key < 2; ++key) {
+                uint8_t *record = bytes + poseKeysOffset + key * 52;
+                dc_write_word_le(record, key * 8);
+                float angle = key ? 1.8f : -0.6f;
+                dc_write_float_le(record + 12, sinf(angle * 0.5f));
+                dc_write_float_le(record + 16, cosf(angle * 0.5f));
+                dc_write_float_le(record + 28, key ? 0.2f : -0.2f);
+                dc_write_float_le(record + 40, key ? 1.15f : 0.85f);
+                dc_write_float_le(record + 44, key ? 1.15f : 0.85f);
+                dc_write_float_le(record + 48, 1);
+            }
             dc_animation_clip clips[DC_XA_CLIP_COUNT];
             dc_animation_timing timing[DC_XA_CLIP_COUNT];
             dc_status status = dc_xa_load_clips(bytes, fixture.length, clips, timing, DC_XA_CLIP_COUNT);
@@ -320,6 +344,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
             if (status == DC_OK)
                 status = dc_xx_find_material_encoded(model, bytes + track.name_offset, track.name_length, &materialIndex);
             if (status == DC_OK) status = dc_xx_material_baseline(model, materialIndex, &_diagnosticBaseline);
+            dc_xa_pose_track poseTrack;
+            uint32_t nodeIndex = UINT32_MAX;
+            if (status == DC_OK) status = dc_xa_pose_track_at(bytes, fixture.length, 0, &poseTrack);
+            if (status == DC_OK)
+                status = dc_xx_find_node_encoded(model, bytes + poseTrack.name_offset, poseTrack.name_length, &nodeIndex);
+            if (status == DC_OK) status = dc_xx_node_matrix(model, nodeIndex, &_diagnosticPose);
+            if (status == DC_OK) status = dc_xa_load_pose_keys(bytes, fixture.length, 0, _diagnosticPoseKeys, 2);
             dc_xx_close(model);
             if (status != DC_OK)
                 return [NSString stringWithFormat:@"Native XA/XX material binding rejected: %d", status];
@@ -340,13 +371,19 @@ static void dc_write_float_le(uint8_t *out, float value) {
         if (materialStatus != DC_OK)
             return [NSString stringWithFormat:@"Native material sampling failed: %d", materialStatus];
         materialMoved = animationMoved && oldAlpha != _diagnosticMaterial.components[3];
+        dc_matrix previousPose = _diagnosticPose;
+        dc_status poseStatus = dc_pose_sample(_diagnosticPoseKeys, 2, 0, update.samples[0], &_diagnosticPose);
+        if (poseStatus != DC_OK)
+            return [NSString stringWithFormat:@"Native pose sampling failed: %d", poseStatus];
+        poseMoved = animationMoved && memcmp(&previousPose, &_diagnosticPose, sizeof(previousPose)) != 0;
+        float poseScale = hypotf(_diagnosticPose.values[0], _diagnosticPose.values[1]);
         float side = fminf(_width, _height) * 0.4f;
         dc_vk_sprite_item *item = &draws[drawCount++];
         item->texture = _texture; item->blend_mode = 3; item->point_filter = 1;
         item->pose = (dc_sprite_pose){.width = side, .height = side,
-            .x = _width * (0.5f + x * 0.3f), .y = _height * (0.5f - y * 0.3f), .z = 0.5f,
-            .origin_x = 0.5f, .origin_y = 0.5f, .scale_x = 1, .scale_y = 1, .alpha = _diagnosticMaterial.components[3],
-            .rotation = update.samples[0], .red = 1, .green = 1, .blue = 1,
+            .x = _width * (0.5f + x * 0.3f + _diagnosticPose.values[12]*0.3f), .y = _height * (0.5f - y * 0.3f), .z = 0.5f,
+            .origin_x = 0.5f, .origin_y = 0.5f, .scale_x = poseScale, .scale_y = poseScale, .alpha = _diagnosticMaterial.components[3],
+            .rotation = atan2f(_diagnosticPose.values[1], _diagnosticPose.values[0]), .red = 1, .green = 1, .blue = 1,
             .u0 = 0, .u1 = 1, .v0 = 0, .v1 = 1};
     }
     const uint8_t clear[] = {10,15,26,255};
@@ -361,12 +398,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
         (_startupTexture ? DCVulkanSpriteSceneStartupCard : DCVulkanSpriteSceneDiagnostic);
     if (animationMoved) _diagnosticAnimationAdvanced = YES;
     if (materialMoved) _diagnosticMaterialAdvanced = YES;
+    if (poseMoved) _diagnosticPoseAdvanced = YES;
     ++_presentedFrames;
     return nil;
 }
 - (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching
-            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL))completion {
-    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO); return; }
+            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL))completion {
+    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO); return; }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     CGSize drawableSize = layer.drawableSize;
     uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
@@ -378,7 +416,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
             DCVulkanSpriteScene scene = self->_presentedScene;
             BOOL advanced = self->_diagnosticAnimationAdvanced;
             BOOL materialAdvanced = self->_diagnosticMaterialAdvanced;
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced); });
+            BOOL poseAdvanced = self->_diagnosticPoseAdvanced;
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced, poseAdvanced); });
         }
     });
 }

@@ -13,7 +13,7 @@ typedef NS_ENUM(NSInteger, DCVulkanSpriteScene) {
 @property(nonatomic, readonly) DCVulkanSpriteScene presentedScene;
 @property(nonatomic, copy, nullable) NSString *startupDataDirectory;
 - (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching
-            completion:(void (^)(NSString * _Nullable error, NSString *deviceName, DCVulkanSpriteScene presentedScene, BOOL animationAdvanced, BOOL materialAdvanced))completion
+            completion:(void (^)(NSString * _Nullable error, NSString *deviceName, DCVulkanSpriteScene presentedScene, BOOL animationAdvanced, BOOL materialAdvanced, BOOL poseAdvanced))completion
     NS_SWIFT_NAME(requestDraw(atX:y:time:touching:completion:));
 - (void)releaseRenderer;
 @end

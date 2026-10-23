@@ -103,6 +103,23 @@ class MaterialKey(C.Structure):
     _fields_ = [("value", MaterialValue), ("frame", C.c_int32)]
 
 
+class PoseKey(C.Structure):
+    _fields_ = [("frame", C.c_int32), ("values", C.c_float * 12)]
+
+
+class PoseSelection(C.Structure):
+    _fields_ = [("left", C.c_uint32), ("right", C.c_uint32), ("weight", C.c_float)]
+
+
+class Matrix(C.Structure):
+    _fields_ = [("values", C.c_float * 16)]
+
+
+class XAPoseTrack(C.Structure):
+    _fields_ = [("name_offset", C.c_size_t), ("keys_offset", C.c_size_t),
+                ("name_length", C.c_uint32), ("key_count", C.c_uint32), ("mode", C.c_uint32)]
+
+
 class XAMaterialTrack(C.Structure):
     _fields_ = [("name_offset", C.c_size_t), ("keys_offset", C.c_size_t),
                 ("name_length", C.c_uint32), ("key_count", C.c_uint32)]
@@ -182,10 +199,10 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c",
                ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -261,6 +278,16 @@ def library():
     lib.dc_xa_material_track_at.restype = C.c_int
     lib.dc_xa_load_material_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(MaterialKey), C.c_size_t]
     lib.dc_xa_load_material_keys.restype = C.c_int
+    lib.dc_pose_select.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_float, C.POINTER(PoseSelection)]
+    lib.dc_pose_select.restype = C.c_int
+    lib.dc_pose_sample.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_uint32, C.c_float, C.POINTER(Matrix)]
+    lib.dc_pose_sample.restype = C.c_int
+    lib.dc_matrix_multiply.argtypes = [C.POINTER(Matrix), C.POINTER(Matrix), C.POINTER(Matrix)]
+    lib.dc_matrix_multiply.restype = C.c_int
+    lib.dc_xa_pose_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAPoseTrack)]
+    lib.dc_xa_pose_track_at.restype = C.c_int
+    lib.dc_xa_load_pose_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(PoseKey), C.c_size_t]
+    lib.dc_xa_load_pose_keys.restype = C.c_int
     lib.dc_material_interpolate.argtypes = [C.POINTER(MaterialKey), C.POINTER(MaterialKey), C.c_float, C.POINTER(MaterialValue)]
     lib.dc_material_interpolate.restype = C.c_int
     lib.dc_material_sample.argtypes = [C.POINTER(MaterialKey), C.c_size_t, C.POINTER(MaterialValue), C.c_float, C.POINTER(MaterialValue)]
@@ -279,6 +306,10 @@ def library():
         function.restype = C.c_int
     lib.dc_xx_find_material_encoded.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
     lib.dc_xx_find_material_encoded.restype = C.c_int
+    lib.dc_xx_find_node_encoded.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
+    lib.dc_xx_find_node_encoded.restype = C.c_int
+    lib.dc_xx_node_matrix.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(Matrix)]
+    lib.dc_xx_node_matrix.restype = C.c_int
     lib.dc_xx_material_baseline.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(MaterialValue)]
     lib.dc_xx_material_baseline.restype = C.c_int
     lib.dc_xx_image_probe.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(ImageInfo)]

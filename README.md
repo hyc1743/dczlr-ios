@@ -73,6 +73,13 @@ pixels were compared only for the non-character transition's two images.
 Opaque model tails and the unknown archive remain unresolved. See
 [xx-reader.md](docs/xx-reader.md).
 
+XA node-key reading and bounded mode-0 local pose sampling are implemented.
+The local audit covers 10,398 tracks/14,884,058 keys; isolated original
+selection/driver comparisons cover self-authored fixtures and the non-character
+startup transition. The checker projects a sampled self-authored node matrix
+into its sprite. Node hierarchy, original transition mesh rendering and later
+game flow remain incomplete. See [pose-sampling.md](docs/pose-sampling.md).
+
 Source `17e42d7` passed 111 portable tests, 78 ARM64 macOS native tests,
 iPhoneOS compilation and device IPA packaging. Run `40008100005` passed the
 iPhone 16 Pro/iOS 18.5 checker on attempt 2 after the first simulator launch

@@ -2,6 +2,7 @@
 #define DC_XA_H
 #include "dc_animation.h"
 #include "dc_material.h"
+#include "dc_pose.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,6 +19,10 @@ typedef struct dc_xa_material_track {
     size_t name_offset, keys_offset;
     uint32_t name_length, key_count;
 } dc_xa_material_track;
+typedef struct dc_xa_pose_track {
+    size_t name_offset, keys_offset;
+    uint32_t name_length, key_count, mode;
+} dc_xa_pose_track;
 
 /* Validate the admitted serialized XA profile without allocating or modifying
  * input: four 0/1 section flags, bounded variable blocks and (when present) the
@@ -47,6 +52,13 @@ DC_API dc_status dc_xa_material_track_at(const void *bytes, size_t length,
     uint32_t index, dc_xa_material_track *out);
 DC_API dc_status dc_xa_load_material_keys(const void *bytes, size_t length,
     uint32_t index, dc_material_key *keys, size_t capacity);
+/* Node/bone tracks follow the numeric clip table. The entire XA framing is
+ * checked before outputs are written. Unknown mode values remain metadata;
+ * dc_pose_sample separately admits mode 0. No target lookup or skinning. */
+DC_API dc_status dc_xa_pose_track_at(const void *bytes, size_t length,
+    uint32_t index, dc_xa_pose_track *out);
+DC_API dc_status dc_xa_load_pose_keys(const void *bytes, size_t length,
+    uint32_t index, dc_pose_key *keys, size_t capacity);
 
 #ifdef __cplusplus
 }

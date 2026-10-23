@@ -5,7 +5,7 @@ import hashlib
 import json
 import struct
 from pathlib import Path
-from native_core import library, XAInfo, AnimationClip, AnimationTiming, PPArchive, XAMaterialTrack, MaterialKey
+from native_core import library, XAInfo, AnimationClip, AnimationTiming, PPArchive, XAMaterialTrack, MaterialKey, XAPoseTrack, PoseKey
 from xa_cases import numeric_reference
 
 
@@ -76,10 +76,31 @@ def audit(directory, reference=None):
                     material_keys += count
                     material_digest.update(bytes(keys))
                     offset = keys_offset + count * 72
+                pose_digest, pose_keys, pose_modes = hashlib.sha256(), 0, {}
+                offset = info.clip_table_offset + 512 * 108 + 4
+                for track_index in range(info.bone_tracks):
+                    name_length = struct.unpack_from('<I', data, offset)[0]
+                    name_offset = offset + 4
+                    count, mode = struct.unpack_from('<2I', data, name_offset + name_length)
+                    keys_offset = name_offset + name_length + 8
+                    view = XAPoseTrack()
+                    if lib.dc_xa_pose_track_at(data, len(data), track_index, C.byref(view)):
+                        raise ValueError('Native pose track lookup failed')
+                    if (view.name_offset,view.name_length,view.keys_offset,view.key_count,view.mode) != (name_offset,name_length,keys_offset,count,mode):
+                        raise ValueError('Pose metadata differs from serialized cursor')
+                    keys = (PoseKey * count)()
+                    if lib.dc_xa_load_pose_keys(data, len(data), track_index, keys, count):
+                        raise ValueError('Native pose key decode failed')
+                    if bytes(keys) != data[keys_offset:keys_offset + count*52]:
+                        raise ValueError('Pose key bytes differ')
+                    pose_digest.update(bytes(keys)); pose_keys += count
+                    pose_modes[str(mode)] = pose_modes.get(str(mode), 0) + 1
+                    offset = keys_offset + count * 52
                 rows.append({"archive": path.name, "index": index, "bytes": entry.size,
                              "source_sha256": digest, "info": info.record(),
                              "numeric_table_sha256": decoded_digest, "material_keys": material_keys,
-                             "material_keys_sha256": material_digest.hexdigest(), "status": "metadata_and_numeric_bytes_match"})
+                             "material_keys_sha256": material_digest.hexdigest(), "pose_keys": pose_keys,
+                             "pose_modes": pose_modes, "pose_keys_sha256": pose_digest.hexdigest(), "status": "metadata_and_numeric_bytes_match"})
     if references is not None and set(references) != {(r["archive"], r["index"]) for r in rows}:
         raise ValueError("Independent reference entry coverage differs")
     return {"schema": 1, "method": "native XA framing plus serialized-field byte comparison",
@@ -87,9 +108,11 @@ def audit(directory, reference=None):
             "entries": rows, "verified_xa": len(rows), "decoded_clip_records": sum(r["info"]["clip_count"] for r in rows),
             "material_tracks": sum(r["info"]["material_tracks"] for r in rows),
             "material_key_records": sum(r["material_keys"] for r in rows),
+            "pose_tracks": sum(r['info']['bone_tracks'] for r in rows),
+            "pose_key_records": sum(r['pose_keys'] for r in rows),
             "unrecognized_archives_not_inspected": unrecognized,
             "payload_exported": False, "names_or_pose_values_exported": False,
-            "pose_material_sampling": "not verified by this audit; material key bytes only", "game_playability": "not_verified"}
+            "pose_material_sampling": "not verified by this audit; key bytes only", "game_playability": "not_verified"}
 
 
 if __name__ == "__main__":
