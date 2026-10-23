@@ -93,3 +93,22 @@ python -m unittest discover -s tests -p test_dx9_effect.py -v
 
 现有 `MetalEffect.swift` 仍是诊断场景。`converted-effects.schema.json` 和校验器继续约束
 已有 Metal 产物契约，但尚未产生满足实际游戏渲染要求的转换清单。
+
+## 离线转换器构建门槛
+
+`offline-shader-tools.yml` 固定下载 vkd3d 1.17、SPIRV-Tools 和 SPIRV-Headers
+`vulkan-sdk-1.4.304.0` 源码，下载后先核对摘要。工作流先在 Linux 编译转换器，
+只转换本工程自制的三个 SM2 shader，再交叉编译 Windows x64 转换器／验证器，最后在
+真实 Windows runner 上执行并比较相同输入的 SPIR-V 摘要。源码归档和许可证随工具
+产物保留。原版 shader 不进入这些云端任务。
+
+此前 run `39904758142` 已通过 Linux 上三个自制 shader 的转换和 `spirv-val` 校验，
+随后在 Windows 交叉编译检查 Vulkan 头文件时失败：复制的 Vulkan 头依赖未复制的
+`vk_video` 目录。提交 `512a13c` 已补齐该目录，新的工具构建 run `39921040563`
+仍在执行，尚不能宣称 Windows 工具已通过或原版 shader 已转换。
+
+`tools/convert_effect_shaders.py` 在运行转换器前核对全部本地输入摘要；输出先写入独立
+临时文件，通过入口 stage 检查和 Vulkan 1.0 的 `spirv-val` 后才写入正式 `.spv`。
+报告记录输入、输出、工具摘要和 SPIR-V 的入口、变量与绑定／布局 decoration。
+只通过合成夹具分帧的输入与通过微软长度／反汇编核对的原版输入分别标记，不能混称。
+GPU 像素一致性和 effect 绑定整合仍是后续独立门槛。
