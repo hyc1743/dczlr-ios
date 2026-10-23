@@ -52,6 +52,14 @@ The native CMake library and iOS source directory include this implementation;
 `native-core.yml` also explicitly compiles it into its iPhoneOS archive.
 Compilation is separate from physical-device execution.
 
+This revision passed ARM64 macOS behavior tests (35 native tests), explicit
+iPhoneOS SDK compilation and the Apple archive/image adapter checks in run
+`39962574609`, source `df701d6b9e5a25db3af214664ef11f4a3476ca23`. The downloaded
+archive's source hashes match the local C files and include `dc_animation.o`.
+The app build at the same source passed all 64 portable tests, device IPA
+packaging and the self-authored iOS simulator checker in run `39962543987`.
+The animation controller is not yet driving that checker or the game flow.
+
 The next evidence boundary is XA loading and frame advancement: static exports
 identify `0x0040bd50` as the XA loader, `0x00404890` as the delta/speed setter,
 `0x00404bd0` as frame advancement and `0x00405670` as the pose/material update.

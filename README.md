@@ -49,6 +49,13 @@ query tests the current record's loop byte; it is not a timer-completion event.
 XA loading, frame advancement and transition rendering remain incomplete. See
 [animation-reconstruction.md](docs/animation-reconstruction.md).
 
+Source `df701d6` passed 64 portable tests, device IPA packaging and the iPhone
+simulator checker in run `39962543987`. Its native-core run `39962574609` also
+passed 35 ARM64 macOS tests and iPhoneOS SDK compilation. This remains a stage
+build, with game flow and physical-device playability incomplete. The public
+build workflow uploads host artifacts and the manifest; original game resources
+remain local and are not uploaded by `build-ios.yml`.
+
 ## Previous interpreter experiment
 
 The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.

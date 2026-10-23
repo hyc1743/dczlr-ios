@@ -67,7 +67,7 @@ the original 1024x768 size, origin `(0,0)`, neutral color, zero rotation and
 mode-3 alpha are taken from the isolated loader path. D3D9 texture sampling
 equivalence and the external fades still need separate evidence.
 
-The full local suite has 54 tests. Run `39937228160` at revision `7a3597e`
+The startup-only revision's full local suite had 54 tests. Run `39937228160` at revision `7a3597e`
 also passed the native tests on ARM64 macOS, compiled the new startup object for
 iPhoneOS and exercised the Apple file adapter. Startup's resource operations, initial
 configuration, original screen-transition implementation, next state's logic,

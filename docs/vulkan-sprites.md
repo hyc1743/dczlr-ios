@@ -93,7 +93,10 @@ scene (`--expected-scene`, default `checker`); a fallback frame cannot satisfy a
 startup/title requirement. Its report records the observed scenes and leaves
 resource-content inspection, physical-device behavior and playability separate.
 The cloud gate still uses only the self-authored checker and supplies no game
-resources. These reporting changes require their own Apple build/runtime check.
+resources. These reporting changes passed device and simulator builds in run
+`39962543987`, source `df701d6`. The collected app log reports only `checker`,
+and the inspected screenshot shows the self-authored four-color sprite. This
+does not validate original startup/title resources or physical-device behavior.
 
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
