@@ -7,6 +7,7 @@ import argparse
 from pathlib import Path
 import plistlib
 import re
+import shutil
 
 from prepare_interpreter_probe import prepare
 
@@ -106,6 +107,8 @@ static PortLabDxmtVsync PortLabFindDxmtVsync() {
     header.write_text(text, encoding="utf-8")
 
     sources = root / "ios/app/Sources"
+    check_source = Path(__file__).resolve().parents[1] / "ios/RuntimeChecks/PortLabRuntimeCheck.swift"
+    shutil.copyfile(check_source, sources / check_source.name)
     (sources / "PortLabBackend.swift").write_text('''
 import Foundation
 
@@ -125,6 +128,17 @@ extension AppModel {
                         'Text(model.jit.isUsable ? "JIT ready" : "JIT unavailable")',
                         "Text(model.cpuBackendStatus)", "Backend status label")
     text = text.replace("model.jit.isUsable", "model.cpuBackendReady")
+    text = replace_once(text, '            Section("Runtime") {',
+                        '''            Section("Compatibility check") {
+                Button("Run Win32 compatibility check") {
+                    model.launchPortLabRuntimeCheck()
+                }
+                .disabled(model.runtimeState == .starting || model.runtimeState == .running
+                          || model.runtimeState == .stopping)
+                Text("Tests files, threads, offscreen GDI and a silent audio buffer. Import the Wine runtime in Settings first. Results appear in guest output; D3D9 and audible playback are not tested.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Runtime") {''', "Compatibility check entry point")
     text = replace_once(text,
                         "            JITStatusSection()\n            JITHintSection()",
                         '''            if model.runtimeNeedsJIT {

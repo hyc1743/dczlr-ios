@@ -86,6 +86,16 @@ device; neither audible output nor on-screen presentation is established.
 D3D9 and physical iOS execution remain untested by this gate. No original
 application executable or resources are used or uploaded.
 
+Run `39879664469` passed all four checks and emitted the final Win32 marker.
+The report records 27.16 seconds, with host shutdown still controlled by the
+harness. Audio telemetry confirms the silent PCM buffer reached an SDL device
+and was converted from 22050 Hz to 44100 Hz; audible output is not established.
+The macOS native-audio CoreAudio selection concerns MIDI, while this PCM path
+is implemented by `platform/sdl/kdspaudio.cpp`. The iOS frontend now stages the
+same self-authored probe and offers a dedicated compatibility-check button,
+using its own scratch directory and prefix. It does not apply the probe's
+installer overrides to other launch profiles. Device execution remains open.
+
 ## Correction to the earlier shader investigation
 
 The previous token scanner undercounted both comments and instructions by one

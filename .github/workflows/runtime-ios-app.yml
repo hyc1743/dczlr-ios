@@ -7,11 +7,31 @@ permissions:
   contents: read
 
 jobs:
+  compile-win32-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile the self-authored compatibility check
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686
+          mkdir -p out/win32-probe
+          i686-w64-mingw32-gcc -std=c11 -Os -Wall -Wextra -Werror -static \
+            probes/win32_smoke.c -o out/win32-probe/portlab-win32-smoke.exe -lgdi32 -luser32 -lwinmm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: self-authored-ios-runtime-check
+          path: out/win32-probe/portlab-win32-smoke.exe
   interpreter-app:
+    needs: compile-win32-probe
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: self-authored-ios-runtime-check
+          path: out/win32-probe
       - name: Fetch pinned runtime and stage interpreter launch mode
         shell: bash
         run: |
@@ -20,6 +40,8 @@ jobs:
           git init "$upstream"
           git -C "$upstream" fetch --depth=1 https://github.com/125hz/BoxedVN.git 7b6e03575922967ca161f2b55c39846e242916f6
           git -C "$upstream" checkout --detach FETCH_HEAD
+          mkdir -p "$upstream/ios/app/Resources"
+          cp out/win32-probe/portlab-win32-smoke.exe "$upstream/ios/app/Resources/"
           python3 tools/prepare_interpreter_app.py "$upstream"
       - name: Identify SDK for dependency cache
         id: sdk
@@ -67,6 +89,7 @@ jobs:
               'upstream_revision': '7b6e03575922967ca161f2b55c39846e242916f6',
               'wine_rootfs': 'requires separately supplied runtime ZIP',
               'original_game_files': 'not included', 'game_playability': 'not verified',
+              'self_authored_win32_check': 'bundled; device execution not verified',
               'device_execution': 'not verified', 'signing': 'unsigned',
           }, indent=2) + '\n')
           PY
