@@ -53,6 +53,15 @@ def check(app, output, runtime):
     device = phone["udid"]
     run("xcrun", "simctl", "bootstatus", device, "-b", timeout=240)
     run("xcrun", "simctl", "install", device, str(app))
+    # Resolve the app container before launch. A graphics-service crash can
+    # wedge subsequent simctl queries, but the Documents path remains usable.
+    container = None
+    try:
+        container = Path(run("xcrun", "simctl", "get_app_container", device,
+            "org.example.portlab", "data", timeout=30))
+        (output / "container.txt").write_text(str(container) + "\n", encoding="utf-8")
+    except (RuntimeError, subprocess.TimeoutExpired) as error:
+        (output / "container-error.txt").write_text(str(error), encoding="utf-8")
     try:
         launch_process = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
             device, "org.example.portlab"], capture_output=True, text=True, timeout=60)
@@ -62,43 +71,56 @@ def check(app, output, runtime):
         launch_timed_out = True
         launch = "launch timed out after 60s; stdout=" + str(error.stdout)[-1000:] + "; stderr=" + str(error.stderr)[-1000:]
     (output / "launch.txt").write_text(launch + "\n", encoding="utf-8")
-    container = Path(run("xcrun", "simctl", "get_app_container", device, "org.example.portlab", "data"))
     deadline = time.monotonic() + 60
     log = ""
     markers = ("Vulkan / MoltenVK 已显示原始 illusion.ema 首屏",
                "Vulkan / MoltenVK 已显示自制检查精灵")
     while time.monotonic() < deadline:
-        path = container / "Documents/log.txt"
-        if path.exists():
+        path = container / "Documents/log.txt" if container else None
+        if path and path.exists():
             log = path.read_text(encoding="utf-8")
             if any(marker in log for marker in markers) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
     (output / "app.log").write_text(log, encoding="utf-8")
-    unified = subprocess.run(["xcrun", "simctl", "spawn", device, "log", "show", "--last", "3m",
-        "--style", "compact", "--predicate", 'process == "PortLab" OR process == "SpringBoard" OR eventMessage CONTAINS[c] "PortLab"'],
-        capture_output=True, text=True, timeout=60)
-    (output / "unified.log").write_text(unified.stdout + unified.stderr, encoding="utf-8")
-    container_logs = Path(run("xcrun", "simctl", "get_app_container", device,
-        "org.example.portlab", "data")) / "Library/Logs"
+    try:
+        unified = subprocess.run(["xcrun", "simctl", "spawn", device, "log", "show", "--last", "3m",
+            "--style", "compact", "--predicate", 'process == "PortLab" OR process == "SpringBoard" OR eventMessage CONTAINS[c] "PortLab"'],
+            capture_output=True, text=True, timeout=30)
+        unified_code, unified_log = unified.returncode, unified.stdout + unified.stderr
+    except subprocess.TimeoutExpired as error:
+        unified_code, unified_log = -1, str(error)
+    (output / "unified.log").write_text(unified_log, encoding="utf-8")
+    container_logs = container / "Library/Logs" if container else None
     crash_dir = output / "app-crashes"
     crash_dir.mkdir(exist_ok=True)
-    if container_logs.exists():
+    if container_logs and container_logs.exists():
         import shutil
         for crash in container_logs.rglob("*.ips"):
             shutil.copyfile(crash, crash_dir / crash.name)
     diagnostic_reports = Path.home() / "Library/Logs/DiagnosticReports"
     if diagnostic_reports.exists():
         import shutil
-        for crash in diagnostic_reports.glob("*PortLab*.ips"):
-            shutil.copyfile(crash, crash_dir / crash.name)
-    run("xcrun", "simctl", "io", device, "screenshot", str(output / "sprite-scene.png"))
-    if not any(marker in log for marker in markers):
-        process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
+        for pattern in ("*PortLab*.ips", "*SimMetalHost*.ips"):
+            for crash in diagnostic_reports.glob(pattern):
+                shutil.copyfile(crash, crash_dir / crash.name)
+    try:
+        screenshot = subprocess.run(["xcrun", "simctl", "io", device, "screenshot", str(output / "sprite-scene.png")],
             capture_output=True, text=True, timeout=30)
-        (output / "processes.log").write_text(process.stdout + process.stderr, encoding="utf-8")
-        if unified.returncode:
-            raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified.stderr[-1500:])
+        screenshot_log = screenshot.stdout + screenshot.stderr
+    except subprocess.TimeoutExpired as error:
+        screenshot_log = str(error)
+    (output / "screenshot-command.txt").write_text(screenshot_log, encoding="utf-8")
+    if not any(marker in log for marker in markers):
+        try:
+            process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
+                capture_output=True, text=True, timeout=30)
+            process_log = process.stdout + process.stderr
+        except subprocess.TimeoutExpired as error:
+            process_log = str(error)
+        (output / "processes.log").write_text(process_log, encoding="utf-8")
+        if unified_code:
+            raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified_log[-1500:])
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame; launch_timed_out=" +
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
     original_card = markers[0] in log
