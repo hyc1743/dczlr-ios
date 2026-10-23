@@ -7,8 +7,9 @@
 
 `native/resource/dc_pp.c` 是新编写的可移植 C 模块，使用调用方提供的只读随机访问接口。
 它验证八字节头部、每项32字节文件名、每项四字节长度、累计偏移和完整载荷范围；
-按条目读取并解码，不将整包加载到内存。文件名保留原始字节。目前提供精确字节查找；
-原版的路径截取和不区分大小写规则尚未接入该查找 API。
+按条目读取并解码，不将整包加载到内存。文件名保留原始字节。除精确字节查找外，
+现在另提供原版路径截取与 ASCII 大小写折叠查找。高位字节的大小写折叠仍未验证，
+该查找 API 明确拒绝高位字节查询；不会假装完整支持任意代码页。
 
 本地数据调查和原生模块核对覆盖72个 PP 文件中的71个，共5,011个条目。
 每个已识别条目的名称、偏移、长度、首尾抽样读取与独立观察解析器一致。
@@ -31,6 +32,15 @@ cdecl 返回与输出哨兵；不启动 EXE 进程、不调用 Windows API、不
 载荷前缀。新 C 解码器与原版结果逐字节一致，边界哨兵保持。完整归档加载器、
 文件名归一化和 iOS 执行仍分别待验证。
 
+随后已对原版名字扫描叶函数 `0x00423250` 的118字节实现做隔离对照。
+5,018组有效输入（全部5,011个识别出的条目名称及7组路径／双字节边界）与原生
+扫描器结果一致。原版遇到缺少点号的字符串可能越界，原生 API 对此明确拒绝，
+不执行原版不安全输入。此叶函数对照不包含 CRT 大小写比较函数。
+
+上一版核心在云端 run `39890729083` 已通过 ARM64 macOS 原生 C 测试与 iPhoneOS
+ARM64 编译。当前 iOS 工程已接入相同 C 模块及 Objective-C 只读文件适配器，
+主页可检查导入后的 PP 索引和小段读取，仍未启动完整游戏或接入游戏渲染。
+
 公开的 `tests/fixtures/pp-codec-original-vectors.json` 只包含合成输入的生成参数与
 原版输出摘要，不含 EXE 指令或原游戏资源字节。ARM64 云端测试可用这些记录核对
 同一 C 模块。Unicorn、Ghidra 和原 EXE 都不进入 iOS 产品。
@@ -41,6 +51,7 @@ cdecl 返回与输出哨兵；不启动 EXE 进程、不调用 Windows API、不
 python -m unittest discover -s tests -p test_native_pp.py -v
 python tools/audit_native_pp.py --data Data --output research/native-core/native-pp-audit.json
 python tools/oracle_pp_codec.py --exe research/target.exe --data Data --output research/native-core/pp-codec-oracle.json
+python tools/oracle_pp_names.py --exe research/target.exe --data Data --output research/native-core/pp-names-oracle.json
 ```
 
 源码仓库没有测试所需的原 EXE 或 Data。原版输入必须与已分析摘要一致；新版本需重新

@@ -89,6 +89,8 @@ jobs:
               'product': 'PortLab-unsigned.ipa',
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'not_embedded',
+              'native_resource_module': 'reconstructed PP reader linked; execution on device unverified',
+              'graphics_backend': 'diagnostic Metal scene; game Vulkan/MoltenVK not integrated',
               'game_playability': 'not_claimed',
               'resource_manifest': 'embedded',
               'resource_parts': 'published_separately_as_release_assets',

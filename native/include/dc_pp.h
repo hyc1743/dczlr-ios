@@ -49,6 +49,13 @@ DC_API void dc_pp_close(dc_pp *archive);
 DC_API uint32_t dc_pp_count(const dc_pp *archive);
 DC_API dc_status dc_pp_entry_at(const dc_pp *archive, uint32_t index, dc_pp_entry *out);
 DC_API dc_status dc_pp_find_exact(const dc_pp *archive, const void *name, size_t length, uint32_t *index);
+/* Original 0x00423250 scans until the first dot, remembers backslashes and
+ * skips two bytes for bytes >= 0x80. This bounded equivalent rejects missing
+ * dots and incomplete multibyte prefixes instead of reading past the input. */
+DC_API dc_status dc_pp_basename_offset(const void *name, size_t length, size_t *offset);
+/* Matches the observed archive loader for ASCII paths, preserving first-match
+ * ordering. High-byte comparisons require a separately verified locale rule. */
+DC_API dc_status dc_pp_find_ascii_path(const dc_pp *archive, const void *name, size_t length, uint32_t *index);
 DC_API dc_status dc_pp_read(const dc_pp *archive, uint32_t index, uint64_t offset, void *out, size_t length);
 DC_API dc_status dc_pp_decode_bytes(void *bytes, size_t length);
 

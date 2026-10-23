@@ -8,6 +8,8 @@ targets:
     platform: iOS
     sources:
       - Sources
+      - Native
+      - path: ../native/resource
       - path: Resources
         type: folder
         buildPhase: resources
@@ -30,6 +32,10 @@ targets:
       TARGETED_DEVICE_FAMILY: "1,2"
       GENERATE_INFOPLIST_FILE: NO
       ENABLE_USER_SCRIPT_SANDBOXING: YES
+      SWIFT_OBJC_BRIDGING_HEADER: Native/PortLab-Bridging-Header.h
+      HEADER_SEARCH_PATHS:
+        - $(inherited)
+        - $(SRCROOT)/../native/include
 schemes:
   PortLab:
     build:

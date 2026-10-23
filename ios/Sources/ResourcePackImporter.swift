@@ -90,6 +90,16 @@ final class ResourcePackImporter {
             let base = destination.standardizedFileURL.path
             guard target.standardizedFileURL.path.hasPrefix(base + "/") else { throw PackImportError.unsafePath(record.path) }
             try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // Once gameplay can write here, packaged defaults must not replace
+            // existing saves or settings, even when they differ from the manifest.
+            let lower = relative.lowercased()
+            if fileManager.fileExists(atPath: target.path),
+               (lower.hasPrefix("save/") || lower.hasPrefix("saves/") ||
+                lower.hasSuffix(".sav") || lower.hasSuffix(".cfg")) {
+                completed += record.size
+                progress?(completed, manifest.totalBytes)
+                continue
+            }
             if fileManager.fileExists(atPath: target.path),
                (try? SHA256Stream.hash(file: target, chunkSize: chunkSize)) == record.sha256,
                (try? target.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) == record.size {

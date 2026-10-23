@@ -10,6 +10,7 @@ final class LabModel: ObservableObject {
     private var player: AVAudioPlayer?
     private let root: URL
     private var logReady = false
+    private var auditingResources = false
 
     private struct Position: Codable {
         let version: Int
@@ -79,6 +80,22 @@ final class LabModel: ObservableObject {
             record("已保存位置：\(x), \(y)")
         } catch {
             record("保存失败：\(error.localizedDescription)")
+        }
+    }
+
+    func auditNativeResources() {
+        guard !auditingResources else { return }
+        auditingResources = true
+        record("正在用原生模块检查资源包")
+        let directory = root.appendingPathComponent("game/Data", isDirectory: true)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result: String
+            do { result = try NativeResourceAudit.inspect(dataDirectory: directory) }
+            catch { result = "原生资源检查失败：" + error.localizedDescription }
+            DispatchQueue.main.async {
+                self?.auditingResources = false
+                self?.record(result)
+            }
         }
     }
 

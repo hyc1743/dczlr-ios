@@ -102,6 +102,58 @@ dc_status dc_pp_find_exact(const dc_pp *archive, const void *name, size_t length
     return DC_NOT_FOUND;
 }
 
+dc_status dc_pp_basename_offset(const void *name, size_t length, size_t *offset) {
+    if (!name || !offset) return DC_ARGUMENT;
+    const uint8_t *bytes = (const uint8_t *)name;
+    size_t begin = 0;
+    for (size_t position = 0; position < length;) {
+        uint8_t value = bytes[position];
+        if (value == '.') {
+            *offset = begin;
+            return DC_OK;
+        }
+        if (!value) return DC_FORMAT;
+        if (value == '\\') begin = position + 1;
+        if (value >= 0x80) {
+            if (length - position < 2 || !bytes[position + 1]) return DC_FORMAT;
+            position += 2;
+        } else {
+            ++position;
+        }
+    }
+    return DC_FORMAT;
+}
+
+static uint8_t fold_ascii(uint8_t value) {
+    return value >= 'A' && value <= 'Z' ? (uint8_t)(value + ('a' - 'A')) : value;
+}
+
+dc_status dc_pp_find_ascii_path(const dc_pp *archive, const void *name, size_t length, uint32_t *index) {
+    if (!archive || !name || !index) return DC_ARGUMENT;
+    const uint8_t *bytes = (const uint8_t *)name;
+    for (size_t i = 0; i < length; ++i)
+        if (!bytes[i] || bytes[i] >= 0x80) return DC_FORMAT;
+    size_t begin;
+    dc_status status = dc_pp_basename_offset(name, length, &begin);
+    if (status != DC_OK) return status;
+    for (uint32_t i = 0; i < archive->count; ++i) {
+        const dc_pp_entry *entry = archive->entries + i;
+        size_t entry_begin;
+        if (dc_pp_basename_offset(entry->name, entry->name_length, &entry_begin) != DC_OK)
+            continue;
+        size_t size = length - begin;
+        if (size != entry->name_length - entry_begin) continue;
+        size_t j = 0;
+        while (j < size && entry->name[entry_begin + j] < 0x80 &&
+               fold_ascii(bytes[begin + j]) == fold_ascii(entry->name[entry_begin + j])) ++j;
+        if (j == size) {
+            *index = i;
+            return DC_OK;
+        }
+    }
+    return DC_NOT_FOUND;
+}
+
 dc_status dc_pp_read(const dc_pp *archive, uint32_t index, uint64_t offset, void *out, size_t length) {
     if (!archive || (length && !out)) return DC_ARGUMENT;
     if (index >= archive->count) return DC_RANGE;

@@ -86,6 +86,28 @@ class NativePPTests(unittest.TestCase):
             self.assertEqual(self.lib.dc_pp_read(archive._handle, 0, 2, result, 2), 4)
             self.assertEqual(result.value, b"sentinel")
 
+    def test_original_path_scanning_stops_at_first_dot_and_skips_high_byte_pair(self):
+        cases = [(b"a.bmp", 0), (b"Data\\a.bmp", 5), (b"one\\two\\a.bmp", 8),
+                 (b"dir.name\\a.bmp", 0), (b"dir/asset.bmp", 0),
+                 (b"\x81\\folder\\a.bmp", 9), (b"\x81.a.bmp", 0)]
+        for value, expected in cases:
+            with self.subTest(value=value):
+                offset = C.c_size_t(999)
+                self.assertEqual(self.lib.dc_pp_basename_offset(value, len(value), C.byref(offset)), 0)
+                self.assertEqual(offset.value, expected)
+        for value in [b"", b"nodot", b"abc\0file.bmp", b"\x81", b"\x81\0a.bmp"]:
+            offset = C.c_size_t(999)
+            self.assertEqual(self.lib.dc_pp_basename_offset(value, len(value), C.byref(offset)), 3)
+            self.assertEqual(offset.value, 999)
+
+    def test_ascii_path_lookup_is_case_insensitive_and_first_match(self):
+        with PPArchive(fixture([(b"Data\\Asset.BMP", b"one"), (b"asset.bmp", b"two")])) as archive:
+            index = C.c_uint32(999)
+            query = b"other\\ASSET.bmp"
+            self.assertEqual(self.lib.dc_pp_find_ascii_path(archive._handle, query, len(query), C.byref(index)), 0)
+            self.assertEqual(index.value, 0)
+            self.assertEqual(self.lib.dc_pp_find_ascii_path(archive._handle, b"missing.bmp", 11, C.byref(index)), 6)
+
 
 if __name__ == "__main__":
     unittest.main()

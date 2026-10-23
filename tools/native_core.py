@@ -81,6 +81,10 @@ def library():
     lib.dc_pp_read.restype = C.c_int
     lib.dc_pp_decode_bytes.argtypes = [C.c_void_p, C.c_size_t]
     lib.dc_pp_decode_bytes.restype = C.c_int
+    lib.dc_pp_basename_offset.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(C.c_size_t)]
+    lib.dc_pp_basename_offset.restype = C.c_int
+    lib.dc_pp_find_ascii_path.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
+    lib.dc_pp_find_ascii_path.restype = C.c_int
     return lib
 
 

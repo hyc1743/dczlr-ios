@@ -27,7 +27,11 @@ STOP = 0x30000000
 
 
 class OriginalCodec:
-    def __init__(self, path):
+    def __init__(self, path, entry=ENTRY, function_bytes=FUNCTION_BYTES):
+        if (entry, function_bytes) not in [(ENTRY, FUNCTION_BYTES), (0x423250, 118)]:
+            raise ValueError("Leaf function has not been admitted")
+        self.entry = entry
+        self.function_bytes = function_bytes
         data = path.read_bytes()
         if hashlib.sha256(data).hexdigest() != TARGET_SHA256:
             raise ValueError("Original executable revision does not match the analyzed decoder")
@@ -47,13 +51,13 @@ class OriginalCodec:
             _, rva, size, raw = struct.unpack_from("<IIII", data, offset + 8)
             if size:
                 self.uc.mem_write(image_base + rva, data[raw:raw + size])
-        code = bytes(self.uc.mem_read(ENTRY, FUNCTION_BYTES))
+        code = bytes(self.uc.mem_read(entry, function_bytes))
         self.code_sha256 = hashlib.sha256(code).hexdigest()
         disassembler = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
         disassembler.detail = True
-        instructions = list(disassembler.disasm(code, ENTRY))
+        instructions = list(disassembler.disasm(code, entry))
         addresses = {i.address for i in instructions}
-        if sum(i.size for i in instructions) != FUNCTION_BYTES or instructions[-1].mnemonic != "ret":
+        if sum(i.size for i in instructions) != function_bytes or instructions[-1].mnemonic != "ret":
             raise ValueError("Decoder range does not match analyzed instruction boundaries")
         for instruction in instructions:
             if instruction.mnemonic in ("call", "syscall", "sysenter", "int"):
@@ -67,12 +71,14 @@ class OriginalCodec:
         self.uc.mem_map(STOP, 0x1000, UC_PROT_READ | UC_PROT_EXEC)
 
         def guard(uc, address, size, context):
-            if address < ENTRY or address + size > ENTRY + FUNCTION_BYTES:
+            if address < entry or address + size > entry + function_bytes:
                 raise RuntimeError("Original execution left the admitted decoder")
 
         self.uc.hook_add(UC_HOOK_BLOCK, guard)
 
     def decode(self, data):
+        if self.entry != ENTRY:
+            raise ValueError("Wrong leaf selected for byte decoding")
         if len(data) > 16384:
             raise ValueError("Oracle input exceeds its explicit analysis bound")
         canary = b"\xa5" * 16
@@ -87,6 +93,29 @@ class OriginalCodec:
         if result[:16] != canary or result[-16:] != canary:
             raise RuntimeError("Original decoder wrote outside its admitted output buffer")
         return result[16:-16]
+
+    def basename_offset(self, data):
+        from unicorn.x86_const import UC_X86_REG_EAX
+        if self.entry != 0x423250 or not data or len(data) > 4096:
+            raise ValueError("Invalid basename oracle request")
+        # Admit only paths where the bounded native scanner finds the dot;
+        # the original function does not handle a missing dot safely.
+        offset = C.c_size_t()
+        if library().dc_pp_basename_offset(data, len(data), C.byref(offset)):
+            raise ValueError("Input outside original scanner's valid domain")
+        self.uc.mem_write(BUFFER, data + b"\0")
+        self.uc.mem_write(STACK, struct.pack("<II", STOP, BUFFER))
+        self.uc.reg_write(UC_X86_REG_ESP, STACK)
+        self.uc.reg_write(UC_X86_REG_EBP, 0)
+        self.uc.emu_start(self.entry, STOP, timeout=1_000_000, count=len(data) * 32 + 128)
+        if self.uc.reg_read(UC_X86_REG_EIP) != STOP or self.uc.reg_read(UC_X86_REG_ESP) != STACK + 4:
+            raise RuntimeError("Original scanner did not return")
+        if bytes(self.uc.mem_read(BUFFER, len(data) + 1)) != data + b"\0":
+            raise RuntimeError("Original scanner modified its input")
+        result = self.uc.reg_read(UC_X86_REG_EAX) - BUFFER
+        if not 0 <= result <= len(data):
+            raise RuntimeError("Original scanner returned outside its input")
+        return result
 
 
 def compare(exe, data_directory=None):
