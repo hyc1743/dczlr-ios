@@ -804,15 +804,15 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
         }
         vkCmdEndRenderPass(r->command);
         if (rgba) {
-        VkBufferImageCopy copy = {.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
-            .imageExtent = {r->width, r->height, 1}};
-        vkCmdCopyImageToBuffer(r->command, r->target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, r->readback.buffer, 1, &copy);
-        VkBufferMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
-            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-            .buffer = r->readback.buffer, .size = VK_WHOLE_SIZE};
-        vkCmdPipelineBarrier(r->command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
-            0, 0, NULL, 1, &barrier, 0, NULL);
+            VkBufferImageCopy copy = {.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+                .imageExtent = {r->width, r->height, 1}};
+            vkCmdCopyImageToBuffer(r->command, r->target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, r->readback.buffer, 1, &copy);
+            VkBufferMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+                .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .buffer = r->readback.buffer, .size = VK_WHOLE_SIZE};
+            vkCmdPipelineBarrier(r->command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
+                0, 0, NULL, 1, &barrier, 0, NULL);
         }
         status = submit_commands(r);
         if (status == DC_OK && r->surface) status = present_target(r);

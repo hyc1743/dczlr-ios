@@ -48,6 +48,25 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     OK(dc_vk_sprite_render(r, NULL, 0, clear, rgba, sizeof(rgba)));
     for (unsigned y = 0; y < 8; ++y) for (unsigned x = 0; x < 8; ++x) CHECK(pixel(rgba,x,y,20,40,60,100,0));
     dc_vk_sprite_item draw = {.pose = pose(0.25f,0.25f), .texture = texture, .blend_mode = 3, .point_filter = 1};
+    /* Varying UVs and a 90-degree pivot rotation exercise orientation and
+     * interpolation through the native vertex generator, beyond solid UVs. */
+    draw.pose = pose(0,0);
+    draw.pose.width = draw.pose.height = 6;
+    draw.pose.x = draw.pose.y = 1;
+    draw.pose.u1 = draw.pose.v1 = 1;
+    OK(dc_vk_sprite_render(r, &draw, 1, clear, rgba, sizeof(rgba)));
+    CHECK(pixel(rgba,2,2,255,0,0,255,0));
+    CHECK(pixel(rgba,5,2,0,255,0,255,0));
+    CHECK(pixel(rgba,2,5,0,0,255,255,0));
+    CHECK(pixel(rgba,5,5,255,255,255,255,0));
+    draw.pose.x = draw.pose.y = 4;
+    draw.pose.origin_x = draw.pose.origin_y = 0.5f;
+    draw.pose.rotation = 1.5707963267948966f;
+    OK(dc_vk_sprite_render(r, &draw, 1, clear, rgba, sizeof(rgba)));
+    CHECK(pixel(rgba,3,3,0,0,255,255,0));
+    CHECK(pixel(rgba,5,3,255,0,0,255,0));
+    CHECK(pixel(rgba,3,5,255,255,255,255,0));
+    CHECK(pixel(rgba,5,5,0,255,0,255,0));
     const int colors[4][3] = {{255,0,0}, {0,255,0}, {0,0,255}, {255,255,255}};
     for (int i = 0; i < 4; ++i) {
         draw.pose = pose((i & 1) ? 0.75f : 0.25f, (i & 2) ? 0.75f : 0.25f);
@@ -67,7 +86,7 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     CHECK(pixel(rgba,3,3,128,128,128,255,1));
     dc_vk_sprite_item pair[2] = {draw, draw};
     pair[0].point_filter = 1; pair[0].pose.x = -10;
-    /* Native post-draw restoration changes inherited point to linear too. */
+    /* Native post-draw restoration keeps the following draw linear. */
     OK(dc_vk_sprite_render(r, pair, 2, clear, rgba, sizeof(rgba)));
     CHECK(pixel(rgba,3,3,128,128,128,255,1));
     draw.texture = transparent; draw.pose = pose(0.5f,0.5f);
@@ -123,6 +142,24 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     CHECK(info.validation_errors == 0);
     printf("PASS: sprite pixel/readback, blends, filtering, repeat, state transitions, admission, lifetime; frames=%llu validation_errors=%u\n",
         (unsigned long long)info.submitted_frames, info.validation_errors);
+    dc_vk_sprite_destroy(r);
+    r = NULL;
+    config.initial_filter = 1;
+    OK(dc_vk_sprite_create(&config, &r, error, sizeof(error)));
+    OK(dc_vk_sprite_upload(r, 2, 2, checker, sizeof(checker), &texture));
+    draw = (dc_vk_sprite_item){.pose = pose(0.5f,0.5f), .texture = texture, .blend_mode = 3};
+    OK(dc_vk_sprite_render(r, &draw, 1, clear, rgba, sizeof(rgba)));
+    CHECK(pixel(rgba,3,3,255,255,255,255,0));
+    pair[0] = pair[1] = draw;
+    pair[0].point_filter = 1; pair[0].pose.x = -10;
+    OK(dc_vk_sprite_render(r, pair, 2, clear, rgba, sizeof(rgba)));
+    CHECK(pixel(rgba,3,3,128,128,128,255,1));
+    /* The next frame starts from the explicit inherited point state again. */
+    OK(dc_vk_sprite_render(r, &draw, 1, clear, rgba, sizeof(rgba)));
+    CHECK(pixel(rgba,3,3,255,255,255,255,0));
+    OK(dc_vk_sprite_get_info(r, &info));
+    CHECK(info.validation_errors == 0 && info.submitted_frames == 3);
+    puts("PASS: initial point filter, native restoration to linear, frame state reset");
     dc_vk_sprite_destroy(r);
     return 0;
 failed:

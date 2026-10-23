@@ -53,7 +53,7 @@ final class SpritePresenter: NSObject {
 
     @objc private func draw() {
         guard model.active, !failed, let view = view else { return }
-        if let error = view.draw(atX: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start) {
+        if let error = view.renderSprite(x: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start) {
             failed = true
             displayLink?.isPaused = true
             model.record("Vulkan 初始化或绘制失败：\(error)")
