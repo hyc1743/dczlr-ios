@@ -98,6 +98,15 @@ jobs:
             ios/Native/DCArchive.m native/resource/dc_pp.c native/resource/dc_image.c -framework Foundation \
             -o "$RUNNER_TEMP/portlab-archive-adapter-test"
           "$RUNNER_TEMP/portlab-archive-adapter-test"
+      - name: Exercise the actual Swift resource-pack importer
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="$RUNNER_TEMP/portlab-import-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          python3 tools/resource_import_fixture.py --output "$fixture"
+          xcrun swiftc -parse-as-library ios/Sources/ResourcePackImporter.swift tests/native/test_resource_import.swift \
+            -o "$RUNNER_TEMP/portlab-resource-import-test"
+          "$RUNNER_TEMP/portlab-resource-import-test" "$fixture"
       - uses: actions/upload-artifact@v4
         with:
           name: reconstructed-native-iphoneos-core

@@ -25,7 +25,7 @@ struct DczlrPackManifest: Decodable {
     func validate() throws {
         guard schema == 1, format == "dczlr-resource-parts-v1", game == "dczlr",
               partBytes > 0, partBytes <= 1_000_000_000,
-              fileCount == files.count, !parts.isEmpty else { throw PackImportError.invalidManifest }
+              fileCount == files.count, !parts.isEmpty, totalBytes >= 0 else { throw PackImportError.invalidManifest }
         guard parts.allSatisfy({ $0.name.range(of: #"^DczlrData\.part[0-9]{3}\.dczdata$"#, options: .regularExpression) != nil && $0.size > 0 }) else { throw PackImportError.invalidManifest }
         for (index, part) in parts.enumerated() {
             guard part.name == String(format: "DczlrData.part%03d.dczdata", index + 1), part.size <= Int64(partBytes), part.sha256?.count == 64 else { throw PackImportError.invalidManifest }
@@ -36,6 +36,7 @@ struct DczlrPackManifest: Decodable {
         var previousPath = ""
         for record in files {
             guard record.path.hasPrefix("Data/"), record.path > previousPath,
+                  record.size >= 0,
                   !record.path.contains("\\"), !record.path.contains("\0"),
                   !record.path.contains("../") else { throw PackImportError.invalidManifest }
             previousPath = record.path
@@ -43,7 +44,9 @@ struct DczlrPackManifest: Decodable {
             for segment in record.segments {
                 guard segment.part == partIndex, segment.offset == partOffset,
                       segment.length > 0, segment.part < parts.count,
-                      segment.offset + segment.length <= parts[segment.part].size else {
+                      segment.length <= parts[segment.part].size - partOffset,
+                      segment.length <= record.size - covered,
+                      segment.length <= totalBytes - coveredTotal else {
                     throw PackImportError.invalidManifest
                 }
                 covered += segment.length

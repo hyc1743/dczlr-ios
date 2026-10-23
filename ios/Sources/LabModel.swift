@@ -9,6 +9,8 @@ final class LabModel: ObservableObject {
     @Published var active = true
     @Published var gameResourcesActive = false
     @Published var gameError: String?
+    @Published var resourcesReady = true
+    @Published var importingResources = false
     @Published var status = "等待 Vulkan 初始化"
     private var player: AVAudioPlayer?
     private let root: URL
@@ -42,11 +44,14 @@ final class LabModel: ObservableObject {
     }
 
     private func importResourcePacksIfPresent() {
+        guard !importingResources else { return }
         guard let manifest = Bundle.main.url(forResource: "DczlrData.manifest", withExtension: "json") else { return }
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         let hasParts = names.contains { $0.hasPrefix("DczlrData.part") && $0.hasSuffix(".dczdata") }
             || ((try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("ResourcePacks").path)) ?? []).contains { $0.hasSuffix(".dczdata") }
-        guard hasParts else { return }
+        guard hasParts else { resourcesReady = true; return }
+        importingResources = true
+        resourcesReady = false
         record("发现资源分卷，开始校验与解包")
         let destination = root.appendingPathComponent("game/Data", isDirectory: true)
         let documentsRoot = root
@@ -55,12 +60,21 @@ final class LabModel: ObservableObject {
                 try ResourcePackImporter().importPacks(from: documentsRoot, manifestURL: manifest, destination: destination) { completed, total in
                     DispatchQueue.main.async { self?.status = "资源解包：\(completed)/\(total) 字节" }
                 }
-                DispatchQueue.main.async { self?.record("资源分卷解包完成") }
+                DispatchQueue.main.async {
+                    self?.importingResources = false
+                    self?.resourcesReady = true
+                    self?.record("资源分卷解包完成")
+                }
             } catch {
-                DispatchQueue.main.async { self?.record("资源分卷失败：\(error.localizedDescription)") }
+                DispatchQueue.main.async {
+                    self?.importingResources = false
+                    self?.record("资源分卷失败：\(error.localizedDescription)")
+                }
             }
         }
     }
+
+    func retryResourceImport() { importResourcePacksIfPresent() }
 
     func record(_ message: String, event: String? = nil) {
         status = message

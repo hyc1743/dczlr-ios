@@ -8,12 +8,13 @@ struct VulkanSurface: UIViewRepresentable {
 
     func makeUIView(context: Context) -> DCVulkanSpriteView {
         let view = DCVulkanSpriteView(frame: .zero)
-        view.startupDataDirectory = model.gameDataDirectory.path
+        view.startupDataDirectory = model.resourcesReady ? model.gameDataDirectory.path : nil
         context.coordinator.attach(view)
         return view
     }
 
     func updateUIView(_ view: DCVulkanSpriteView, context: Context) {
+        view.startupDataDirectory = model.resourcesReady ? model.gameDataDirectory.path : nil
         context.coordinator.setActive(model.active)
     }
 

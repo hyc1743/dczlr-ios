@@ -30,6 +30,8 @@ struct PortLabApp: App {
                         Button("读取位置") { model.load() }
                     }.buttonStyle(.bordered)
                     Button("检查原生资源模块") { model.auditNativeResources() }
+                    Button("重新检查资源") { model.retryResourceImport() }
+                        .disabled(model.importingResources)
                     Text(model.status).font(.caption).accessibilityIdentifier("labStatus")
                     Text("测试日志与位置文件保存在本机 Documents 目录。")
                         .font(.caption2).foregroundStyle(.secondary)
