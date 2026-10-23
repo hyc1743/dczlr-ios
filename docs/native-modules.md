@@ -51,6 +51,15 @@ SHA-256 `f917f9c315a7f35408257d3fbc092bb73a7a9111f45921a8eacafd21ed0bd95a`。
 文件适配器，包括部分读取、输出上限、非法索引、损坏布局与文件截断后的 IO 错误。
 这与可移植 C 模块测试和 iOS SDK 编译分别记录，不能替代物理设备执行。
 
+Apple 适配器实测已在 run `39898499168` 通过，日志记录
+`PORTLAB_APPLE_ARCHIVE_ADAPTER_OK`；同次8项原生 C 测试及 iPhoneOS ARM64 编译通过。
+文件适配采用有界 `pread`，避免 stdio 缓存掩盖已截断的底层文件。
+包含此实现的阶段 IPA 在 run `39898501922` 构建，下载后确认 ARM64/iPhoneOS、
+原生归档及 `_pread` 符号存在。最新阶段包 SHA-256 为
+`53f771c1e54368d46a9a0d5193e1cf344218fc6c4641171e48e9af50ffe6a354`，
+115,091字节。该小型资源验证包没有游戏逻辑或 MoltenVK 游戏渲染，不能用于
+宣称最终游戏 IPA 已完成。
+
 公开的 `tests/fixtures/pp-codec-original-vectors.json` 只包含合成输入的生成参数与
 原版输出摘要，不含 EXE 指令或原游戏资源字节。ARM64 云端测试可用这些记录核对
 同一 C 模块。Unicorn、Ghidra 和原 EXE 都不进入 iOS 产品。
