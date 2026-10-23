@@ -191,5 +191,8 @@ python -m unittest discover -s tests -p test_native_sprite.py -v
 ```
 
 本地新增四项顶点测试检查原函数数值夹具、旋转与支点、UV／颜色／顺序、负缩放、
-非有限值和错误时不修改输出。iPhoneOS 构建清单已纳入模块，ARM64 执行待本轮新提交
-验证。仍需将顶点与提交计划接到真实 Vulkan／MoltenVK，原生游戏流程尚未完成。
+非有限值和错误时不修改输出。提交 `45adcaa` 的 run `39923141206` 已在 ARM64 macOS
+执行全部 24 项原生测试通过，并编译 iPhoneOS ARM64 核心。下载的
+`dc_sprite_vertices.o` 已核对 ARM64 Mach-O、目标符号和源码摘要。相同提交的
+run `39923121996` 已通过便携测试、模拟器和设备 App 构建。仍需将顶点与提交计划
+接到真实 Vulkan／MoltenVK，原生游戏流程尚未完成。

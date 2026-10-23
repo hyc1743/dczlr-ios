@@ -85,7 +85,11 @@ def convert(audit, shaders, compiler, validator, output):
             raise ValueError("Invalid input shader hash")
         if digest in records and records[digest]["bytes"] != row["bytes"]:
             raise ValueError("Inconsistent shader records")
-        records[digest] = row
+        if digest not in records:
+            records[digest] = {**row, "effect_sources": []}
+        source = {k: row[k] for k in ("effect", "owners", "constant_table", "offset") if k in row}
+        if source and source not in records[digest]["effect_sources"]:
+            records[digest]["effect_sources"].append(source)
     # Check every input before invoking the first conversion.
     for digest, row in records.items():
         data = (shaders / (digest + ".dx9")).read_bytes()
@@ -96,7 +100,8 @@ def convert(audit, shaders, compiler, validator, output):
     output.mkdir(parents=True, exist_ok=True)
     rows = []
     for digest, record in records.items():
-        row = {"source_sha256": digest, "profile": record["profile"], "stage": record["stage"]}
+        row = {"source_sha256": digest, "profile": record["profile"], "stage": record["stage"],
+               "effect_sources": record["effect_sources"]}
         temporary = output / (digest + "." + uuid.uuid4().hex + ".partial")
         try:
             row["compiler_diagnostic"] = run([compiler, "--strip-debug", "-x", "d3dbc", "-b", "spirv-binary",
@@ -118,6 +123,7 @@ def convert(audit, shaders, compiler, validator, output):
                 temporary.unlink()
         rows.append(row)
     report = {"schema": 1, "artifact_sha256": audit["artifact_sha256"],
+              "input_audit_sha256": hashlib.sha256(json.dumps(audit, sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
               "compiler_version": version, "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
               "validator_version": validator_version, "validator_sha256": hashlib.sha256(validator.read_bytes()).hexdigest(),
               "target_environment": "vulkan1.0", "strip_debug": True, "shader_records": len(audit["shaders"]),

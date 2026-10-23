@@ -44,6 +44,17 @@ SHA-256，所有长度相等且反汇编成功：
 这些统计含相同 shader 在不同 effect／对象中的重复声明。不能据此宣称只需支持 SM2；
 也不能将字节码长度／反汇编通过视为 SPIR-V 转换、GPU 执行或像素一致性通过。
 
+同一离线核对工具现还调用 `D3DXGetShaderConstantTable` 读取顶层声明。158 个记录中
+155 个有 CTAB，恢复 1,607 项常量／sampler 声明，全部按名称对应到所属 effect 的参数。
+其中 240 项矩阵的 effect 存储为 row-major、shader 声明为 column-major，报告明确
+标记上传时需转置。数值维度、数组长度及类型均检查；通用 effect sampler 与 shader
+具体 sampler 类型的差异单独记录。寄存器填充不能直接用 effect 连续存储字节替代。
+
+另外三个记录来自 CUBE、PARA、WATER 的 `ps_1_1` 汇编参数，确实没有 CTAB；不能因此
+断言未使用常量／sampler，仍需结合汇编和调用设置恢复。上述声明匹配不证明 GPU 常量
+上传、动态 shader 选择或采样绑定已经正确。转换报告保留每个去重输入在各 effect 中
+的归属和声明，避免去重时丢失绑定上下文。
+
 ```powershell
 python tools/audit_dx9_effect_shaders.py --exe research/target.exe --evidence research/rea-pe-resources.json --dll-dir .tools/d3dx-reference/build/native/release/bin/x64 --output research/effect-parser/shaders --export-bytecode
 ```
