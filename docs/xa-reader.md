@@ -68,7 +68,17 @@ tick. A successful pipeline is reported only after a positive-delta sample
 change and presentation. The simulator gate requires checker presentation,
 animation advancement and `PORTLAB_NATIVE_XA_FIXTURE_LOADED`; a first frame or
 an echoed marker cannot satisfy it. No original resource is supplied to cloud
-builds. Apple compilation/execution of this revision needs its own verification.
+builds.
+
+Source `f9d275a832f7dcd6818d2f4ca16fe98e9653e34d` passed 86 portable tests,
+device IPA packaging and the iPhone 16 Pro/iOS 18.5 simulator pipeline in run
+`39976603576`. Its app log contains the checker-present, XA-fixture-loaded and
+animation-advanced markers, and its screenshot was inspected. Run `39976638796`
+passed 55 ARM64 macOS native tests, explicit iPhoneOS SDK compilation (including
+`dc_xa.o`) and Apple archive/image adapter checks. Downloaded artifacts matched
+the pinned source hashes; the device IPA was inspected as unsigned ARM64/iPhoneOS
+with the matching manifest and no PP/XX/XA/resource-part/EXE bundle members.
+This verifies the self-authored diagnostic pipeline, not original game flow.
 
 Original resource binding, material/pose sampling, the startup transition
 composition and subsequent game flow remain incomplete.

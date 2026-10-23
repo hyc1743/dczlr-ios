@@ -56,10 +56,11 @@ This validates framing/numeric fields, not key sampling or model linking. See
 rotation and requires a positive-delta update before its simulator gate passes. See
 [animation-reconstruction.md](docs/animation-reconstruction.md).
 
-Source `e5a76fc` passed 77 portable tests, device IPA packaging and the iPhone
-simulator checker in run `39968051678`. The checker reported a positive-delta
-native animation update followed by successful presentation. Its native-core
-run `39968085705` also passed 47 ARM64 macOS tests and iPhoneOS SDK compilation. This remains a stage
+Source `f9d275a` passed 86 portable tests, device IPA packaging and the iPhone
+simulator checker in run `39976603576`. The checker reported native XA fixture
+decoding and a positive-delta animation update followed by successful
+presentation. Its native-core run `39976638796` also passed 55 ARM64 macOS tests
+and iPhoneOS SDK compilation. This remains a stage
 build, with game flow and physical-device playability incomplete. The public
 build workflow uploads host artifacts and the manifest; original game resources
 remain local and are not uploaded by `build-ios.yml`.

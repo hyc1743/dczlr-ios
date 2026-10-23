@@ -118,6 +118,12 @@ verification gate requires `PORTLAB_NATIVE_XA_FIXTURE_LOADED` in addition to
 presentation and advancement. This fixture contains no original names, keys or
 other game payloads; its successful execution must not certify original assets.
 
+This XA-to-animation checker passed in run `39976603576` at source `f9d275a`.
+The collected log contains all three required markers and the inspected
+screenshot shows the self-authored sprite with its pipeline status. The
+associated device IPA and iPhoneOS native archive were downloaded and inspected;
+physical-device behavior and actual game playability remain unverified.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.
