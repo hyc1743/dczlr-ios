@@ -54,3 +54,13 @@ pending media references resolve and their admitted EMA/PCM profiles parse:
 six background, three music, one sound and 33 voice references. External
 transition readiness is synthetic in this audit; no original media is rendered
 or uploaded, and this is not original GPU/audio or gameplay execution proof.
+
+Source `6ee92da` passed both Apple workflows: 166 portable tests, 124 native
+ARM64 tests, all 17 iPhoneOS native objects and unsigned device packaging.
+The iPhone 16 Pro/iOS 18.5 generated run presented records `0:0`, `0:1`,
+`0:2`, then `1:0`, with normal text fade and all three audio playback clocks.
+Exact first-record GPU capture passed 9/9 background samples and 2,205 bright
+body-text pixels; the self-authored Chinese sentence and width-fitted ASCII
+chapter text were inspected. This remains a partial script host. First
+nonscript gameplay, broader input/backlog/options/save-load, original media
+GPU/audio equivalence and physical-device playability remain unverified.
