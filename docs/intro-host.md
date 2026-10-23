@@ -29,3 +29,16 @@ through the normal input adapter after title presentation. Normal launches
 use user input. Generated text and media are self-authored. The check does
 not establish original-resource GPU equivalence, audibility, physical-device
 playability or complete-game compatibility.
+
+Source `44a2099` passed both Apple workflows: 156 portable tests, 115 native
+ARM64 tests, all 16 iPhoneOS native objects, unsigned device packaging and
+the generated simulator route on iPhone 16 Pro/iOS 18.5. The generated
+background/text screenshot and exact startup-card captures were inspected.
+This validates the documented adapter scope only. Original resource bindings
+were checked separately and kept local; original GPU/audio execution and a
+physical iPhone remain unverified.
+
+The next dispatcher work is explicit: chapter 0 ends by incrementing the
+chapter index and opening script 1 through action 4 in `0x0052bcf0`. After
+script chapters 0/1/2, chapter 3 dispatches the first nonscript scene at
+`0x00512cc0`. The current adapter stops at the first chapter boundary.
