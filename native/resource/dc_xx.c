@@ -184,6 +184,42 @@ GETTER(submesh, dc_xx_submesh, meshes, submeshes)
 GETTER(material, dc_xx_material, materials, materials)
 GETTER(texture, dc_xx_texture, textures, textures)
 
+dc_status dc_xx_load_mesh_vertices(const dc_xx *model,uint32_t index,dc_mesh_vertex *out,size_t capacity) {
+    if (!model || !out) return DC_ARGUMENT;
+    if (index>=model->info.submeshes) return DC_RANGE;
+    const dc_xx_submesh *m=&model->meshes[index];
+    if (capacity<m->vertex_count || m->vertex_count>1048576) return DC_RANGE;
+    if (overlap(model->data,model->length,out,m->vertex_count*sizeof(*out))) return DC_ARGUMENT;
+    const uint32_t offsets[8]={4,8,12,32,36,40,44,48};
+    for (uint32_t pass=0;pass<2;++pass) for (uint32_t i=0;i<m->vertex_count;++i) {
+        dc_mesh_vertex v;
+        float values[8];
+        for (uint32_t j=0;j<8;++j) {
+            uint32_t bits=word(model->data+m->vertices.offset+i*52+offsets[j]);
+            memcpy(&values[j],&bits,4);
+            if (!isfinite(values[j])) return DC_RANGE;
+        }
+        memcpy(v.position,values,12);memcpy(v.normal,values+3,12);memcpy(v.uv,values+6,8);
+        if (pass) out[i]=v;
+    }
+    return DC_OK;
+}
+
+dc_status dc_xx_load_mesh_indices(const dc_xx *model,uint32_t index,uint16_t *out,size_t capacity) {
+    if (!model || !out) return DC_ARGUMENT;
+    if (index>=model->info.submeshes) return DC_RANGE;
+    const dc_xx_submesh *m=&model->meshes[index];
+    if (capacity<m->index_count || m->index_count%3 || m->index_count>1048576) return DC_RANGE;
+    if (overlap(model->data,model->length,out,m->index_count*sizeof(*out))) return DC_ARGUMENT;
+    for (uint32_t pass=0;pass<2;++pass) for (uint32_t i=0;i<m->index_count;++i) {
+        const uint8_t *p=model->data+m->indices.offset+i*2;
+        uint16_t value=(uint16_t)((uint16_t)p[0]|(uint16_t)p[1]<<8);
+        if (value>=m->vertex_count) return DC_FORMAT;
+        if (pass) out[i]=value;
+    }
+    return DC_OK;
+}
+
 static int string_length(const uint8_t *bytes, size_t capacity, size_t *length) {
     for (size_t i = 0; i < capacity; ++i) if (bytes[i] == 255) { *length = i; return 1; }
     return 0;

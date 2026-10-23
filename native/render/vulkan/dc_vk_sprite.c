@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#include <math.h>
 #ifdef __APPLE__
 #include <dispatch/dispatch.h>
 #include <pthread.h>
@@ -32,6 +33,9 @@ typedef struct texture {
 
 typedef struct prepared_draw {
     dc_sprite_vertex vertices[4];
+    const dc_sprite_vertex *source;
+    size_t count;
+    VkDeviceSize offset;
     texture *image;
     uint32_t pipeline, filter, alpha_op;
 } prepared_draw;
@@ -63,7 +67,7 @@ struct dc_vk_sprite {
     VkDescriptorPool descriptor_pool;
     VkPipelineLayout pipeline_layout;
     VkShaderModule modules[2];
-    VkPipeline pipelines[3];
+    VkPipeline pipelines[6];
     VkSampler samplers[2];
     host_buffer readback, vertices;
     texture *textures;
@@ -207,7 +211,7 @@ void dc_vk_sprite_destroy(dc_vk_sprite *r) {
         if (r->swapchain) vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
         if (r->textures)
             for (uint32_t i = 0; i < r->max_textures; ++i) drop_texture(r, &r->textures[i]);
-        for (uint32_t i = 0; i < 3; ++i)
+        for (uint32_t i = 0; i < 6; ++i)
             if (r->pipelines[i]) vkDestroyPipeline(r->device, r->pipelines[i], NULL);
         for (uint32_t i = 0; i < 2; ++i) {
             if (r->modules[i]) vkDestroyShaderModule(r->device, r->modules[i], NULL);
@@ -573,8 +577,8 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         .vertexAttributeDescriptionCount = 3, .pVertexAttributeDescriptions = attributes};
     VkPipelineInputAssemblyStateCreateInfo assembly = {.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, .primitiveRestartEnable = VK_TRUE};
-    /* All draws are non-indexed, so restart cannot alter their four vertices.
-     * Enabling it admits Metal portability devices that cannot disable restart. */
+    /* Sprite strips are non-indexed; enabling restart admits Metal portability
+     * devices that cannot disable it for strips. Triangle lists disable it. */
     VkViewport viewport = {0, 0, (float)r->width, (float)r->height, 0, 1};
     VkRect2D scissor = {{0, 0}, {r->width, r->height}};
     VkPipelineViewportStateCreateInfo view = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
@@ -586,11 +590,14 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
     const VkBlendFactor sources[] = {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ZERO};
     const VkBlendFactor destinations[] = {VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_COLOR};
-    for (uint32_t i = 0; i < 3; ++i) {
+    for (uint32_t i = 0; i < 6; ++i) {
+        uint32_t blend_index = i % 3;
+        assembly.topology = i < 3 ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        assembly.primitiveRestartEnable = i < 3;
         VkPipelineColorBlendAttachmentState blend = {.blendEnable = VK_TRUE,
-            .srcColorBlendFactor = sources[i], .dstColorBlendFactor = destinations[i], .colorBlendOp = VK_BLEND_OP_ADD,
-            .srcAlphaBlendFactor = sources[i],
-            .dstAlphaBlendFactor = i == 2 ? VK_BLEND_FACTOR_SRC_ALPHA : destinations[i],
+            .srcColorBlendFactor = sources[blend_index], .dstColorBlendFactor = destinations[blend_index], .colorBlendOp = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = sources[blend_index],
+            .dstAlphaBlendFactor = blend_index == 2 ? VK_BLEND_FACTOR_SRC_ALPHA : destinations[blend_index],
             .alphaBlendOp = VK_BLEND_OP_ADD, .colorWriteMask = 15};
         VkPipelineColorBlendStateCreateInfo blending = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .attachmentCount = 1, .pAttachments = &blend};
@@ -781,6 +788,9 @@ unsupported:
     return fail(r, DC_FORMAT, "Unsupported native sprite command/effective state");
 }
 
+static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t visible,
+    const uint8_t clear[4], uint8_t *rgba);
+
 dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, size_t count,
         const uint8_t clear[4], uint8_t *rgba, size_t capacity) {
     if (!r || !clear || (!rgba && capacity) || (count && !items)) return DC_ARGUMENT;
@@ -799,6 +809,7 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
     for (size_t i = 0; i < count && status == DC_OK; ++i) {
         if (items[i].hidden == 1) continue;
         prepared_draw *draw = &draws[visible];
+        draw->source = draw->vertices; draw->count = 4;
         status = dc_sprite_build_vertices(&items[i].pose, draw->vertices);
         if (status != DC_OK) { fail(r, status, "Invalid sprite pose at item %zu", i); break; }
         dc_sprite_draw input = {.vertex_buffer = i + 1, .texture = items[i].texture,
@@ -811,14 +822,60 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
         ++visible;
     }
     if (status != DC_OK) { free(draws); return status; }
-    VkDeviceSize vertex_bytes = visible * 4 * sizeof(dc_sprite_vertex);
+    status = render_prepared(r, draws, visible, clear, rgba);
+    free(draws);
+    return status;
+}
+
+dc_status dc_vk_geometry_render(dc_vk_sprite *r, const dc_vk_geometry_item *items, size_t count,
+        const uint8_t clear[4], uint8_t *rgba, size_t capacity) {
+    if (!r || !clear || (!rgba && capacity) || (count && !items)) return DC_ARGUMENT;
+    if (r->broken) return fail(r, DC_IO, "Renderer requires recreation after submission failure");
+    if (count > 4096 || (rgba && capacity < (size_t)r->width * r->height * 4)) return DC_RANGE;
+    prepared_draw *draws = calloc(count ? count : 1, sizeof(*draws));
+    if (!draws) return DC_MEMORY;
+    size_t visible = 0, total = 0;
+    dc_status status = DC_OK;
+    for (size_t i = 0; i < count; ++i) {
+        const dc_vk_geometry_item *item = &items[i];
+        if (item->hidden == 1) continue;
+        if (!item->vertices || !item->vertex_count || item->vertex_count % 3 || item->vertex_count > 1048576 - total) {
+            status = DC_RANGE; break;
+        }
+        if (item->blend_mode > 3 || item->point_filter > 1) { status = DC_FORMAT; break; }
+        texture *image = find_texture(r, item->texture);
+        if (!image) { status = DC_ARGUMENT; break; }
+        for (size_t j = 0; j < item->vertex_count; ++j) {
+            const dc_sprite_vertex *v = &item->vertices[j];
+            if (!isfinite(v->x) || !isfinite(v->y) || !isfinite(v->z) ||
+                !isfinite(v->rhw) || v->rhw <= 0 || !isfinite(v->u) || !isfinite(v->v)) { status = DC_FORMAT; break; }
+        }
+        if (status != DC_OK) break;
+        uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
+        draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
+            .image = image, .pipeline = 3 + blend, .filter = item->point_filter ? 0 : 1, .alpha_op = 4};
+        total += item->vertex_count;
+    }
+    if (status == DC_OK) status = render_prepared(r, draws, visible, clear, rgba);
+    free(draws);
+    return status;
+}
+
+static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t visible,
+        const uint8_t clear[4], uint8_t *rgba) {
+    dc_status status = DC_OK;
+    VkDeviceSize vertex_bytes = 0;
+    for (size_t i = 0; i < visible; ++i) {
+        draws[i].offset = vertex_bytes;
+        vertex_bytes += draws[i].count * sizeof(dc_sprite_vertex);
+    }
     if (vertex_bytes > r->vertices.bytes) {
         drop_buffer(r, &r->vertices);
         status = make_buffer(r, vertex_bytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, &r->vertices);
     }
     if (status == DC_OK) {
         for (size_t i = 0; i < visible; ++i)
-            memcpy((uint8_t *)r->vertices.mapped + i * sizeof(draws[i].vertices), draws[i].vertices, sizeof(draws[i].vertices));
+            memcpy((uint8_t *)r->vertices.mapped + draws[i].offset, draws[i].source, draws[i].count * sizeof(dc_sprite_vertex));
         status = begin_commands(r);
     }
     if (status == DC_OK) {
@@ -831,14 +888,14 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
         for (size_t i = 0; i < visible; ++i) {
             prepared_draw *draw = &draws[i];
             struct { float width, height; uint32_t alpha_op, reserved; } push = {(float)r->width, (float)r->height, draw->alpha_op, 0};
-            VkDeviceSize offset = i * sizeof(draw->vertices);
+            VkDeviceSize offset = draw->offset;
             vkCmdBindPipeline(r->command, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[draw->pipeline]);
             vkCmdBindDescriptorSets(r->command, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipeline_layout,
                 0, 1, &draw->image->sets[draw->filter], 0, NULL);
             vkCmdBindVertexBuffers(r->command, 0, 1, &r->vertices.buffer, &offset);
             vkCmdPushConstants(r->command, r->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                 0, sizeof(push), &push);
-            vkCmdDraw(r->command, 4, 1, 0, 0);
+            vkCmdDraw(r->command, (uint32_t)draw->count, 1, 0, 0);
         }
         vkCmdEndRenderPass(r->command);
         if (rgba) {
@@ -859,6 +916,5 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
             ++r->info.submitted_frames;
         }
     }
-    free(draws);
     return status;
 }

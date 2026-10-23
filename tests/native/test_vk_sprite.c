@@ -160,6 +160,33 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     OK(dc_vk_sprite_get_info(r, &info));
     CHECK(info.validation_errors == 0 && info.submitted_frames == 3);
     puts("PASS: initial point filter, native restoration to linear, frame state reset");
+    dc_sprite_vertex triangle[3] = {
+        {.x=-.5f,.y=-.5f,.z=.5f,.rhw=1,.diffuse=0xffffffff,.u=0,.v=.25f},
+        {.x=7.5f,.y=-.5f,.z=.5f,.rhw=1,.diffuse=0xffffffff,.u=1,.v=.25f},
+        {.x=-.5f,.y=7.5f,.z=.5f,.rhw=1,.diffuse=0xffffffff,.u=0,.v=.25f}};
+    dc_vk_geometry_item geometry = {.vertices=triangle,.vertex_count=3,.texture=texture,.blend_mode=3,.point_filter=1};
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,2,2,255,0,0,255,0));
+    CHECK(pixel(rgba,7,7,20,40,60,100,0));
+    triangle[1].rhw=4;
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,2,2,0,255,0,255,0)); /* Positive rhw changes UV interpolation. */
+    triangle[1].rhw=1;
+    for (unsigned i=0;i<3;++i) {triangle[i].u=.25f;triangle[i].diffuse=0x80ffffff;}
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,2,2,138,20,30,114,1));
+    memcpy(before,rgba,sizeof(rgba));
+    OK(dc_vk_sprite_get_info(r,&info));frame_count=info.submitted_frames;
+    triangle[1].rhw=0;
+    CHECK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba))==DC_FORMAT);
+    triangle[1].rhw=1;geometry.vertex_count=4;
+    CHECK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba))==DC_RANGE);
+    geometry.vertex_count=3;geometry.texture=(uintptr_t)-1;
+    CHECK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba))==DC_ARGUMENT);
+    CHECK(!memcmp(before,rgba,sizeof(rgba)));
+    OK(dc_vk_sprite_get_info(r,&info));
+    CHECK(info.submitted_frames==frame_count && info.validation_errors==0);
+    puts("PASS: triangle-list mesh raster, perspective-correct UV, diffuse alpha and atomic admission");
     dc_vk_sprite_destroy(r);
     return 0;
 failed:

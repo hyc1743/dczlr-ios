@@ -13,7 +13,7 @@ layout(push_constant) uniform SpriteConstants {
 void main() {
     // D3D9 samples at integer pixel centers, Vulkan at half-integer centers.
     vec2 clip = (in_position.xy + vec2(0.5)) / constants.viewport * 2.0 - 1.0;
-    gl_Position = vec4(clip, in_position.z, 1.0);
+    gl_Position = vec4(clip, in_position.z, 1.0) / in_position.w;
     diffuse = unpackUnorm4x8(in_argb).bgra;
     uv = in_uv;
 }

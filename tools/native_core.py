@@ -115,6 +115,20 @@ class Matrix(C.Structure):
     _fields_ = [("values", C.c_float * 16)]
 
 
+class MeshVertex(C.Structure):
+    _fields_ = [("position", C.c_float*3), ("normal", C.c_float*3), ("uv", C.c_float*2)]
+
+
+class Viewport(C.Structure):
+    _fields_ = [(n,C.c_float) for n in ("x","y","width","height","min_z","max_z")]
+
+
+class SceneNode(C.Structure):
+    _fields_ = [("parent", C.c_uint32), ("modifier", C.c_uint32),
+                ("hidden", C.c_uint8), ("billboard", C.c_uint8), ("reserved", C.c_uint8 * 2),
+                ("local", Matrix), ("extra", Matrix)]
+
+
 class XAPoseTrack(C.Structure):
     _fields_ = [("name_offset", C.c_size_t), ("keys_offset", C.c_size_t),
                 ("name_length", C.c_uint32), ("key_count", C.c_uint32), ("mode", C.c_uint32)]
@@ -198,11 +212,11 @@ def compiler_command():
 def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c",
-               ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c"]
+               ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -278,6 +292,30 @@ def library():
     lib.dc_xa_material_track_at.restype = C.c_int
     lib.dc_xa_load_material_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(MaterialKey), C.c_size_t]
     lib.dc_xa_load_material_keys.restype = C.c_int
+    lib.dc_xx_load_mesh_vertices.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t]
+    lib.dc_xx_load_mesh_vertices.restype = C.c_int
+    lib.dc_xx_load_mesh_indices.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(C.c_uint16),C.c_size_t]
+    lib.dc_xx_load_mesh_indices.restype = C.c_int
+    lib.dc_mesh_project.argtypes = [C.POINTER(MeshVertex),C.c_size_t,C.POINTER(C.c_uint16),C.c_size_t,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t]
+    lib.dc_mesh_project.restype = C.c_int
+    lib.dc_model_open.argtypes = [C.c_void_p,C.c_size_t,C.c_void_p,C.c_size_t,C.POINTER(C.c_void_p)]
+    lib.dc_model_open.restype = C.c_int
+    lib.dc_model_close.argtypes = [C.c_void_p]
+    lib.dc_model_close.restype = None
+    lib.dc_model_request.argtypes = [C.c_void_p,C.c_uint32,C.c_uint32]
+    lib.dc_model_request.restype = C.c_int
+    lib.dc_model_query.argtypes = [C.c_void_p,C.POINTER(C.c_uint32),C.POINTER(C.c_uint32)]
+    lib.dc_model_query.restype = C.c_int
+    lib.dc_model_tick.argtypes = [C.c_void_p,C.c_uint32,C.c_uint32,C.POINTER(Matrix)]
+    lib.dc_model_tick.restype = C.c_int
+    for name,record in (("get_info",XXInfo),("material",MaterialValue),("global",Matrix),("mesh",XXSubmesh)):
+        function=getattr(lib,"dc_model_"+name)
+        function.argtypes=[C.c_void_p]+([] if name=="get_info" else [C.c_uint32])+[C.POINTER(record)]
+        function.restype=C.c_int
+    lib.dc_model_project.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t]
+    lib.dc_model_project.restype = C.c_int
+    lib.dc_scene_update.argtypes = [C.POINTER(SceneNode), C.c_size_t, C.POINTER(Matrix), C.POINTER(Matrix), C.c_size_t]
+    lib.dc_scene_update.restype = C.c_int
     lib.dc_pose_select.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_float, C.POINTER(PoseSelection)]
     lib.dc_pose_select.restype = C.c_int
     lib.dc_pose_sample.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_uint32, C.c_float, C.POINTER(Matrix)]

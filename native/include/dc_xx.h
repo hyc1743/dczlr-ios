@@ -3,6 +3,7 @@
 #include "dc_material.h"
 #include "dc_image.h"
 #include "dc_pose.h"
+#include "dc_mesh.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -56,6 +57,14 @@ DC_API dc_status dc_xx_node_at(const dc_xx *model, uint32_t index, dc_xx_node *o
 DC_API dc_status dc_xx_submesh_at(const dc_xx *model, uint32_t index, dc_xx_submesh *out);
 DC_API dc_status dc_xx_material_at(const dc_xx *model, uint32_t index, dc_xx_material *out);
 DC_API dc_status dc_xx_texture_at(const dc_xx *model, uint32_t index, dc_xx_texture *out);
+/* Decode the first UV stream and unskinned position/normal from 52-byte XX
+ * records, matching 0x408f60's FVF 0x112 source offsets. Indices retain file
+ * order and must form a valid in-range triangle list. Capacity and complete
+ * selected mesh validation precede writes. Source/output must not overlap. */
+DC_API dc_status dc_xx_load_mesh_vertices(const dc_xx *model,uint32_t index,
+    dc_mesh_vertex *out,size_t capacity);
+DC_API dc_status dc_xx_load_mesh_indices(const dc_xx *model,uint32_t index,
+    uint16_t *out,size_t capacity);
 
 /* First exact case-sensitive C-string match in file order. Query is the
  * encoded (bytewise complemented) name span from XA; requires an encoded NUL.

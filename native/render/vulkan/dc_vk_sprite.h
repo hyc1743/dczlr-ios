@@ -26,6 +26,16 @@ typedef struct dc_vk_sprite_item {
     uintptr_t texture;
     uint8_t blend_mode, hidden, point_filter, software_vertex;
 } dc_vk_sprite_item;
+/* Preprojected, non-indexed triangle-list vertices. RGB and alpha modulate
+ * texture with diffuse; blend modes 0/3 standard, 1 additive, 2 modulation.
+ * Explicit unlit one-texture profile; no depth/culling/skinning/effect claim.
+ * Positive rhw enables perspective-correct interpolation through the shader. */
+typedef struct dc_vk_geometry_item {
+    const dc_sprite_vertex *vertices;
+    size_t vertex_count;
+    uintptr_t texture;
+    uint8_t blend_mode, hidden, point_filter, reserved;
+} dc_vk_geometry_item;
 
 typedef struct dc_vk_sprite_info {
     char device_name[256];
@@ -60,6 +70,9 @@ DC_API dc_status dc_vk_sprite_remove_texture(dc_vk_sprite *renderer, uintptr_t h
 DC_API dc_status dc_vk_sprite_render(dc_vk_sprite *renderer,
                                      const dc_vk_sprite_item *items, size_t count,
                                      const uint8_t clear_rgba[4], uint8_t *rgba, size_t capacity);
+DC_API dc_status dc_vk_geometry_render(dc_vk_sprite *renderer,
+    const dc_vk_geometry_item *items, size_t count,
+    const uint8_t clear_rgba[4], uint8_t *rgba, size_t capacity);
 
 #ifdef __cplusplus
 }
