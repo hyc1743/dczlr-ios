@@ -15,11 +15,16 @@ def run(*command, timeout=120):
 
 
 def check(app, output):
+    app = app.resolve(strict=True)
+    output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     with (app / "Info.plist").open("rb") as source:
         info = plistlib.load(source)
     if info.get("CFBundleIdentifier") != "org.example.portlab" or not info.get("CFBundleExecutable"):
         raise ValueError("App is missing expected bundle identity/executable metadata")
+    (output / "bundle.json").write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
+    if not (app / info["CFBundleExecutable"]).is_file():
+        raise ValueError("App bundle executable is missing")
     devices = json.loads(run("xcrun", "simctl", "list", "devices", "available", "--json"))["devices"]
     phones = [device for entries in devices.values() for device in entries if device["name"].startswith("iPhone")]
     if not phones:
