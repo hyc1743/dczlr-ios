@@ -108,6 +108,34 @@ class XAMaterialTrack(C.Structure):
                 ("name_length", C.c_uint32), ("key_count", C.c_uint32)]
 
 
+class XXSpan(C.Structure):
+    _fields_ = [("offset", C.c_size_t), ("length", C.c_size_t)]
+
+
+class XXInfo(C.Structure):
+    _fields_ = [(n, C.c_uint32) for n in ("nodes", "submeshes", "materials", "textures", "bones", "version_bits")] + [("parsed_bytes", C.c_size_t), ("opaque_tail", XXSpan)]
+
+    def record(self):
+        return {**{name: getattr(self, name) for name, _ in self._fields_ if name != "opaque_tail"},
+                "opaque_tail": {"offset": self.opaque_tail.offset, "length": self.opaque_tail.length}}
+
+
+class XXNode(C.Structure):
+    _fields_ = [("name", XXSpan), ("matrix_offset", C.c_size_t)] + [(n, C.c_uint32) for n in ("parent", "children", "first_submesh", "submeshes")]
+
+
+class XXSubmesh(C.Structure):
+    _fields_ = [("indices", XXSpan), ("vertices", XXSpan), ("extra_uv", XXSpan * 3)] + [(n, C.c_uint32) for n in ("node", "material", "index_count", "vertex_count", "uv_sets")]
+
+
+class XXMaterial(C.Structure):
+    _fields_ = [("name", XXSpan), ("texture_names", XXSpan * 8), ("value_offset", C.c_size_t)]
+
+
+class XXTexture(C.Structure):
+    _fields_ = [("name", XXSpan), ("image", XXSpan), ("descriptor_offset", C.c_size_t)]
+
+
 class SpritePose(C.Structure):
     _fields_ = [(name, C.c_float) for name in (
         "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
@@ -152,12 +180,12 @@ def compiler_command():
 @lru_cache(maxsize=1)
 def library():
     command = compiler_command()
-    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c",
+    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c",
                ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
                ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -237,7 +265,80 @@ def library():
     lib.dc_material_interpolate.restype = C.c_int
     lib.dc_material_sample.argtypes = [C.POINTER(MaterialKey), C.c_size_t, C.POINTER(MaterialValue), C.c_float, C.POINTER(MaterialValue)]
     lib.dc_material_sample.restype = C.c_int
+    lib.dc_xx_probe.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(XXInfo)]
+    lib.dc_xx_probe.restype = C.c_int
+    lib.dc_xx_open.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(C.c_void_p)]
+    lib.dc_xx_open.restype = C.c_int
+    lib.dc_xx_close.argtypes = [C.c_void_p]
+    lib.dc_xx_close.restype = None
+    lib.dc_xx_get_info.argtypes = [C.c_void_p, C.POINTER(XXInfo)]
+    lib.dc_xx_get_info.restype = C.c_int
+    for method, structure in (("node", XXNode), ("submesh", XXSubmesh), ("material", XXMaterial), ("texture", XXTexture)):
+        function = getattr(lib, "dc_xx_" + method + "_at")
+        function.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(structure)]
+        function.restype = C.c_int
+    lib.dc_xx_find_material_encoded.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
+    lib.dc_xx_find_material_encoded.restype = C.c_int
+    lib.dc_xx_material_baseline.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(MaterialValue)]
+    lib.dc_xx_material_baseline.restype = C.c_int
+    lib.dc_xx_image_probe.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(ImageInfo)]
+    lib.dc_xx_image_probe.restype = C.c_int
+    lib.dc_xx_image_decode.argtypes = [C.c_void_p, C.c_uint32, C.c_void_p, C.c_size_t, C.POINTER(ImageInfo)]
+    lib.dc_xx_image_decode.restype = C.c_int
     return lib
+
+
+class XXModel:
+    """Own the borrowed source buffer for the entire native metadata lifetime."""
+    def __init__(self, data):
+        self.data = data
+        self.source = C.create_string_buffer(data)
+        self.lib = library()
+        self.handle = C.c_void_p()
+        status = self.lib.dc_xx_open(self.source, len(data), C.byref(self.handle))
+        if status:
+            raise ValueError("Native XX open failed with status " + str(status))
+
+    def __enter__(self): return self
+
+    def __exit__(self, *_): self.close()
+
+    def close(self):
+        if self.handle:
+            self.lib.dc_xx_close(self.handle)
+            self.handle = C.c_void_p()
+
+    def info(self):
+        out = XXInfo()
+        if self.lib.dc_xx_get_info(self.handle, C.byref(out)):
+            raise ValueError("Native XX info failed")
+        return out
+
+    def at(self, kind, index):
+        structure = {"node": XXNode, "submesh": XXSubmesh, "material": XXMaterial, "texture": XXTexture}[kind]
+        out = structure()
+        if getattr(self.lib, "dc_xx_" + kind + "_at")(self.handle, index, C.byref(out)):
+            raise ValueError("Native XX index failed: " + kind)
+        return out
+
+    def span(self, span): return self.data[span.offset:span.offset + span.length]
+
+    def baseline(self, index):
+        out = MaterialValue()
+        if self.lib.dc_xx_material_baseline(self.handle, index, C.byref(out)):
+            raise ValueError("Native XX baseline failed")
+        return out
+
+    def image(self, index, max_bytes=64 * 1024 * 1024):
+        info = ImageInfo()
+        if self.lib.dc_xx_image_probe(self.handle, index, C.byref(info)):
+            raise ValueError("Native XX image profile rejected")
+        if info.rgba_bytes > max_bytes:
+            raise ValueError("Native XX image exceeds caller output cap")
+        out = C.create_string_buffer(info.rgba_bytes)
+        if self.lib.dc_xx_image_decode(self.handle, index, out, len(out), C.byref(info)):
+            raise ValueError("Native XX image decode failed")
+        return info, out.raw
 
 
 def decode_image(data, format, max_bytes=64 * 1024 * 1024):

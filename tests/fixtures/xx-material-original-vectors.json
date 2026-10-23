@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 18,
+  "output_sha256": "44d0f638cd9d5dc7b3704cbcebac8ad47bcd58cbf8c8fcf69c01ca3db83849fd",
+  "original_function_sha256": {
+    "0x40aee0": "940e36f3b63f7c84d58e64d499d0feeae3037e3e3c737417611a1a863e14144b",
+    "0x40b40f": "0a4614fb932342801e8ce33e1445f2efe9543c6fd103ddc5f7dc21e12f4e52a9",
+    "0x40d770": "661f31925f9437f43d8f49bca6347547ab5fc5672df525815647c303615fa29b",
+    "0x40d9c0": "3e34a1cbb2edd51580b8787343a0afa05761c888b86c5f4bc9173c799016b604"
+  },
+  "x87_control_words": [
+    639,
+    895
+  ],
+  "execution": "isolated original material loader/name decoder/checksum with bounded synthetic allocator/memcpy",
+  "comparison": "exact normalized 17-component material bytes on self-authored records, including signed zero",
+  "exclusions": "original XX hierarchy, meshes, images, shader binding, checksum acceptance policy and GPU output",
+  "original_game_resources_used": false,
+  "game_playability": "not_verified"
+}

@@ -8,6 +8,18 @@ from check_ios_sprite import presented_scenes, scene_evidence, scene_ready
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_xx_requires_its_own_exact_marker_and_scene(self):
+        log = "2026-10-24T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
+        self.assertFalse(scene_ready(log, "checker", require_xx=True))
+        with self.assertRaises(ValueError):
+            scene_evidence(log, "checker", require_xx=True)
+        for suffix in ("command echo PORTLAB_NATIVE_XX_FIXTURE_LOADED", "PORTLAB_NATIVE_XX_FIXTURE_LOADED_pending"):
+            self.assertFalse(scene_ready(log + "2026-10-24T12:00:01Z " + suffix + "\n", "checker", require_xx=True))
+        log += "2026-10-24T12:00:01Z PORTLAB_NATIVE_XX_FIXTURE_LOADED submitted\n"
+        self.assertEqual(scene_evidence(log, "checker", require_xx=True)["native_xx_fixture"],
+                         "self-authored XX embedded texture and XA material binding presented")
+        self.assertFalse(scene_ready(log, "title", require_xx=True))
+
     def test_material_sampling_requires_changed_sample_and_presentation_report(self):
         log = ("2026-10-23T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
                "2026-10-23T12:00:01Z PORTLAB_NATIVE_ANIMATION_ADVANCED submitted\n"

@@ -32,7 +32,7 @@ CLIP_OFFSETS = {"first_frame": 0x48, "last_frame": 0x4c, "blend_duration": 0x5c,
 
 
 class OriginalAnimation:
-    def __init__(self, path, ranges=None):
+    def __init__(self, path, ranges=None, *, fragment_ends=None):
         data = path.read_bytes()
         if hashlib.sha256(data).hexdigest() != TARGET_SHA256:
             raise ValueError("Original input differs from pinned analyzed PE")
@@ -55,7 +55,8 @@ class OriginalAnimation:
         for start, length in (RANGES if ranges is None else ranges).items():
             code = bytes(self.uc.mem_read(start, length))
             instructions = list(disassembler.disasm(code, start))
-            if sum(i.size for i in instructions) != length or instructions[-1].mnemonic != "ret":
+            terminal = (fragment_ends or {}).get(start, "ret")
+            if not instructions or sum(i.size for i in instructions) != length or instructions[-1].mnemonic != terminal:
                 raise ValueError("Function framing differs from analyzed boundaries")
             self.instructions.update(i.address for i in instructions)
             self.hashes[hex(start)] = hashlib.sha256(code).hexdigest()

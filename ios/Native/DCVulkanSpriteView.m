@@ -5,6 +5,8 @@
 #include "dc_sprite_spv.h"
 #include "dc_animation.h"
 #include "dc_xa.h"
+#include "dc_xx.h"
+#include "dc_diagnostic_xx.h"
 #import "DCArchive.h"
 #include <math.h>
 #include <string.h>
@@ -193,8 +195,18 @@ static void dc_write_float_le(uint8_t *out, float value) {
         char error[512];
         if (dc_vk_sprite_create(&config, &_renderer, error, sizeof(error)) != DC_OK)
             return [NSString stringWithUTF8String:error];
-        const uint8_t checker[] = {255,80,40,255, 40,220,100,255, 40,100,255,255, 250,230,100,255};
-        if (dc_vk_sprite_upload(_renderer, 2, 2, checker, sizeof(checker), &_texture) != DC_OK) {
+        dc_xx *model = NULL;
+        dc_image_info imageInfo;
+        uint8_t checker[16];
+        dc_status fixtureStatus = dc_xx_open(dc_diagnostic_xx, sizeof(dc_diagnostic_xx), &model);
+        if (fixtureStatus == DC_OK)
+            fixtureStatus = dc_xx_image_decode(model, 0, checker, sizeof(checker), &imageInfo);
+        dc_xx_close(model);
+        if (fixtureStatus != DC_OK || imageInfo.width != 2 || imageInfo.height != 2) {
+            [self destroyRenderer];
+            return [NSString stringWithFormat:@"Native XX fixture rejected: %d", fixtureStatus];
+        }
+        if (dc_vk_sprite_upload(_renderer, imageInfo.width, imageInfo.height, checker, sizeof(checker), &_texture) != DC_OK) {
             NSString *message = [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
             [self releaseRenderer];
             return message;
@@ -271,12 +283,15 @@ static void dc_write_float_le(uint8_t *out, float value) {
         if (!_diagnosticTickInitialized) {
             /* Self-authored XA bytes exercise the real resource-to-controller
              * path. No original names, keys or game payloads are supplied. */
-            const size_t keysOffset = 13, tableOffset = 160;
+            const uint8_t target[] = {0x9b,0x96,0x9e,0x98,0x91,0x90,0x8c,0x8b,0x96,0x9c,0xff};
+            const size_t keysOffset = 13 + sizeof(target), tableOffset = 160 + sizeof(target);
             NSMutableData *fixture = [NSMutableData dataWithLength:tableOffset + 4 + DC_XA_CLIP_COUNT * DC_XA_CLIP_RECORD_BYTES];
             uint8_t *bytes = fixture.mutableBytes;
             bytes[0] = 1;
-            dc_write_word_le(bytes + 1, 1); /* One material track with an empty name. */
-            dc_write_word_le(bytes + 9, 2);
+            dc_write_word_le(bytes + 1, 1);
+            dc_write_word_le(bytes + 5, sizeof(target));
+            memcpy(bytes + 9, target, sizeof(target));
+            dc_write_word_le(bytes + 9 + sizeof(target), 2);
             for (uint32_t key = 0; key < 2; ++key) {
                 for (uint32_t component = 0; component < DC_MATERIAL_COMPONENTS; ++component)
                     dc_write_float_le(bytes + keysOffset + key * 72 + component * 4, 1.0f);
@@ -297,8 +312,18 @@ static void dc_write_float_le(uint8_t *out, float value) {
             status = dc_xa_load_material_keys(bytes, fixture.length, 0, _diagnosticMaterialKeys, 2);
             if (status != DC_OK)
                 return [NSString stringWithFormat:@"Native XA material keys rejected: %d", status];
+            dc_xa_material_track track;
+            status = dc_xa_material_track_at(bytes, fixture.length, 0, &track);
+            dc_xx *model = NULL;
+            uint32_t materialIndex = UINT32_MAX;
+            if (status == DC_OK) status = dc_xx_open(dc_diagnostic_xx, sizeof(dc_diagnostic_xx), &model);
+            if (status == DC_OK)
+                status = dc_xx_find_material_encoded(model, bytes + track.name_offset, track.name_length, &materialIndex);
+            if (status == DC_OK) status = dc_xx_material_baseline(model, materialIndex, &_diagnosticBaseline);
+            dc_xx_close(model);
+            if (status != DC_OK)
+                return [NSString stringWithFormat:@"Native XA/XX material binding rejected: %d", status];
             _diagnosticMaterial = _diagnosticMaterialKeys[0].value;
-            _diagnosticBaseline = _diagnosticMaterial;
             _diagnosticAnimation = (dc_animation_state){.blend = 1};
         }
         dc_animation_tick_result update;

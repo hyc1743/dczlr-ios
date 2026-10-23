@@ -10,7 +10,8 @@ extern "C" {
 typedef enum dc_image_format {
     DC_IMAGE_BMP = 1,
     DC_IMAGE_TGA = 2,
-    DC_IMAGE_EMA = 3
+    DC_IMAGE_EMA = 3,
+    DC_IMAGE_XX_BMP = 4 /* Explicit embedded XX profile: BM or zero signature. */
 } dc_image_format;
 
 typedef struct dc_image_info {

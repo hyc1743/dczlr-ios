@@ -59,9 +59,19 @@ rotation and requires a positive-delta update before its simulator gate passes. 
 The native material sampler and interval/fallback logic now match 826 isolated
 original-function calls. XA material-key extraction covers 487 tracks and 2,902
 records in the recognized local entries. The checker connects self-authored XA
-keys to the sampler and Vulkan sprite alpha. Actual XX material binding,
-baseline capture and startup composition remain incomplete. See
+keys to the sampler and Vulkan sprite alpha. XX metadata reading, baseline
+capture and first encoded-name matching are now implemented; the iOS checker
+uses a self-authored XX embedded texture and an XA-bound material baseline.
+Startup composition and the model renderer remain incomplete. See
 [material-sampling.md](docs/material-sampling.md).
+
+The bounded XX reader admits 83/83 models in recognized local PP archives,
+with independent framing agreement. The original material loader matches 18
+self-authored table comparisons; three actual transition material bindings
+match 122 isolated sampler comparisons using their model baselines. Embedded
+pixels were compared only for the non-character transition's two images.
+Opaque model tails and the unknown archive remain unresolved. See
+[xx-reader.md](docs/xx-reader.md).
 
 Source `3186da4` passed 98 portable tests, device IPA packaging and the iPhone
 simulator checker in run `39980622644`. The checker reported native XA fixture
@@ -92,9 +102,12 @@ The host already has the resource import contract needed for a future port. A bu
 
 The `Build PortLab iOS IPA` workflow runs portable Python checks on Ubuntu, then prepares pinned MoltenVK, compiles the self-authored sprite shaders and builds the Swift/native Vulkan host on macOS. It uploads an unsigned simulator app and an unsigned device IPA. A developer must sign the device app with their own Apple identity before installation.
 
-The workflow does not download or embed the local game data. Publish the resource parts separately as GitHub Release assets after generating them locally.
+The workflow does not download or embed the local game data. Keep generated
+resource parts local and copy them into the installed app when needed.
 
-Pushing a tag such as `v0.1.0` runs `release-ios.yml`, creates or updates a GitHub Release, and uploads `PortLab-unsigned.ipa` plus the resource manifest. The three `.dczdata` files must be uploaded separately from a machine that has the local `Data/` directory.
+Pushing a tag such as `v0.1.0` runs `release-ios.yml`, creates or updates a GitHub
+Release, and uploads `PortLab-unsigned.ipa` plus the resource manifest. The three
+`.dczdata` files stay local under the current delivery arrangement.
 
 The repository intentionally ignores the local `Data/` directory, original Windows binaries, local `research/` outputs, generated IPA files and `.dczdata` parts. Only the small resource manifest is committed to the app bundle. Research commands regenerate their local reports from separately supplied inputs.
 

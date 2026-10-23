@@ -96,6 +96,7 @@ static dc_status parse(const void *data, size_t length, dc_image_format format,
     memset(layout, 0, sizeof(*layout));
     const uint8_t *bytes = data;
     if (format == DC_IMAGE_BMP) return parse_bmp(bytes, length, layout, 0);
+    if (format == DC_IMAGE_XX_BMP) return parse_bmp(bytes, length, layout, 1);
     if (format == DC_IMAGE_TGA) return parse_tga(bytes, length, layout);
     if (format != DC_IMAGE_EMA) return DC_ARGUMENT;
     if (length < 13) return DC_FORMAT;
