@@ -130,6 +130,13 @@ sprite alpha. The gate additionally requires a changed alpha followed by
 successful presentation (`PORTLAB_NATIVE_MATERIAL_ADVANCED`). This extends the
 diagnostic pipeline without supplying original models or material baselines.
 
+This material gate passed in run `39980622644` at source `3186da4`. The collected
+app log contains all four required markers, including changed material alpha
+and presentation, and its screenshot was inspected. The device IPA and native
+iPhoneOS archive were downloaded and checked against the pinned source. The
+checker remains a diagnostic scene; original startup/model composition and
+physical iPhone playability remain unverified.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.

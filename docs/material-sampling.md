@@ -60,6 +60,14 @@ This is a resource-reader result, not proof of original model linking, runtime
 baseline selection, GPU composition or playability. The unknown PP archive
 remains outside the audit.
 
+A further local comparison fed the decoded actual key records to both native
+sampling and the isolated original one-track functions. All 487 tracks passed
+12,582 exact output comparisons at key timestamps, adjacent midpoints, zero and
+outer endpoints, under both selected x87 profiles. There were no skipped tracks.
+Targets and baselines were synthetic; this result still does not recover the
+model's baseline values, target lookup, multiple-track order or GPU output. Only
+counts and output digests were retained in the local report.
+
 ```sh
 python tools/audit_native_xa.py --data Data \
   --reference research/native-core/xa-framing-audit.json \
@@ -72,8 +80,17 @@ selects the material value, which controls Vulkan sprite alpha. The host reports
 `PORTLAB_NATIVE_MATERIAL_ADVANCED` only after a positive-delta animation sample
 changes alpha and the resulting frame presents. The simulator gate requires
 this marker in addition to scene, XA and animation markers. The original game
-assets are not supplied to this cloud gate. Apple execution of this revision
-requires its own successful build/runtime evidence.
+assets are not supplied to this cloud gate.
+
+Source `3186da484ca00c8946f1486b95486dcf4078092d` passed 98 portable tests,
+device IPA packaging and the iPhone 16 Pro/iOS 18.5 simulator pipeline in run
+`39980622644`. The app log reports scene presentation, XA decoding, animation
+advancement and changed material alpha followed by presentation. The inspected
+screenshot shows the self-authored sprite and material status. Run `39980656755`
+passed 66 ARM64 macOS native tests and explicit iPhoneOS SDK compilation including
+`dc_material.o`. Downloaded artifacts matched the pinned source hashes; the IPA
+was inspected as unsigned ARM64/iPhoneOS with the matching resource manifest.
+This verifies the diagnostic material pipeline, not original game/device playability.
 
 Original material-name binding to the XX model, fullscreen transition geometry,
 pose sampling, full startup composition and later game states remain incomplete.

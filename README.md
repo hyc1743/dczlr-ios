@@ -63,10 +63,10 @@ keys to the sampler and Vulkan sprite alpha. Actual XX material binding,
 baseline capture and startup composition remain incomplete. See
 [material-sampling.md](docs/material-sampling.md).
 
-Source `f9d275a` passed 86 portable tests, device IPA packaging and the iPhone
-simulator checker in run `39976603576`. The checker reported native XA fixture
-decoding and a positive-delta animation update followed by successful
-presentation. Its native-core run `39976638796` also passed 55 ARM64 macOS tests
+Source `3186da4` passed 98 portable tests, device IPA packaging and the iPhone
+simulator checker in run `39980622644`. The checker reported native XA fixture
+decoding, animation advancement and changed material alpha followed by
+presentation. Its native-core run `39980656755` also passed 66 ARM64 macOS tests
 and iPhoneOS SDK compilation. This remains a stage
 build, with game flow and physical-device playability incomplete. The public
 build workflow uploads host artifacts and the manifest; original game resources
