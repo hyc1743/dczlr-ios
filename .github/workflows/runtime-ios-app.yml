@@ -9,12 +9,14 @@ permissions:
 jobs:
   compile-win32-probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Compile the self-authored compatibility check
+        timeout-minutes: 4
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 update -qq
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 install -y --no-install-recommends gcc-mingw-w64-i686
           mkdir -p out/win32-probe
           i686-w64-mingw32-gcc -std=c11 -Os -Wall -Wextra -Werror -static \
             probes/win32_smoke.c -o out/win32-probe/portlab-win32-smoke.exe -lgdi32 -luser32 -lwinmm

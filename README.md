@@ -8,6 +8,8 @@ Wine console execution has passed on the ARM64 macOS runner in run `39878555474`
 
 Those four self-authored PE32 checks passed on ARM64 macOS in run `39879664469`, with all subsystem markers and `PORTLAB_WIN32_OK` observed. The report records 27.16 seconds and a harness-controlled shutdown. The PCM log shows conversion from 22050 Hz to 44100 Hz. The iOS build now stages the same probe with a **Run Win32 compatibility check** button and a dedicated diagnostic prefix. It requires importing the Wine runtime ZIP through Settings first. The button is an entry point for future phone verification, not evidence of a device pass.
 
+The app with the bundled check and persistent-report viewer built successfully in run `39880869873` from revision `45f7976`. Its downloaded IPA was checked as ARM64/iPhoneOS, and its PE32 probe matches the compiler artifact from that same run. IPA SHA-256: `32d5bf3f971814c616c6900ac516421abb26a5f8d52e4a1e3d15843c3d1a5040`. The probe also passed a native Windows control run and wrote all six report lines. Follow [runtime-device-check.md](docs/runtime-device-check.md) for the remaining phone verification.
+
 The default `build-ios.yml` and `release-ios.yml` workflows still produce the earlier diagnostic `PortLab-unsigned.ipa`. Those are platform tests, not the interpreter runtime or a playable game release.
 
 The host already has the resource import contract needed for a future port. A bundled manifest describes 132 local `Data` files split into three release assets, each no larger than 1 GB. The assets are intentionally outside Git history and the IPA.
