@@ -1,0 +1,13 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 10584,
+  "output_sha256": "64cf4aa3741b39904a7a84d5e9fe109ece2062f98573d601563e9b6271d7bdd1",
+  "original_function_sha256": {
+    "0x5129c0": "eece451dc98a347c7b5803334b24ce0462e210e1fc928adc64a1bb1dddf3be97",
+    "0x52b830": "13f48030a75575421abbd92a1d96c2d204a91fbf0b9d9ef8d563e06f1f334cd7"
+  },
+  "original_game_resources_used": false,
+  "coverage": "title frame and dispatcher; synthetic menu/query/audio/cleanup/init; Alt-F4 up; host destinations not executed",
+  "execution": "isolated original x86; all external routines intercepted",
+  "game_playability": "not verified"
+}

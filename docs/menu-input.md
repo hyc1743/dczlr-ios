@@ -26,3 +26,20 @@ not yet dispatch all title actions, open the load screen or start gameplay.
 The original title driver and post-transition callbacks have been located;
 their host connections remain separate work. CPU oracle tests do not establish
 UIKit input or complete-game behavior.
+
+`dc_title_build_plan` now restores the ordered routing at `0x005129c0` and
+`0x0052b830`. It first resolves a pending transition, including the selection
+player's busy gate for actions 1–5. Action 6 enters options without that sound
+gate. It preserves the distinct load/options callback backups, hide flags,
+music-stop operations and action/hover reset rules. New Game orders cleanup,
+intro callback installation, then numeric game-state initialization/chapter 0.
+The host replaces the title update after a departure and must execute each
+operation in order before committing state. Initial action 0 clears waiting
+and can accept input in that same frame. Menu result 3 updates hover only.
+
+The isolated original frame and helper match 10,584 self-authored combinations
+of actions, waiting/query/busy flags, escape codes, hover and menu results.
+External menu/audio/transition/initialization calls are synthetic boundaries;
+callback writes and callback clearing execute in the original functions.
+The Windows Alt-F4 path is held inactive. This adds verified native routing;
+Apple callback destinations and intro rendering remain unfinished.

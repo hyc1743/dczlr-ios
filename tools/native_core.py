@@ -138,6 +138,26 @@ class SaveUnlocks(C.Structure):
     _fields_ = [("edit",C.c_uint32),("extra",C.c_uint32)]
 
 
+class TitleState(C.Structure):
+    _fields_ = [(n,C.c_uint32) for n in ('action','waiting','hover')]
+
+
+class TitleInput(C.Structure):
+    _fields_ = [(n,C.c_uint32) for n in ('transition_ready','selection_busy','escape_code')]+[(n,C.c_int32) for n in ('menu_result','menu_row')]
+
+
+class TitleCommand(C.Structure):
+    _fields_ = [('kind',C.c_uint32),('value',C.c_uint32)]
+
+
+class TitlePlan(C.Structure):
+    _fields_ = [('next',TitleState),('count',C.c_uint32),('departed',C.c_uint32),('commands',TitleCommand*6)]
+
+    def record(self):
+        return {'state':[self.next.action,self.next.waiting,self.next.hover],
+                'departed':self.departed,'commands':[[c.kind,c.value] for c in self.commands[:self.count]]}
+
+
 class ScriptSpan(C.Structure):
     _fields_ = [("offset",C.c_size_t),("length",C.c_size_t)]
 
@@ -348,6 +368,8 @@ def library():
     lib.dc_save_get_unlocks.restype = C.c_int
     lib.dc_menu_step.argtypes = [C.POINTER(MenuState),C.POINTER(MenuButton),C.c_size_t,C.c_int32,C.c_int32,C.c_float,C.c_uint8,C.POINTER(C.c_int32)]
     lib.dc_menu_step.restype = C.c_int
+    lib.dc_title_build_plan.argtypes = [C.POINTER(TitleState),C.POINTER(TitleInput),C.POINTER(TitlePlan)]
+    lib.dc_title_build_plan.restype = C.c_int
     lib.dc_scene_update.argtypes = [C.POINTER(SceneNode), C.c_size_t, C.POINTER(Matrix), C.POINTER(Matrix), C.c_size_t]
     lib.dc_scene_update.restype = C.c_int
     lib.dc_pose_select.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_float, C.POINTER(PoseSelection)]
