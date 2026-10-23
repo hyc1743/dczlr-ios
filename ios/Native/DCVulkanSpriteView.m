@@ -9,6 +9,8 @@
 #include "dc_diagnostic_xx.h"
 #import "DCArchive.h"
 #import "DCStartupScene.h"
+#import "DCGameAudio.h"
+#include "dc_menu.h"
 #include <math.h>
 #include <string.h>
 
@@ -28,6 +30,9 @@ static void dc_write_float_le(uint8_t *out, float value) {
     dc_vk_sprite *_renderer;
     uintptr_t _texture;
     DCStartupScene *_startupScene;
+    DCGameAudio *_gameAudio;
+    dc_menu_state _titleMenu;
+    BOOL _titleMenuInitialized,_previousTitleTouch;
     uintptr_t _titleTextures[9];
     uint32_t _width, _height;
     uint32_t _titleWidths[9], _titleHeights[9];
@@ -71,7 +76,11 @@ static void dc_write_float_le(uint8_t *out, float value) {
 - (uint64_t)presentedFrames { return _presentedFrames; }
 - (DCVulkanSpriteScene)presentedScene { return _presentedScene; }
 - (void)releaseRenderer {
-    dispatch_async(_renderQueue, ^{ [self destroyRenderer]; });
+    dispatch_async(_renderQueue, ^{
+        [self->_gameAudio pause];
+        self->_previousTitleTouch=NO;
+        [self destroyRenderer];
+    });
 }
 - (BOOL)tryLoadTitleSceneFromDirectory:(NSString *)directory {
     if (_titleSceneLoaded || directory.length == 0) return _titleSceneLoaded;
@@ -213,24 +222,36 @@ static void dc_write_float_le(uint8_t *out, float value) {
     BOOL materialMoved = NO;
     BOOL poseMoved = NO;
     if (showTitle) {
+        if (!_gameAudio) {
+            NSString *audioError=nil;
+            _gameAudio=[[DCGameAudio alloc] initWithDirectory:directory error:&audioError];
+            if(!_gameAudio)return audioError ?: @"Title audio resources are unavailable";
+        }
+        NSString *audioError=[_gameAudio startTitleMusic];
+        if(audioError)return audioError;
         /* The original title assets and hit regions use 1024x768 coordinates. */
         float scale = fminf((float)_width / 1024.0f, (float)_height / 768.0f);
         float offsetX = ((float)_width - 1024.0f * scale) * 0.5f;
         float offsetY = ((float)_height - 768.0f * scale) * 0.5f;
-        if (touching) {
+        if (touching || _previousTitleTouch) {
             float screenX = (x + 1.0f) * 0.5f * _width;
             float screenY = (1.0f - y) * 0.5f * _height;
             float gameX = (screenX - offsetX) / scale;
             float gameY = (screenY - offsetY) / scale;
-            _selectedTitleOption = -1;
-            for (NSInteger row = 0; row < 5; ++row) {
-                float buttonY = 400.0f + 72.0f * row;
-                if (gameX >= 702.0f && gameX < 958.0f && gameY >= buttonY && gameY < buttonY + 48.0f) {
-                    _selectedTitleOption = row + 2;
-                    break;
-                }
+            if (!_titleMenuInitialized) {
+                _titleMenu=(dc_menu_state){.hover=-1,.selected=-1};
+                _titleMenuInitialized=YES;
             }
+            dc_menu_button buttons[5]={0};
+            for(uint32_t i=0;i<5;++i)buttons[i]=(dc_menu_button){.x=702,.y=400+72*i,.width=256,.height=48,.disabled=i==2||i==3};
+            uint8_t input=touching ? (_previousTitleTouch?2:1) : 3;
+            int32_t result;
+            dc_status menuStatus=dc_menu_step(&_titleMenu,buttons,5,(int32_t)gameX,(int32_t)gameY,1,input,&result);
+            if(menuStatus!=DC_OK)return @"Title menu update failed";
+            _selectedTitleOption=_titleMenu.active ? _titleMenu.hover+2 : -1;
+            if(result==1 && ![_gameAudio playMenuSelection])return @"Menu selection audio failed";
         }
+        _previousTitleTouch=touching;
 #define ADD_TITLE_LAYER(index_, x_, y_) do { \
     dc_vk_sprite_item *item = &draws[drawCount++]; \
     item->texture = _titleTextures[(index_)]; item->blend_mode = 3; \
@@ -375,8 +396,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
     return nil;
 }
 - (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching
-            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL))completion {
-    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO); return; }
+            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL, BOOL))completion {
+    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO, NO); return; }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     CGSize drawableSize = layer.drawableSize;
     uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
@@ -389,7 +410,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
             BOOL advanced = self->_diagnosticAnimationAdvanced;
             BOOL materialAdvanced = self->_diagnosticMaterialAdvanced;
             BOOL poseAdvanced = self->_diagnosticPoseAdvanced;
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced, poseAdvanced); });
+            BOOL musicAdvanced = self->_gameAudio.musicAdvanced;
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced); });
         }
     });
 }

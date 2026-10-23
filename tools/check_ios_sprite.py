@@ -19,7 +19,7 @@ def presented_scenes(log):
     return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(checker|startup|warning|title)(?= |$)", log)
 
 
-def startup_evidence(log):
+def startup_evidence(log,require_audio=False):
     from datetime import datetime
     events=re.findall(r'(?m)^(\S+) PORTLAB_SCENE_PRESENTED=(startup|warning|title)(?= |$)',log)
     if [scene for _,scene in events]!=['startup','warning','title']:
@@ -28,12 +28,15 @@ def startup_evidence(log):
         raise ValueError('Startup action completion was not reported')
     if not re.search(r'(?m)^\S+ PORTLAB_STARTUP_TRANSITION_PRESENTED(?= |$)',log):
         raise ValueError('Transition geometry presentation was not reported')
+    if require_audio and not re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log):
+        raise ValueError('Title audio playback clock advancement was not reported')
     times=[datetime.fromisoformat(t.replace('Z','+00:00')) for t,_ in events]
     first=(times[1]-times[0]).total_seconds();second=(times[2]-times[1]).total_seconds()
     if first<2 or second<30:
         raise ValueError('Normal two-card hold times were not observed')
     return {'startup_flow':'both stable cards, transition geometry and title presented in order',
             'first_to_second_seconds':first,'second_to_title_seconds':second,
+            'title_audio':'playback clock advanced; audible output unverified' if require_audio else 'not required by this profile',
             'original_resources':'not exercised; generated fixtures only','game_playability':'not verified'}
 
 
@@ -167,7 +170,9 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
                     if scene not in captured:
                         run('xcrun','simctl','io',device,'screenshot',str(output/('startup-'+scene+'.png')),timeout=30)
                         captured.add(scene)
-            if scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose) or "Vulkan 初始化或绘制失败" in log:
+            scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
+            audio_ok=not startup_fixture or bool(re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log))
+            if (scene_ok and audio_ok) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
     (output / "app.log").write_text(log, encoding="utf-8")
@@ -214,7 +219,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
     report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
     if startup_fixture:
-        report['startup_fixture']=startup_evidence(log)
+        report['startup_fixture']=startup_evidence(log,require_audio=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))

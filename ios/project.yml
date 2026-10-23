@@ -59,6 +59,7 @@ targets:
       - sdk: QuartzCore.framework
       - sdk: IOSurface.framework
       - sdk: CoreGraphics.framework
+      - sdk: AVFoundation.framework
 schemes:
   PortLab:
     build:

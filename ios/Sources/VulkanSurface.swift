@@ -31,6 +31,7 @@ final class SpritePresenter: NSObject {
     private var reportedAnimationAdvance = false
     private var reportedMaterialAdvance = false
     private var reportedPoseAdvance = false
+    private var reportedMusicAdvance = false
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -60,7 +61,7 @@ final class SpritePresenter: NSObject {
         guard model.active, !failed, !renderPending, let view = view else { return }
         renderPending = true
         view.requestDraw(atX: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start,
-            touching: model.touchActive) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced in
+            touching: model.touchActive) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced in
                 guard let self = self else { return }
                 self.renderPending = false
                 if let error = error {
@@ -100,6 +101,10 @@ final class SpritePresenter: NSObject {
                 if scene == .diagnostic, poseAdvanced, !self.reportedPoseAdvance {
                     self.reportedPoseAdvance = true
                     self.model.record("原生 XA 节点姿态已改变精灵变换并完成呈现", event: "PORTLAB_NATIVE_POSE_ADVANCED")
+                }
+                if scene == .title, musicAdvanced, !self.reportedMusicAdvance {
+                    self.reportedMusicAdvance = true
+                    self.model.record("标题音乐播放时钟已推进；声音输出仍需设备确认", event: "PORTLAB_TITLE_AUDIO_ADVANCED")
                 }
             }
     }

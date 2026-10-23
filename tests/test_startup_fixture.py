@@ -3,6 +3,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+import io
+import wave
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
@@ -48,10 +50,14 @@ class StartupFixtureTests(unittest.TestCase):
     def test_fixture_install_is_explicit_and_never_overwrites_existing_data(self):
         with tempfile.TemporaryDirectory() as root:
             destination=Path(root)/'Data';report=install(destination)
-            self.assertEqual(set(report['files']),{'RPP_02.pp','RPP_17.pp'})
+            self.assertEqual(set(report['files']),{'RPP_01.pp','RPP_02.pp','RPP_14.pp','RPP_17.pp'})
             with self.assertRaises(ValueError):install(destination)
             with PPArchive(destination/'RPP_02.pp') as cards:
                 self.assertEqual(cards.count,11)
+            with PPArchive(destination/'RPP_01.pp') as audio:
+                with wave.open(io.BytesIO(audio.read(0)),'rb') as source:
+                    self.assertEqual((source.getnchannels(),source.getsampwidth(),source.getframerate()),(1,2,22050))
+                    self.assertEqual(source.getnframes(),44100)
 
     def test_startup_evidence_requires_order_waits_and_completion(self):
         lines=['2026-10-24T00:00:00Z PORTLAB_STARTUP_TRANSITION_PRESENTED submitted',
@@ -60,6 +66,10 @@ class StartupFixtureTests(unittest.TestCase):
                '2026-10-24T00:00:35Z PORTLAB_STARTUP_COMPLETED submitted',
                '2026-10-24T00:00:35Z PORTLAB_SCENE_PRESENTED=title submitted']
         self.assertEqual(startup_evidence('\n'.join(lines))['second_to_title_seconds'],31)
+        with self.assertRaises(ValueError):startup_evidence('\n'.join(lines),require_audio=True)
+        audio='2026-10-24T00:00:36Z PORTLAB_TITLE_AUDIO_ADVANCED submitted'
+        self.assertEqual(startup_evidence('\n'.join(lines+[audio]),require_audio=True)['title_audio'],
+                         'playback clock advanced; audible output unverified')
         for changed in (lines[:3]+lines[4:],lines[1:],lines[:2]+lines[3:],
                         lines[:4]+[lines[4].replace('00:00:35','00:00:05')]):
             with self.assertRaises(ValueError):startup_evidence('\n'.join(changed))

@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import math
 from xx_cases import diagnostic_fixture, name, u32
 from pose_cases import key
 
@@ -50,7 +51,14 @@ def resources():
     xa+=clips+u32(1)+pose
     cards=[(b'illusion.ema',ema((20,110,180))),(b'warning.ema',ema((180,80,20)))]
     cards += [(n,ema((20+i*12,60+i*7,30+i*6))) for i,n in enumerate(TITLE_NAMES)]
-    return {'RPP_02.pp':pp(cards),'RPP_17.pp':pp([(b'mm_B_W.xx',xx),(b'mm_B_W.xa',xa)])}
+    return {'RPP_02.pp':pp(cards),'RPP_17.pp':pp([(b'mm_B_W.xx',xx),(b'mm_B_W.xa',xa)]),
+            'RPP_01.pp':pp([(b'bgm000.wav',wave(220,2))]),'RPP_14.pp':pp([(b'se100.wav',wave(440,.08))])}
+
+
+def wave(frequency,seconds):
+    rate=22050;count=int(rate*seconds)
+    pcm=b''.join(struct.pack('<h',int(1000*math.sin(2*math.pi*frequency*i/rate))) for i in range(count))
+    return b'RIFF'+u32(36+len(pcm))+b'WAVEfmt '+u32(16)+struct.pack('<HHIIHH',1,1,rate,rate*2,2,16)+b'data'+u32(len(pcm))+pcm
 
 
 def install(directory):
