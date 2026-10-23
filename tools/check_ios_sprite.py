@@ -27,6 +27,8 @@ def check(app, output):
         raise ValueError("App bundle executable is missing")
     # The CI build intentionally disables developer signing. Simulator installs
     # use a local ad-hoc signature; no Apple identity or device provisioning.
+    for binary in sorted(app.rglob("*.dylib")):
+        run("codesign", "--force", "--sign", "-", "--timestamp=none", str(binary))
     run("codesign", "--force", "--sign", "-", "--timestamp=none", str(app))
     run("codesign", "--verify", "--strict", str(app))
     devices = json.loads(run("xcrun", "simctl", "list", "devices", "available", "--json"))["devices"]

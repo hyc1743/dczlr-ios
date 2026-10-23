@@ -50,6 +50,8 @@ python tools/oracle_startup.py --exe research/target.exe \
 python -m unittest discover -s tests -p test_native_startup.py -v
 ```
 
-The full local suite has 54 tests. Startup's resource operations, initial
+The full local suite has 54 tests. Run `39937228160` at revision `7a3597e`
+also passed the native tests on ARM64 macOS, compiled the new startup object for
+iPhoneOS and exercised the Apple file adapter. Startup's resource operations, initial
 configuration, original screen-transition implementation, next state's logic,
 models, audio, saves and playable-device validation remain separate work.
