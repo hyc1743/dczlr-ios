@@ -71,6 +71,11 @@ Paravirtual GPU without the Khronos layer. The same 54-frame sequence passes
 both offscreen and with a CAMetalLayer swapchain. This Apple cloud GPU is not a
 physical iPhone. A local Intel UHD 630 also passes the expanded pixel gate.
 
+Run `39946226699` at revision `cda1f88` passed an actual iPhone 16 Pro
+simulator frame on iOS 18.5. The screenshot and app log show the self-authored
+checker sprite on the Vulkan surface; the simulator app contained no original
+game assets. This confirms simulator rendering, not physical iPhone behavior.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.

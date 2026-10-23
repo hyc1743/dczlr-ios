@@ -31,7 +31,8 @@ routines. The native Vulkan sprite backend now passes numeric pixel gates on
 Mesa lavapipe (zero validation errors), a local Intel UHD 630 GPU, and MoltenVK
 on an Apple Paravirtual GPU. The Apple gate also exercises actual Metal surface
 acquire/blit/present. The iOS host uses this route for a self-authored sprite
-scene; physical iPhone execution remains unverified. Original effect integration and
+scene, and the iOS 18.5 iPhone 16 Pro simulator has presented its first Vulkan
+frame. Physical iPhone execution remains unverified. Original effect integration and
 game flow remain incomplete; this is not a playable release. See
 [vulkan-sprites.md](docs/vulkan-sprites.md).
 
