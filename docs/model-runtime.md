@@ -84,3 +84,13 @@ card 0. `DCStartupScene` now retains its model, controller, timers and decoded
 card data while detaching/recreating only GPU textures. Detachment also resets
 the last host tick, so background time is not charged as startup elapsed time.
 Renderer recreation therefore preserves the game-state progression.
+
+Delayed `simctl screenshot` commands can capture a later card than the marker
+that triggered them. The startup fixture gate therefore also enables an
+explicit test-only launch environment: on each stable card's successful draw,
+the native view reads the exact GPU frame and saves its PNG before advancing
+to later frames. The gate copies both frame images from the app container and
+checks nine central samples against the generated blue/orange card profiles.
+Swapped or repeated-card screenshots fail this check. Normal launches do not
+save these captures. UI screenshots remain useful for layout inspection but
+cannot alone certify the identity of the earlier card.

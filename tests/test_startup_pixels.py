@@ -1,0 +1,31 @@
+import struct
+import sys
+from pathlib import Path
+import unittest
+import zlib
+
+ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
+from startup_pixels import decode,verify
+
+
+def png(color):
+    def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
+    width=8;height=8;row=bytes((*color,255))*width
+    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress((b'\0'+row)*height))+chunk(b'IEND',b'')
+
+
+class StartupPixelTests(unittest.TestCase):
+    def test_correct_order_and_swapped_or_repeated_cards(self):
+        first,second=png((20,110,180)),png((180,80,20))
+        self.assertEqual(decode(first)[:3],(8,8,4))
+        self.assertEqual([r['matched_center_samples'] for r in verify(first,second)['cards']],[9,9])
+        for a,b in ((second,first),(second,second),(first,first),(png((0,0,0)),second)):
+            with self.assertRaises(ValueError):verify(a,b)
+
+    def test_corrupt_pixels_or_truncated_png_never_certify_a_stage(self):
+        source=png((20,110,180));bad=bytearray(source);bad[40]^=1
+        for data in (source[:7],source[:-12],bytes(bad)):
+            with self.assertRaises(ValueError):decode(data)
+
+
+if __name__=='__main__':unittest.main()

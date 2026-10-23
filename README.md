@@ -1,109 +1,65 @@
 # iOS PortLab
 
-The intended architecture is now native AArch64 game execution with a focused Apple-platform host and Vulkan → MoltenVK → Metal graphics. Original shader semantics still need offline recovery and conversion. See [native-runtime-design.md](docs/native-runtime-design.md) for the requirements and the current missing input: the supplied main executable is PE32 x86, and no usable AArch64 version or source build has been established. There is no verified playable game release yet.
+This project reconstructs the supplied Windows x86 game as native ARM64 modules
+for an iOS host using Vulkan ? MoltenVK ? Metal. There is **no complete playable
+game release yet**. Existing IPAs are development stages; producing a package,
+passing a synthetic scene or recovering resource bytes does not complete the port.
 
-The Windows-to-Switch reference source has now been located: `ruje0504-2/biko3-switch-runtime`, pinned at `63fddc3830b991e725657689934c3b6e3b5786bb`. Its published NRO hash and size match the local `weixing3` input. Its native reconstruction, isolated original-function comparisons and modular Vulkan approach are reviewed in [weixing3-porting-method.md](docs/weixing3-porting-method.md). This source match has not yet been reproduced by rebuilding the NRO, and no upstream implementation was imported into this product.
+The reference chain is Windows ? upstream native Switch reconstruction ?
+weixing3 iOS adaptation. This project uses the same kind of module reconstruction
+and isolated original-function comparisons, then compiles directly for iOS ARM64.
+It does not require a Switch intermediate, CPU interpreter or Wine in the chosen
+product. See [the reference comparison](docs/weixing3-porting-method.md) and
+[native architecture](docs/native-runtime-design.md).
 
-The existing interpreter IPA belongs to an earlier experiment and does not satisfy this native architecture. Its phone checks are optional historical diagnostics, not a prerequisite for the native route.
+The implemented resource/runtime chain includes bounded PP and BMP/TGA/EMA
+readers, XX nodes/materials/embedded images and unskinned meshes, XA clips and
+material/node keys, numeric animation/material/pose sampling, node hierarchy,
+triangle projection and Vulkan rendering. Original-function oracles and local
+resource audits document their admitted profiles; skinning, complete effects,
+billboards and the full scene/game engine remain unfinished.
 
-Native reconstruction has started with the indexed PP resource reader in `native/`. Its byte decoder matches the pinned original x86 leaf on 163 offline cases, while the native archive audit covers 71 recognized local archives and 5,011 entries. One archive remains unrecognized. These are resource-module results, not a complete game. [native-modules.md](docs/native-modules.md) records the exact coverage; `native-core.yml` tests the C module on ARM64 macOS and compiles it for iPhoneOS.
+The Apple host now loads both startup cards and their transition model from
+local archives, follows the original two-card action planner, and presents title
+layers after its normal waits. CPU scene state survives renderer resize and
+background GPU recreation. Title music and selection sound use archive-backed
+AVAudioPlayer; pointer hover and selection use the reconstructed menu helper.
+Existing save prefixes supply title unlock flags. **New-game/load/extra actions,
+full script execution, gameplay and actual game-save writing are not complete.**
 
-The native image layer now decodes standalone BMP, TGA (including RLE) and EMA
-entries into bounded, top-left RGBA8 buffers. All 1,409 such entries in recognized
-local archives match Pillow pixel-for-pixel. The Apple archive adapter uploads
-the first original startup EMA to the Vulkan sprite view when its user resource
-pack has been imported. Later game screens and logic remain incomplete. This comparison does not cover textures embedded in models
-or original D3DX sampling and resizing behavior.
+Public CI uses entirely generated fixtures. The latest inspected app stage,
+source `661eaca`, passed 140 portable tests, 103 ARM64 native tests, iPhoneOS
+compilation, device IPA packaging, a checker scene and the generated two-card /
+title / audio-clock gate. Runs: app `40025756624`, native `40025792555`. The
+fullscreen title layout was inspected. System screenshots can lag earlier
+markers, so subsequent work adds exact-frame GPU captures and generated-card
+pixel checks; the two older card screenshots alone are insufficient identity
+proof. Physical-device execution, audible output, original GPU equivalence and
+complete-game playability remain unverified.
 
-The offline effect reader now restores the seven original effect record graphs,
-including pass bindings and shader-array alternatives. Its 158 declared shader
-ranges (135 unique hashes) pass independent D3DX length/disassembly checks.
-The sprite effect explicitly disables both programmable shader stages. Its
-admitted fixed-function sprite profile now has a reconstructed native Vulkan backend. These are
-offline recovery results; no game shader has yet been validated on the iOS GPU.
-See [effect-conversion-tools.md](docs/effect-conversion-tools.md).
+The numbered intro script reader is a later native-only increment: 19 local
+scripts / 434 record spans match independent framing. Control codes, glyph
+layout, voice sequencing and state dispatch remain separate work. Its source
+`76350b6` passes the independent native workflow `40026854428`.
 
-All 135 unique original shaders now translate offline to SPIR-V and pass
-Vulkan 1.0 validation with a pinned vkd3d 2.1 tool plus scoped LGPL legacy
-instruction extensions. The native sprite entry state, draw submission and
-vertex generation are also reconstructed and checked against isolated original
-routines. The native Vulkan sprite backend now passes numeric pixel gates on
-Mesa lavapipe (zero validation errors), a local Intel UHD 630 GPU, and MoltenVK
-on an Apple Paravirtual GPU. The Apple gate also exercises actual Metal surface
-acquire/blit/present. The iOS host uses this route for a self-authored sprite
-scene, and the iOS 18.5 iPhone 16 Pro simulator has presented its first Vulkan
-frame. The clean run also removed the SwiftUI lifecycle warnings. Physical iPhone
-execution remains unverified. Original effect integration and
-game flow remain incomplete; this is not a playable release. See
-[vulkan-sprites.md](docs/vulkan-sprites.md).
+Implementation and verification details:
 
-The first two-card startup update is also reconstructed as a native state/action
-planner. Its 5,600 isolated original-function comparisons pass, including exact
-skip input, ordered transition actions and unsigned timer wrap. It is not yet
-connected to the view's game flow; the external transition controller and next
-states remain incomplete. See [startup-reconstruction.md](docs/startup-reconstruction.md).
+- [Model runtime, startup connection and triangle geometry](docs/model-runtime.md)
+- [Animation controller](docs/animation-reconstruction.md), [material sampling](docs/material-sampling.md), [node pose sampling](docs/pose-sampling.md)
+- [XX reader](docs/xx-reader.md), [XA reader](docs/xa-reader.md), [script framing](docs/script-framing.md)
+- [Menu input](docs/menu-input.md), [title audio](docs/title-audio.md), [save-prefix metadata](docs/save-metadata.md)
+- [Vulkan pixel gates](docs/vulkan-sprites.md), [offline effect/shader tools](docs/effect-conversion-tools.md)
 
-The external animation controller's request and current-record query now have
-native C implementations matching 2,916 isolated original-function cases. The
-query tests the current record's loop byte; it is not a timer-completion event.
-Numeric frame advancement and blend updates now also match isolated original
-functions; XA loading, pose/material sampling and transition rendering remain
-incomplete. The native XA metadata reader now accounts for all 81 recognized
-local XA entries and decodes 74 clip tables (37,888 records); seven entries
-have no table. A 512-record isolated original-loader comparison also matches.
-This validates framing/numeric fields, not key sampling or model linking. See
-[xa-reader.md](docs/xa-reader.md). The checker uses the native update to drive its self-authored
-rotation and requires a positive-delta update before its simulator gate passes. See
-[animation-reconstruction.md](docs/animation-reconstruction.md).
+## Local resource packages
 
-The native material sampler and interval/fallback logic now match 826 isolated
-original-function calls. XA material-key extraction covers 487 tracks and 2,902
-records in the recognized local entries. The checker connects self-authored XA
-keys to the sampler and Vulkan sprite alpha. XX metadata reading, baseline
-capture and first encoded-name matching are now implemented; the iOS checker
-uses a self-authored XX embedded texture and an XA-bound material baseline.
-Startup composition and the model renderer remain incomplete. See
-[material-sampling.md](docs/material-sampling.md).
-
-The bounded XX reader admits 83/83 models in recognized local PP archives,
-with independent framing agreement. The original material loader matches 18
-self-authored table comparisons; three actual transition material bindings
-match 122 isolated sampler comparisons using their model baselines. Embedded
-pixels were compared only for the non-character transition's two images.
-Opaque model tails and the unknown archive remain unresolved. See
-[xx-reader.md](docs/xx-reader.md).
-
-XA node-key reading and bounded mode-0 local pose sampling are implemented.
-The local audit covers 10,398 tracks/14,884,058 keys; isolated original
-selection/driver comparisons cover self-authored fixtures and the non-character
-startup transition. The checker projects a sampled self-authored node matrix
-into its sprite. Node hierarchy, original transition mesh rendering and later
-game flow remain incomplete. See [pose-sampling.md](docs/pose-sampling.md).
-
-Source `17e42d7` passed 111 portable tests, 78 ARM64 macOS native tests,
-iPhoneOS compilation and device IPA packaging. Run `40008100005` passed the
-iPhone 16 Pro/iOS 18.5 checker on attempt 2 after the first simulator launch
-timed out without an app log. The passing log reports XX texture decoding and
-XA material binding, animation advancement and changed alpha presentation;
-its screenshot was inspected. Native run `40008122611` passed separately.
-The unsigned stage IPA remains a diagnostic build; complete game flow and
-physical-device playability are unverified.
-
-Source `6a0423d` additionally passed 119 portable tests, 85 ARM64 native tests,
-iPhoneOS compilation and unsigned IPA packaging. App run `40016597965` passed
-the checker with the independent changed-node-transform presentation marker;
-its screenshot was inspected. Native run `40016609285` passed separately.
-This validates the self-authored local-pose resource chain. Original startup
-composition, complete game flow and physical-device playability remain open.
-
-Source `3186da4` passed 98 portable tests, device IPA packaging and the iPhone
-simulator checker in run `39980622644`. The checker reported native XA fixture
-decoding, animation advancement and changed material alpha followed by
-presentation. Its native-core run `39980656755` also passed 66 ARM64 macOS tests
-and iPhoneOS SDK compilation. This remains a stage
-build, with game flow and physical-device playability incomplete. The public
-build workflow uploads host artifacts and the manifest; original game resources
-remain local and are not uploaded by `build-ios.yml`.
+The 132 local Data files total 2,551,369,384 bytes. Three generated packages stay
+under ignored `out/resource-packs/`: 1,000,000,000 bytes, 1,000,000,000 bytes and
+551,369,384 bytes. Package hashes and original files were verified using the
+bundled app manifest; a complete restore also matched every file hash. Original
+resources are not uploaded by the app workflows and are not bundled into the IPA.
+The remaining unknown PP archive and runtime format coverage are separate
+compatibility work; a package roundtrip does not establish that every game
+resource is executable/renderable yet.
 
 ## Previous interpreter experiment
 
@@ -117,7 +73,7 @@ The app with the bundled check and persistent-report viewer built successfully i
 
 The persistent-report variant also passed the real no-JIT Wine gate in run `39881581198`: all four subsystem markers, the final guest-output marker and the guest-written report's six lines were verified. The Win32 run's elapsed time was 36.82 seconds including harness cleanup; this is not a phone performance result. Normal host shutdown, device execution, D3D9 and playability remain unverified.
 
-The default `build-ios.yml` and `release-ios.yml` workflows still produce the earlier diagnostic `PortLab-unsigned.ipa`. Those are platform tests, not the interpreter runtime or a playable game release.
+The default `build-ios.yml` and `release-ios.yml` workflows produce the native development-stage `PortLab-unsigned.ipa`. They do not produce the earlier interpreter experiment or certify a playable release.
 
 The host already has the resource import contract needed for a future port. A bundled manifest describes 132 local `Data` files split into three release assets, each no larger than 1 GB. The assets are intentionally outside Git history and the IPA.
 

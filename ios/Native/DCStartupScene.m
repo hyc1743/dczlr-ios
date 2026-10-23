@@ -4,6 +4,8 @@
 #include "dc_startup.h"
 #include <math.h>
 #include <string.h>
+#import <ImageIO/ImageIO.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 static dc_matrix dcStartupIdentity(void) { return (dc_matrix){{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1}}; }
 static uint32_t dcStartupColor(const dc_material_value *value) {
@@ -27,6 +29,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     dc_startup_state _startup;
     uint32_t _card,_lastTick;
     BOOL _finished,_tickInitialized,_wasTouching,_cardReady;
+    BOOL _captureEnabled,_capturedCards[2];
 }
 - (BOOL)finished { return _finished; }
 - (uint32_t)card { return _card; }
@@ -66,6 +69,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if (!(self=[super init])) return nil;
     _renderer=renderer;_card=UINT32_MAX;
+    _captureEnabled=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_STARTUP"] isEqualToString:@"1"];
     NSError *reason=nil;
     DCArchive *transition=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_17.pp"]] error:&reason];
     if (!transition) {if(error)*error=reason.localizedDescription;return nil;}
@@ -192,11 +196,31 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
         draws[count++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=mesh.index_count,.texture=_textures[image],.blend_mode=3};
     }
     const uint8_t clear[4]={0,0,0,255};
-    status=dc_vk_geometry_render(_renderer,draws,count,clear,NULL,0);
-    if (status!=DC_OK) return [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
     status=dc_model_query(_model,&clip,&ready);
-    if (status!=DC_OK) return @"Startup post-present animation query failed";
-    _cardReady=_card<2 && !_startup.waiting && clip==1 && ready;
+    if (status!=DC_OK) return @"Startup animation query failed";
+    BOOL stableCard=_card<2 && !_startup.waiting && clip==1 && ready;
+    BOOL capture=_captureEnabled && stableCard && !_capturedCards[_card];
+    NSMutableData *pixels=capture ? [NSMutableData dataWithLength:(size_t)width*height*4] : nil;
+    status=dc_vk_geometry_render(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length);
+    if (status!=DC_OK) return [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
+    _cardReady=stableCard;
+    if(capture) {
+        CGColorSpaceRef color=CGColorSpaceCreateDeviceRGB();
+        CGDataProviderRef provider=CGDataProviderCreateWithCFData((__bridge CFDataRef)pixels);
+        CGImageRef image=CGImageCreate(width,height,8,32,width*4,color,
+            kCGBitmapByteOrderDefault|kCGImageAlphaPremultipliedLast,provider,NULL,false,kCGRenderingIntentDefault);
+        CGDataProviderRelease(provider);CGColorSpaceRelease(color);
+        if(!image)return @"Startup frame capture failed";
+        NSURL *documents=[NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+        NSURL *url=[documents URLByAppendingPathComponent:[NSString stringWithFormat:@"startup-card-%u.png",_card]];
+        CGImageDestinationRef output=CGImageDestinationCreateWithURL((__bridge CFURLRef)url,CFSTR("public.png"),1,NULL);
+        if(!output) {CGImageRelease(image);return @"Startup frame capture destination failed";}
+        CGImageDestinationAddImage(output,image,NULL);
+        BOOL saved=CGImageDestinationFinalize(output);
+        CFRelease(output);CGImageRelease(image);
+        if(!saved)return @"Startup frame capture write failed";
+        _capturedCards[_card]=YES;
+    }
     return nil;
 }
 @end

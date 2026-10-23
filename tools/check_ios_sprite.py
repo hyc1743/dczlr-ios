@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 import subprocess
 import time
+import os
 
 
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
@@ -150,8 +151,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
         profile=install(container/'Documents/game/Data')
         (output/'fixture.json').write_text(json.dumps(profile,indent=2)+'\n',encoding='utf-8')
     try:
+        launch_environment=dict(os.environ)
+        if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
         launch_process = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
-            device, "org.example.portlab"], capture_output=True, text=True, timeout=60)
+            device, "org.example.portlab"], capture_output=True, text=True, timeout=60,env=launch_environment)
         launch = launch_process.stdout + launch_process.stderr
         launch_timed_out = launch_process.returncode != 0
     except subprocess.TimeoutExpired as error:
@@ -221,6 +224,12 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False)
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')
+        import shutil
+        from startup_pixels import verify
+        for index in range(2):
+            name=f'startup-card-{index}.png'
+            shutil.copyfile(container/'Documents'/name,output/name)
+        report['startup_pixels']=verify((output/'startup-card-0.png').read_bytes(),(output/'startup-card-1.png').read_bytes())
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")

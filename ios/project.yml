@@ -60,6 +60,7 @@ targets:
       - sdk: IOSurface.framework
       - sdk: CoreGraphics.framework
       - sdk: AVFoundation.framework
+      - sdk: ImageIO.framework
 schemes:
   PortLab:
     build:
