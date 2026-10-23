@@ -8,6 +8,17 @@
     fprintf(stderr, "Archive adapter check failed at line %d\n", __LINE__); return 1; \
 } } while (0)
 
+static BOOL write_archive(NSURL *file, const char *name, const uint8_t *bytes,
+                          uint32_t length, NSError **error) {
+    NSMutableData *data = [NSMutableData dataWithLength:44 + length];
+    uint8_t *out = data.mutableBytes;
+    out[0] = 1;
+    for (unsigned i = 0; i < 4; ++i) out[4 + i] = out[40 + i] = (uint8_t)(length >> (i * 8));
+    for (size_t i = 0; i < strlen(name); ++i) out[8 + i] = (uint8_t)(0u - (uint8_t)name[i]);
+    for (uint32_t i = 0; i < length; ++i) out[44 + i] = (uint8_t)(0u - bytes[i]);
+    return [data writeToURL:file options:0 error:error];
+}
+
 int main(void) {
     @autoreleasepool {
         NSURL *directory = [NSURL fileURLWithPath:[NSTemporaryDirectory()
@@ -50,8 +61,39 @@ int main(void) {
         REQUIRE([[DCArchive alloc] initWithURL:file error:&error] == nil && error.code == 3);
         error = nil;
         REQUIRE([[DCArchive alloc] initWithURL:directory error:&error] == nil && error.code == 2);
+        error = nil;
+        uint8_t tga[26] = {0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0, 32, 0x28,
+                           0, 0, 255, 127, 255, 0, 0, 0};
+        uint8_t rgba[8] = {255, 0, 0, 127, 0, 0, 255, 0};
+        REQUIRE(write_archive(file, "SAMPLE.TGA", tga, sizeof(tga), &error));
+        archive = [[DCArchive alloc] initWithURL:file error:&error];
+        REQUIRE(archive && !error);
+        DCDecodedImage *image = [archive decodeImageAtIndex:0 inputLimit:26 outputLimit:8 error:&error];
+        REQUIRE(image && !error && image.width == 2 && image.height == 1);
+        REQUIRE([image.rgba isEqualToData:[NSData dataWithBytes:rgba length:8]]);
+        REQUIRE([archive decodeImageAtIndex:0 inputLimit:25 outputLimit:8 error:&error] == nil && error.code == 4);
+        error = nil;
+        REQUIRE([archive decodeImageAtIndex:0 inputLimit:26 outputLimit:7 error:&error] == nil && error.code == 4);
+        error = nil;
+        REQUIRE([archive decodeImageAtIndex:1 inputLimit:26 outputLimit:8 error:&error] == nil && error.code == 4);
+        archive = nil;
+        error = nil;
+        REQUIRE(write_archive(file, "sample.bin", tga, sizeof(tga), &error));
+        archive = [[DCArchive alloc] initWithURL:file error:&error];
+        REQUIRE([archive decodeImageAtIndex:0 inputLimit:26 outputLimit:8 error:&error] == nil && error.code == 3);
+        archive = nil;
+        error = nil;
+        tga[2] = 3;
+        REQUIRE(write_archive(file, "sample.tga", tga, sizeof(tga), &error));
+        archive = [[DCArchive alloc] initWithURL:file error:&error];
+        REQUIRE([archive decodeImageAtIndex:0 inputLimit:26 outputLimit:8 error:&error] == nil && error.code == 3);
+        archive = nil;
+        error = nil;
+        // A decoded image retains its own pixels after archive and file changes.
+        REQUIRE([image.rgba isEqualToData:[NSData dataWithBytes:rgba length:8]]);
         REQUIRE([[NSFileManager defaultManager] removeItemAtURL:directory error:&error]);
         puts("PORTLAB_APPLE_ARCHIVE_ADAPTER_OK");
+        puts("PORTLAB_APPLE_IMAGE_ADAPTER_OK");
     }
     return 0;
 }

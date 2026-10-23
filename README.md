@@ -8,6 +8,13 @@ The existing interpreter IPA belongs to an earlier experiment and does not satis
 
 Native reconstruction has started with the indexed PP resource reader in `native/`. Its byte decoder matches the pinned original x86 leaf on 163 offline cases, while the native archive audit covers 71 recognized local archives and 5,011 entries. One archive remains unrecognized. These are resource-module results, not a complete game. [native-modules.md](docs/native-modules.md) records the exact coverage; `native-core.yml` tests the C module on ARM64 macOS and compiles it for iPhoneOS.
 
+The native image layer now decodes standalone BMP, TGA (including RLE) and EMA
+entries into bounded, top-left RGBA8 buffers. All 1,409 such entries in recognized
+local archives match Pillow pixel-for-pixel. The Apple archive adapter exposes
+these decoded buffers to future texture uploads; game rendering and game logic
+remain incomplete. This comparison does not cover textures embedded in models
+or original D3DX sampling and resizing behavior.
+
 ## Previous interpreter experiment
 
 The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.

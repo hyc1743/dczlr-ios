@@ -12,6 +12,9 @@ enum NativeResourceAudit {
         var recognized = 0
         var entries: UInt64 = 0
         var sampleBytes = 0
+        var decodedImages = 0
+        var imageBytes = 0
+        var imageFailures: [String] = []
         var unsupported: [String] = []
         for file in files {
             do {
@@ -21,6 +24,20 @@ enum NativeResourceAudit {
                     let first = try archive.readPrefix(at: 0, length: 64)
                     sampleBytes += first.count
                 }
+                // Decode one image per archive; inspect bytes without displaying assets.
+                for index in 0..<archive.entryCount {
+                    guard let name = archive.asciiName(at: index),
+                          ["bmp", "tga", "ema"].contains((name as NSString).pathExtension.lowercased()) else { continue }
+                    do {
+                        let image = try archive.decodeImage(at: index, inputLimit: 8 * 1024 * 1024,
+                                                            outputLimit: 16 * 1024 * 1024)
+                        decodedImages += 1
+                        imageBytes += image.rgba.count
+                    } catch {
+                        imageFailures.append(file.lastPathComponent + ":" + name)
+                    }
+                    break
+                }
                 recognized += 1
                 entries += UInt64(archive.entryCount)
             } catch {
@@ -28,6 +45,7 @@ enum NativeResourceAudit {
             }
         }
         let unknown = unsupported.isEmpty ? "无未识别文件" : "未通过：" + unsupported.joined(separator: ", ")
-        return "原生资源检查：\(recognized)/\(files.count) 包，\(entries) 条目，读取 \(sampleBytes) 字节。\(unknown)。此结果不代表游戏已启动。"
+        let images = imageFailures.isEmpty ? "" : "图像解码失败：" + imageFailures.joined(separator: ", ") + "。"
+        return "原生资源检查：\(recognized)/\(files.count) 包，\(entries) 条目，读取 \(sampleBytes) 字节；解码 \(decodedImages) 个图像，共 \(imageBytes) 字节 RGBA。\(unknown)。\(images)此结果不代表游戏已启动。"
     }
 }

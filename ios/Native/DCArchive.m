@@ -1,6 +1,8 @@
 #import "DCArchive.h"
 #include "dc_pp.h"
+#include "dc_image.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
@@ -24,6 +26,24 @@ static void report_error(NSError **error, NSInteger code) {
     if (error) *error = [NSError errorWithDomain:@"PortLab.NativeArchive" code:code
         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Archive operation failed (%ld)", (long)code]}];
 }
+
+@interface DCDecodedImage ()
+- (instancetype)initWithInfo:(dc_image_info)info pixels:(void *)pixels;
+@end
+
+@implementation DCDecodedImage
+- (instancetype)initWithInfo:(dc_image_info)info pixels:(void *)pixels {
+    self = [super init];
+    if (self) {
+        _width = info.width;
+        _height = info.height;
+        _rgba = [NSData dataWithBytesNoCopy:pixels length:info.rgba_bytes freeWhenDone:YES];
+    } else {
+        free(pixels);
+    }
+    return self;
+}
+@end
 
 @implementation DCArchive {
     FILE *_file;
@@ -72,5 +92,29 @@ static void report_error(NSError **error, NSInteger code) {
     status = dc_pp_read(_archive, index, 0, data.mutableBytes, count);
     if (status != DC_OK) { report_error(error, status); return nil; }
     return data;
+}
+- (DCDecodedImage *)decodeImageAtIndex:(uint32_t)index inputLimit:(NSUInteger)inputLimit
+                           outputLimit:(NSUInteger)outputLimit error:(NSError **)error {
+    dc_pp_entry entry;
+    dc_status status = dc_pp_entry_at(_archive, index, &entry);
+    if (status != DC_OK) { report_error(error, status); return nil; }
+    NSString *name = [self asciiNameAtIndex:index];
+    NSString *extension = name.pathExtension.lowercaseString;
+    dc_image_format format;
+    if ([extension isEqualToString:@"bmp"]) format = DC_IMAGE_BMP;
+    else if ([extension isEqualToString:@"tga"]) format = DC_IMAGE_TGA;
+    else if ([extension isEqualToString:@"ema"]) format = DC_IMAGE_EMA;
+    else { report_error(error, DC_FORMAT); return nil; }
+    NSData *source = [self readEntryAtIndex:index limit:inputLimit error:error];
+    if (!source) return nil;
+    dc_image_info info;
+    status = dc_image_probe(source.bytes, source.length, format, &info);
+    if (status != DC_OK) { report_error(error, status); return nil; }
+    if (info.rgba_bytes > outputLimit) { report_error(error, DC_RANGE); return nil; }
+    void *pixels = malloc(info.rgba_bytes);
+    if (!pixels) { report_error(error, DC_MEMORY); return nil; }
+    status = dc_image_decode(source.bytes, source.length, format, pixels, info.rgba_bytes, &info);
+    if (status != DC_OK) { free(pixels); report_error(error, status); return nil; }
+    return [[DCDecodedImage alloc] initWithInfo:info pixels:pixels];
 }
 @end

@@ -71,11 +71,46 @@ python -m unittest discover -s tests -p test_native_pp.py -v
 python tools/audit_native_pp.py --data Data --output research/native-core/native-pp-audit.json
 python tools/oracle_pp_codec.py --exe research/target.exe --data Data --output research/native-core/pp-codec-oracle.json
 python tools/oracle_pp_names.py --exe research/target.exe --data Data --output research/native-core/pp-names-oracle.json
+python -m unittest discover -s tests -p test_native_images.py -v
+python tools/audit_native_images.py --data Data --output research/native-core/native-image-audit.json
 ```
 
 源码仓库没有测试所需的原 EXE 或 Data。原版输入必须与已分析摘要一致；新版本需重新
 建立函数与调用约定证据。合成测试仅需要 C 编译器。
 
 `native-core.yml` 分开执行 ARM64 macOS 行为测试和 iPhoneOS SDK 编译，不能把后者
-写成 iPhone 上的执行结果。下一阶段是扩展资源服务、接入实际 iOS 宿主并恢复图形／
-逻辑模块；完整游戏、MoltenVK 游戏帧与可玩性尚未完成。
+写成 iPhone 上的执行结果。完整游戏、MoltenVK 游戏帧与可玩性尚未完成。
+
+## 图像：BMP、TGA 与 EMA
+
+`native/resource/dc_image.c` 提供无堆分配的探测与解码接口，调用方分别限制输入和输出
+大小。输出为左上角起始、紧密排列、非预乘 RGBA8。当前支持 40 字节 DIB、无压缩
+24 位 BMP，以及无调色板、无交织的 24／32 位真彩 TGA（原始或 RLE 数据）。
+未支持的位深、压缩与头部类型明确失败。解码前检查完整像素流、RLE 包长度及目标
+容量；失败不改写目标缓冲区。不在本模块中做缩放、mipmap、色键或 GPU 上传。
+
+EMA 外层为两个 little-endian 32 位尺寸与五字节 `.bmp\0`／`.tga\0` 扩展名标签，
+随后是图像。固定 EXE 的 Ghidra 伪代码 `0x0041f130` 静态显示相同的 4＋4＋5 字节
+读取顺序，并在交给 D3DX 前写回 BMP 的 `BM` 签名。99 个实际 EMA BMP 的原始签名
+为两个零字节，新模块接受这一已观察布局，不修改输入数据。EMA 内外尺寸不一致时
+明确拒绝；不模仿原版的越界长度行为。本轮未执行该原版纹理加载函数或 D3DX。
+
+本地完整像素核对见 `research/native-core/native-image-audit.json`：
+
+- 220 个独立 BMP、50 个独立 TGA、1,139 个 EMA，共 1,409 个图像全部与 Pillow 12.3.0
+  解码后的尺寸、RGBA 字节一致；包括 42 个使用 TGA RLE 的 EMA。
+- Pillow 对照仅对 99 个零签名 BMP 恢复 `BM`，与原版静态加载路径一致。报告保留
+  原始条目摘要和解码结果摘要，不导出图像。
+- 核对覆盖 71 个可识别 PP 包的独立图像条目，不包含 XX 模型内嵌纹理。此前未识别
+  的 `rpsp_02.pp` 仍未解析，不能宣称覆盖所有游戏图像。
+- 新增 7 项原生图像测试覆盖四种 TGA 存储方向、透明度、跨行 RLE 包、BMP 行填充、
+  EMA 签名恢复、逐字节截断、非法尺寸、输出限制和缓冲区哨兵；本地全套 26 项测试通过。
+
+`DCArchive.decodeImage` 已接入相同 C 模块，按条目后缀选择格式，分别限制编码数据和
+RGBA 分配，返回持有独立像素数据的 `DCDecodedImage`。iOS 资源检查每个包最多解码
+一个候选图像，并将图像失败与归档失败分开报告。Apple 适配器新增合成像素、大小
+限制和非法输入检查，`native-core.yml` 纳入 ARM64 测试及 iPhoneOS 图像模块编译。
+这些 Apple 改动本轮尚待云端实际编译／执行，不将本地 Windows 结果当作 Apple 通过。
+
+下一步仍需恢复原生渲染及游戏状态机：明确模型和内嵌纹理布局、着色器与渲染状态，
+将解码后的图像上传真实 Vulkan/MoltenVK，再验证游戏入口、输入、音频和存档流程。

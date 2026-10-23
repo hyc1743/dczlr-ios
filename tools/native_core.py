@@ -29,6 +29,10 @@ class Entry(C.Structure):
         return bytes(self.name[:self.name_length])
 
 
+class ImageInfo(C.Structure):
+    _fields_ = [("width", C.c_uint32), ("height", C.c_uint32), ("rgba_bytes", C.c_size_t)]
+
+
 def compiler_command():
     explicit = os.environ.get("DC_NATIVE_COMPILER")
     if explicit:
@@ -46,8 +50,8 @@ def compiler_command():
 @lru_cache(maxsize=1)
 def library():
     command = compiler_command()
-    sources = [ROOT / "native/resource/dc_pp.c"]
-    inputs = sources + [ROOT / "native/include/dc_pp.h"]
+    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c"]
+    inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -85,7 +89,28 @@ def library():
     lib.dc_pp_basename_offset.restype = C.c_int
     lib.dc_pp_find_ascii_path.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
     lib.dc_pp_find_ascii_path.restype = C.c_int
+    lib.dc_image_probe.argtypes = [C.c_void_p, C.c_size_t, C.c_int, C.POINTER(ImageInfo)]
+    lib.dc_image_probe.restype = C.c_int
+    lib.dc_image_decode.argtypes = [C.c_void_p, C.c_size_t, C.c_int, C.c_void_p,
+                                    C.c_size_t, C.POINTER(ImageInfo)]
+    lib.dc_image_decode.restype = C.c_int
     return lib
+
+
+def decode_image(data, format, max_bytes=64 * 1024 * 1024):
+    """Decode via native C, bounding the allocation using a validated probe."""
+    lib = library()
+    info = ImageInfo()
+    status = lib.dc_image_probe(data, len(data), format, C.byref(info))
+    if status:
+        raise ValueError("Native image probe failed with status " + str(status))
+    if info.rgba_bytes > max_bytes:
+        raise ValueError("Native image exceeds caller's output limit")
+    output = C.create_string_buffer(info.rgba_bytes)
+    status = lib.dc_image_decode(data, len(data), format, output, len(output), C.byref(info))
+    if status:
+        raise ValueError("Native image decode failed with status " + str(status))
+    return info, output.raw
 
 
 class PPArchive:
