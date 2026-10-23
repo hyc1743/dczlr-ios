@@ -48,3 +48,32 @@ atomic invalid-input rejection in addition to its earlier sprite regressions.
 These generic primitives do not by themselves prove the original transition's
 camera, draw sorting, lighting, texture stage state or final image. Original
 resource payloads remain local; public oracle fixtures use self-authored data.
+
+## Startup host connection
+
+`DCStartupScene` loads the two startup cards from `RPP_02.pp` and the transition
+XX/XA pair from `RPP_17.pp`. It applies `dc_startup` actions in order and queries
+the model's current loop byte before each state update. The original 2,000 ms
+and 30,000 ms card timers replace the old fixed two-second title preview. A
+new touch maps to the original skip code 3. The model's animation/material/pose
+and hierarchy update supplies projected triangles after the card draw.
+
+The camera is based on the static startup camera-5 setup: right-handed
+perspective, FOV .5, near .5, far 10000 and inverse camera translation Z=1.5.
+Embedded textures bind to the material's first encoded texture name. Current
+GPU composition uses the documented single-texture profile; original full
+lighting, stage selection, sorting and image equivalence are not established.
+Resource/read/profile failures stop the scene explicitly.
+
+Stable-card presentation markers require the waiting flag to clear and the
+controller to be on the looping hold clip. Transition presentation has its own
+marker. The title marker is emitted only after the startup planner enters its
+next state and the title layers successfully present. Later title actions and
+gameplay remain unfinished.
+
+The simulator gate also creates its own tiny PP/XX/XA/EMA resources from
+`tools/startup_fixture.py`, installs them into the app container, waits through
+the normal two-card sequence, requires the ordered presentation markers and
+hold times, and captures each stage. No original resources are used or uploaded
+for this CI gate. Local native checks separately execute actual transition
+model updates and RH projection; they do not establish original GPU output.

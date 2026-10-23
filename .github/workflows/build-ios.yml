@@ -68,12 +68,22 @@ jobs:
         timeout-minutes: 8
         run: |
           python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --output out/ios-sprite
+      - name: Exercise the two-card startup with generated resources
+        timeout-minutes: 8
+        run: |
+          python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene title --startup-fixture --output out/ios-startup
       - name: Upload simulator Vulkan execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: PortLab-simulator-vulkan-scene
           path: out/ios-sprite/
+      - name: Upload generated startup execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-simulator-startup
+          path: out/ios-startup/
 
   unsigned-ipa:
     needs: portable

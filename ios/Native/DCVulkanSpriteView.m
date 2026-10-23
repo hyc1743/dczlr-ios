@@ -8,6 +8,7 @@
 #include "dc_xx.h"
 #include "dc_diagnostic_xx.h"
 #import "DCArchive.h"
+#import "DCStartupScene.h"
 #include <math.h>
 #include <string.h>
 
@@ -26,10 +27,9 @@ static void dc_write_float_le(uint8_t *out, float value) {
 @implementation DCVulkanSpriteView {
     dc_vk_sprite *_renderer;
     uintptr_t _texture;
-    uintptr_t _startupTexture;
+    DCStartupScene *_startupScene;
     uintptr_t _titleTextures[9];
     uint32_t _width, _height;
-    uint32_t _startupWidth, _startupHeight;
     uint32_t _titleWidths[9], _titleHeights[9];
     BOOL _titleSceneLoaded;
     DCVulkanSpriteScene _presentedScene;
@@ -72,10 +72,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
 - (DCVulkanSpriteScene)presentedScene { return _presentedScene; }
 - (void)releaseRenderer {
     dispatch_async(_renderQueue, ^{
+        self->_startupScene = nil;
         dc_vk_sprite_destroy(self->_renderer);
         self->_renderer = NULL;
         self->_texture = 0;
-        self->_startupTexture = 0;
         memset(self->_titleTextures, 0, sizeof(self->_titleTextures));
         memset(self->_titleWidths, 0, sizeof(self->_titleWidths));
         memset(self->_titleHeights, 0, sizeof(self->_titleHeights));
@@ -87,35 +87,6 @@ static void dc_write_float_le(uint8_t *out, float value) {
         self->_diagnosticPoseAdvanced = NO;
         self->_width = self->_height = 0;
     });
-}
-- (BOOL)tryLoadStartupCardFromDirectory:(NSString *)directory {
-    if (_startupTexture || directory.length == 0 || CACurrentMediaTime() - _lastStartupScan < 1)
-        return _startupTexture != 0;
-    _lastStartupScan = CACurrentMediaTime();
-    NSString *archivePath = [directory stringByAppendingPathComponent:@"RPP_02.pp"];
-    NSURL *archiveURL = [NSURL fileURLWithPath:archivePath];
-    NSError *error = nil;
-    DCArchive *archive = [[DCArchive alloc] initWithURL:archiveURL error:&error];
-    if (!archive) return NO; /* The user may still be importing the resource pack. */
-    uint32_t index = UINT32_MAX;
-    for (uint32_t i = 0; i < archive.entryCount; ++i) {
-        if ([[archive asciiNameAtIndex:i] caseInsensitiveCompare:@"illusion.ema"] == NSOrderedSame) {
-            index = i;
-            break;
-        }
-    }
-    if (index == UINT32_MAX) return NO;
-    DCDecodedImage *image = [archive decodeImageAtIndex:index inputLimit:8 * 1024 * 1024
-        outputLimit:64 * 1024 * 1024 error:&error];
-    if (!image) return NO;
-    if (dc_vk_sprite_upload(_renderer, image.width, image.height, image.rgba.bytes,
-            image.rgba.length, &_startupTexture) != DC_OK) {
-        _startupTexture = 0;
-        return NO;
-    }
-    _startupWidth = image.width;
-    _startupHeight = image.height;
-    return YES;
 }
 - (BOOL)tryLoadTitleSceneFromDirectory:(NSString *)directory {
     if (_titleSceneLoaded || directory.length == 0) return _titleSceneLoaded;
@@ -161,10 +132,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
     return YES;
 }
 - (void)destroyRenderer {
+    _startupScene = nil;
     dc_vk_sprite_destroy(_renderer);
     _renderer = NULL;
     _texture = 0;
-    _startupTexture = 0;
     memset(_titleTextures, 0, sizeof(_titleTextures));
     memset(_titleWidths, 0, sizeof(_titleWidths));
     memset(_titleHeights, 0, sizeof(_titleHeights));
@@ -193,7 +164,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if (!width || !height) return @"CAMetalLayer has empty drawable size";
     if (_renderer && (_width != width || _height != height)) [self destroyRenderer];
     if (!_renderer) {
-        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 16, .initial_filter = 2,
+        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 32, .initial_filter = 2,
             .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
             .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv),
             .metal_layer = (__bridge void *)layer};
@@ -221,9 +192,31 @@ static void dc_write_float_le(uint8_t *out, float value) {
         _deviceName = [NSString stringWithUTF8String:info.device_name];
         _width = width; _height = height;
     }
-    [self tryLoadStartupCardFromDirectory:directory];
-    BOOL titleReady = [self tryLoadTitleSceneFromDirectory:directory];
-    BOOL showTitle = titleReady && time >= 2.0;
+    if (!_startupScene && directory.length && CACurrentMediaTime() - _lastStartupScan >= 1) {
+        _lastStartupScan = CACurrentMediaTime();
+        NSFileManager *files = NSFileManager.defaultManager;
+        if ([files fileExistsAtPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] &&
+            [files fileExistsAtPath:[directory stringByAppendingPathComponent:@"RPP_17.pp"]]) {
+            NSString *error = nil;
+            _startupScene = [[DCStartupScene alloc] initWithDirectory:directory renderer:_renderer error:&error];
+            if (!_startupScene) return error ?: @"Startup resources could not be loaded";
+        }
+    }
+    if (_startupScene && !_startupScene.finished) {
+        double milliseconds = time * 1000.0;
+        if (!isfinite(milliseconds) || milliseconds < 0) return @"Invalid startup animation time";
+        uint32_t tick = (uint32_t)fmod(milliseconds, 4294967296.0);
+        NSString *error = [_startupScene drawAtTick:tick touching:touching width:_width height:_height];
+        if (error) return error;
+        if (_startupScene.cardReady)
+            _presentedScene = _startupScene.card == 1 ? DCVulkanSpriteSceneStartupWarning : DCVulkanSpriteSceneStartupCard;
+        else _presentedScene = DCVulkanSpriteSceneStartupTransition;
+        ++_presentedFrames;
+        return nil;
+    }
+    BOOL titleReady = _startupScene.finished && [self tryLoadTitleSceneFromDirectory:directory];
+    BOOL showTitle = titleReady;
+    if (_startupScene.finished && !titleReady) return @"Startup completed but title resources are unavailable";
     dc_vk_sprite_item draws[5] = {0};
     size_t drawCount = 0;
     BOOL animationMoved = NO;
@@ -271,16 +264,6 @@ static void dc_write_float_le(uint8_t *out, float value) {
             ADD_TITLE_LAYER(0, gameX - 6.4f, gameY - 6.4f);
         }
 #undef ADD_TITLE_LAYER
-    } else if (_startupTexture) {
-        float scale = fminf((float)_width / _startupWidth, (float)_height / _startupHeight);
-        dc_vk_sprite_item *item = &draws[drawCount++];
-        item->texture = _startupTexture; item->blend_mode = 3;
-        item->pose.width = _startupWidth * scale; item->pose.height = _startupHeight * scale;
-        item->pose.x = (_width - item->pose.width) * 0.5f;
-        item->pose.y = (_height - item->pose.height) * 0.5f;
-        item->pose.z = 0.5f; item->pose.scale_x = item->pose.scale_y = item->pose.alpha = 1;
-        item->pose.red = item->pose.green = item->pose.blue = 1;
-        item->pose.u0 = 0; item->pose.u1 = 1; item->pose.v0 = 0; item->pose.v1 = 1;
     } else {
         double milliseconds = time * 1000.0;
         if (!isfinite(milliseconds) || milliseconds < 0) return @"Invalid diagnostic animation time";
@@ -394,8 +377,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     }
     /* Report only the scene whose draw was successfully presented. Loading a
      * texture or drawing the fallback must not certify a later game screen. */
-    _presentedScene = showTitle ? DCVulkanSpriteSceneTitle :
-        (_startupTexture ? DCVulkanSpriteSceneStartupCard : DCVulkanSpriteSceneDiagnostic);
+    _presentedScene = showTitle ? DCVulkanSpriteSceneTitle : DCVulkanSpriteSceneDiagnostic;
     if (animationMoved) _diagnosticAnimationAdvanced = YES;
     if (materialMoved) _diagnosticMaterialAdvanced = YES;
     if (poseMoved) _diagnosticPoseAdvanced = YES;

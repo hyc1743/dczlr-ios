@@ -8,7 +8,7 @@ import subprocess
 import time
 
 
-SCENES = {"checker": "self-authored checker sprite", "startup": "original startup-card sprite",
+SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
           "title": "original title-screen background and menu layers"}
 
 
@@ -16,7 +16,25 @@ def presented_scenes(log):
     # LabModel prefixes every app-authored record with its timestamp. Require
     # the exact marker at the start of that message, not an echoed command or
     # prose saying an asset was merely loaded.
-    return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(checker|startup|title)(?= |$)", log)
+    return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(checker|startup|warning|title)(?= |$)", log)
+
+
+def startup_evidence(log):
+    from datetime import datetime
+    events=re.findall(r'(?m)^(\S+) PORTLAB_SCENE_PRESENTED=(startup|warning|title)(?= |$)',log)
+    if [scene for _,scene in events]!=['startup','warning','title']:
+        raise ValueError('Both startup cards and title must be presented in order')
+    if not re.search(r'(?m)^\S+ PORTLAB_STARTUP_COMPLETED(?= |$)',log):
+        raise ValueError('Startup action completion was not reported')
+    if not re.search(r'(?m)^\S+ PORTLAB_STARTUP_TRANSITION_PRESENTED(?= |$)',log):
+        raise ValueError('Transition geometry presentation was not reported')
+    times=[datetime.fromisoformat(t.replace('Z','+00:00')) for t,_ in events]
+    first=(times[1]-times[0]).total_seconds();second=(times[2]-times[1]).total_seconds()
+    if first<2 or second<30:
+        raise ValueError('Normal two-card hold times were not observed')
+    return {'startup_flow':'both stable cards, transition geometry and title presented in order',
+            'first_to_second_seconds':first,'second_to_title_seconds':second,
+            'original_resources':'not exercised; generated fixtures only','game_playability':'not verified'}
 
 
 def animation_advanced(log):
@@ -85,7 +103,7 @@ def select_device(output, runtime):
     return phone
 
 
-def check(app, output, runtime, expected_scene="checker"):
+def check(app, output, runtime, expected_scene="checker", startup_fixture=False):
     require_animation = expected_scene == "checker"
     require_xa = expected_scene == "checker"
     require_material = expected_scene == "checker"
@@ -122,6 +140,12 @@ def check(app, output, runtime, expected_scene="checker"):
         (output / "container.txt").write_text(str(container) + "\n", encoding="utf-8")
     except (RuntimeError, subprocess.TimeoutExpired) as error:
         (output / "container-error.txt").write_text(str(error), encoding="utf-8")
+    if startup_fixture:
+        if expected_scene!='title' or container is None:
+            raise ValueError('Startup fixture requires title target and resolved app container')
+        from startup_fixture import install
+        profile=install(container/'Documents/game/Data')
+        (output/'fixture.json').write_text(json.dumps(profile,indent=2)+'\n',encoding='utf-8')
     try:
         launch_process = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
             device, "org.example.portlab"], capture_output=True, text=True, timeout=60)
@@ -131,12 +155,18 @@ def check(app, output, runtime, expected_scene="checker"):
         launch_timed_out = True
         launch = "launch timed out after 60s; stdout=" + str(error.stdout)[-1000:] + "; stderr=" + str(error.stderr)[-1000:]
     (output / "launch.txt").write_text(launch + "\n", encoding="utf-8")
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + (100 if startup_fixture else 60)
     log = ""
+    captured=set()
     while time.monotonic() < deadline:
         path = container / "Documents/log.txt" if container else None
         if path and path.exists():
             log = path.read_text(encoding="utf-8")
+            if startup_fixture:
+                for scene in presented_scenes(log):
+                    if scene not in captured:
+                        run('xcrun','simctl','io',device,'screenshot',str(output/('startup-'+scene+'.png')),timeout=30)
+                        captured.add(scene)
             if scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
@@ -183,6 +213,9 @@ def check(app, output, runtime, expected_scene="checker"):
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
     report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
+    if startup_fixture:
+        report['startup_fixture']=startup_evidence(log)
+        if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")
@@ -195,10 +228,11 @@ if __name__ == "__main__":
     parser.add_argument("--runtime")
     parser.add_argument("--expected-scene", choices=SCENES, default="checker")
     parser.add_argument("--boot-only", action="store_true")
+    parser.add_argument("--startup-fixture", action="store_true")
     args = parser.parse_args()
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture)
     else:
         parser.error("--app is required unless --boot-only is selected")

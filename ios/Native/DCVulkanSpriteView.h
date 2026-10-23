@@ -4,7 +4,9 @@ NS_ASSUME_NONNULL_BEGIN
 typedef NS_ENUM(NSInteger, DCVulkanSpriteScene) {
     DCVulkanSpriteSceneDiagnostic = 0,
     DCVulkanSpriteSceneStartupCard = 1,
-    DCVulkanSpriteSceneTitle = 2
+    DCVulkanSpriteSceneTitle = 2,
+    DCVulkanSpriteSceneStartupWarning = 3,
+    DCVulkanSpriteSceneStartupTransition = 4
 };
 /* Native sprite integration scene. This view does not run the game. */
 @interface DCVulkanSpriteView : UIView

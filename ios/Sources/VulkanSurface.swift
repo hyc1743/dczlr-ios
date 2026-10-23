@@ -75,8 +75,13 @@ final class SpritePresenter: NSObject {
                     case .diagnostic:
                         self.model.record("Vulkan / MoltenVK 已显示自制检查精灵（\(device)）", event: "PORTLAB_SCENE_PRESENTED=checker")
                     case .startupCard:
-                        self.model.record("Vulkan / MoltenVK 已显示原始 illusion.ema 启动卡（\(device)）", event: "PORTLAB_SCENE_PRESENTED=startup")
+                        self.model.record("Vulkan / MoltenVK 已呈现第一张启动卡与过场（\(device)）", event: "PORTLAB_SCENE_PRESENTED=startup")
+                    case .startupWarning:
+                        self.model.record("Vulkan / MoltenVK 已呈现第二张启动卡与过场（\(device)）", event: "PORTLAB_SCENE_PRESENTED=warning")
+                    case .startupTransition:
+                        self.model.record("启动过场模型已完成呈现", event: "PORTLAB_STARTUP_TRANSITION_PRESENTED")
                     case .title:
+                        self.model.record("双卡启动状态已完成并进入标题呈现", event: "PORTLAB_STARTUP_COMPLETED")
                         self.model.record("Vulkan / MoltenVK 已显示标题画面（\(device)）；后续游戏逻辑尚未接入", event: "PORTLAB_SCENE_PRESENTED=title")
                     @unknown default:
                         self.model.record("Vulkan 返回未知场景编号：\(scene.rawValue)")
