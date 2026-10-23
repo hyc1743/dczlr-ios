@@ -136,7 +136,10 @@ extension AppModel {
                 }
                 .disabled(model.runtimeState == .starting || model.runtimeState == .running
                           || model.runtimeState == .stopping)
-                Text("Tests files, threads, offscreen GDI and a silent audio buffer. Import the Wine runtime in Settings first. Results appear in guest output; D3D9 and audible playback are not tested.")
+                Button("View compatibility report") {
+                    model.showPortLabRuntimeCheckReport()
+                }
+                Text("Tests files, threads, offscreen GDI and a silent audio buffer. Import the Wine runtime in Settings first. D3D9 and audible playback are not tested.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Runtime") {

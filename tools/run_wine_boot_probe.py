@@ -43,6 +43,7 @@ def run(host, rootfs, output, seconds, guest_exe=None):
     if guest_exe:
         guest_exe = guest_exe.resolve(strict=True)
         args += ["-mount", str(guest_exe.parent), "/mnt/portlab-probe",
+                 "-w", "/mnt/portlab-probe",
                  "/bin/wine", "/mnt/portlab-probe/" + guest_exe.name]
     else:
         args += ["-nosound", "/bin/wine", "cmd.exe", "/d", "/c", "echo", MARKER]

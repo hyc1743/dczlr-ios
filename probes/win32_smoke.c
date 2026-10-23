@@ -4,10 +4,25 @@
 #include <mmsystem.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
+
+static FILE *report;
+
+static void emit(const char *line) {
+    puts(line);
+    if (report) {
+        fprintf(report, "%s\n", line);
+        fflush(report);
+    }
+}
 
 static int fail(const char *operation, unsigned long code) {
     printf("PORTLAB_FAIL %s code=%lu\n", operation, code);
     fflush(stdout);
+    if (report) {
+        fprintf(report, "PORTLAB_FAIL %s code=%lu\n", operation, code);
+        fflush(report);
+    }
     return 0;
 }
 
@@ -32,7 +47,7 @@ static int file_probe(void) {
     }
     if (!DeleteFileA(path)) ok = 0;
     if (!ok) return fail("file-roundtrip", GetLastError());
-    puts("PORTLAB_FILE_OK");
+    emit("PORTLAB_FILE_OK");
     return 1;
 }
 
@@ -51,7 +66,7 @@ static int thread_probe(void) {
     if (thread) CloseHandle(thread);
     CloseHandle(event);
     if (!ok) return fail("thread-event-join", GetLastError());
-    puts("PORTLAB_THREAD_OK");
+    emit("PORTLAB_THREAD_OK");
     return 1;
 }
 
@@ -82,7 +97,7 @@ static int gdi_probe(void) {
     if (bitmap) DeleteObject(bitmap);
     DeleteDC(dc);
     if (!ok) return fail("gdi-pixel-readback", GetLastError());
-    puts("PORTLAB_GDI_PIXELS_OK");
+    emit("PORTLAB_GDI_PIXELS_OK");
     return 1;
 }
 
@@ -114,18 +129,23 @@ static int audio_probe(void) {
         ok = 0;
     if (waveOutClose(device) != MMSYSERR_NOERROR) ok = 0;
     if (!ok) return fail("wave-output-completion", result);
-    puts("PORTLAB_WAVE_BUFFER_OK");
+    emit("PORTLAB_WAVE_BUFFER_OK");
     return 1;
 }
 
 int main(void) {
     setvbuf(stdout, NULL, _IONBF, 0);
-    puts("PORTLAB_WIN32_BEGIN");
+    report = fopen("portlab-win32-result.txt", "w");
+    if (!report) {
+        fail("open-diagnostic-report", (unsigned long)errno);
+        return 1;
+    }
+    emit("PORTLAB_WIN32_BEGIN");
     int ok = file_probe();
     ok = thread_probe() && ok;
     ok = gdi_probe() && ok;
     ok = audio_probe() && ok;
-    if (!ok) return 1;
-    puts("PORTLAB_WIN32_OK");
-    return 0;
+    if (ok) emit("PORTLAB_WIN32_OK");
+    fclose(report);
+    return ok ? 0 : 1;
 }

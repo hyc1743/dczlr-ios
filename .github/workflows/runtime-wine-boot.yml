@@ -96,5 +96,6 @@ jobs:
             out/wine-boot/wine-boot-report.json
             out/win32-smoke/wine-console.log
             out/win32-smoke/wine-boot-report.json
+            out/win32-probe/portlab-win32-result.txt
             ${{ runner.temp }}/wine-boot-build/compile_commands.json
           if-no-files-found: ignore
