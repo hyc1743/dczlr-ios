@@ -1,0 +1,61 @@
+name: Verify real Wine console boot without JIT
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wine-boot:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage pinned actual interpreter host
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="$RUNNER_TEMP/boxedvn-wine-boot"
+          git init "$upstream"
+          git -C "$upstream" fetch --depth=1 https://github.com/125hz/BoxedVN.git 7b6e03575922967ca161f2b55c39846e242916f6
+          git -C "$upstream" checkout --detach FETCH_HEAD
+          python3 tools/prepare_wine_boot_probe.py "$upstream"
+      - name: Compile the genuine host without test-only flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install cmake ninja sdl2
+          cmake -S "$RUNNER_TEMP/boxedvn-wine-boot" -B "$RUNNER_TEMP/wine-boot-build" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DBOXEDVN_BUILD_TESTS=OFF -DBOXEDVN_BUILD_RUNTIME=OFF \
+            -DBOXEDVN_BUILD_MACOS_HOST=OFF -DBOXEDVN_ENABLE_UI=OFF \
+            -DBOXEDVN_ENABLE_MIDI=ON -DBOXEDVN_ENABLE_GUEST_X64=OFF \
+            -DBOXEDVN_ENABLE_FEX64=OFF -DBOXEDVN_SDL2_ROOT="$(brew --prefix sdl2)"
+          cmake --build "$RUNNER_TEMP/wine-boot-build" --target portlab_wine_host --parallel 3 -- -k 0
+      - name: Fetch and authenticate the upstream Wine runtime
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/TinyCore15Wine11.0.zip"
+          curl --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 300 \
+            https://boxedwine.org/v2/7/TinyCore15Wine11.0.zip -o "$target"
+          echo "41835c49ce0e582a1d7a610243a8e4a95bc59996fb780c09705dc476bb9b6493  $target" | shasum -a 256 -c -
+      - name: Execute real Wine and require cmd.exe output
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/run_wine_boot_probe.py "$RUNNER_TEMP/wine-boot-build/portlab_wine_host" \
+            "$RUNNER_TEMP/TinyCore15Wine11.0.zip" --output out/wine-boot --seconds 240
+      - name: Retain only bounded execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-boot-evidence
+          path: |
+            out/wine-boot/wine-console.log
+            out/wine-boot/wine-boot-report.json
+            ${{ runner.temp }}/wine-boot-build/compile_commands.json
+          if-no-files-found: ignore

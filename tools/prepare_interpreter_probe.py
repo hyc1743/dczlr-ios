@@ -166,7 +166,7 @@ target_sources(boxedwine_core PRIVATE
     process.write_text(fixed_process, encoding="utf-8")
     thread.write_text(fixed_thread, encoding="utf-8")
     vulkan.write_text(fixed_vulkan, encoding="utf-8")
-    if mode == "ios-core":
+    if mode != "cpu-probe":
         (root / "portlab_interpreter_backend.cpp").write_text('''
 #include "boxedwine.h"
 #ifdef BOXEDWINE_JIT
@@ -174,7 +174,7 @@ target_sources(boxedwine_core PRIVATE
 #endif
 extern "C" const char *PortLabInterpreterBackendName() { return "interpreter"; }
 ''', encoding="utf-8")
-        print("Prepared iOS interpreter core at pinned revision " + PIN)
+        print("Prepared " + mode + " interpreter core at pinned revision " + PIN)
         return
     (root / "portlab_cpu_probe.cpp").write_text('''
 #include "boxedwine.h"
@@ -194,6 +194,6 @@ int main(int argc, char **argv) {
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("checkout", type=Path)
-    parser.add_argument("--mode", choices=["cpu-probe", "ios-core"], default="cpu-probe")
+    parser.add_argument("--mode", choices=["cpu-probe", "ios-core", "macos-core"], default="cpu-probe")
     arguments = parser.parse_args()
     prepare(arguments.checkout, arguments.mode)

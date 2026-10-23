@@ -44,6 +44,19 @@ against the iPhoneOS SDK, without test-only flags and without a JIT backend.
 It does not yet launch Wine or a game, and it does not replace the app's
 runtime with a pretend implementation.
 
+The iOS core gate has passed in run `39873046529`: the downloaded archive
+contains 177 ARM64 Mach-O objects and the no-JIT backend assertion compiled.
+`runtime-ios-app.yml` now builds the genuine launch bridge and upstream
+frontend, with interpreter startup separated from JIT preflight checks.
+That app build is not yet evidence of guest execution.
+
+The independent `runtime-wine-boot.yml` gate runs the real macOS interpreter
+host without test-only flags. It downloads the hash-pinned upstream Wine 11
+runtime and asks `cmd.exe` to emit an exact output line. Only guest output
+counts; printing the command line cannot pass. The harness stops after a hard
+deadline and records shutdown separately from whether Wine executed the command.
+Graphics, audio, iOS execution and game playability remain separate gates.
+
 ## Correction to the earlier shader investigation
 
 The previous token scanner undercounted both comments and instructions by one
