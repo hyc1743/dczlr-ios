@@ -23,6 +23,13 @@ needs a native reconstruction of its fixed-function draw behavior. These are
 offline recovery results; no game shader has yet been validated on the iOS GPU.
 See [effect-conversion-tools.md](docs/effect-conversion-tools.md).
 
+All 135 unique original shaders now translate offline to SPIR-V and pass
+Vulkan 1.0 validation with a pinned vkd3d 2.1 tool plus scoped LGPL legacy
+instruction extensions. The native sprite entry state, draw submission and
+vertex generation are also reconstructed and checked against isolated original
+routines. Actual Vulkan/MoltenVK rendering, effect integration and game flow
+are still incomplete; this is not a playable release.
+
 ## Previous interpreter experiment
 
 The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.

@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from convert_effect_shaders import convert, spirv_metadata
+from convert_effect_shaders import convert, spirv_metadata, partition_descriptor_sets
 
 
 def instruction(opcode, *operands):
@@ -63,6 +63,25 @@ class ShaderConversionTests(unittest.TestCase):
         for payload in bad:
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 spirv_metadata(payload)
+
+    def test_stage_resource_partition_changes_only_descriptor_set_word(self):
+        header = [0x07230203, 0x10000, 0, 20, 0]
+        instructions = instruction(71, 4, 34, 0) + instruction(71, 4, 33, 0) + instruction(59, 3, 4, 2)
+        data = words(header + instructions)
+        output, mapping = partition_descriptor_sets(data, "pixel")
+        expected = header + instructions
+        expected[8] = 1
+        self.assertEqual(output, words(expected))
+        self.assertEqual(mapping["descriptor_set"], 1)
+        self.assertEqual(mapping["descriptor_count"], 1)
+        self.assertEqual(partition_descriptor_sets(data, "vertex")[0], data)
+        with self.assertRaises(ValueError):
+            partition_descriptor_sets(output, "pixel")
+        with self.assertRaises(ValueError):
+            partition_descriptor_sets(data, "unknown")
+        missing = words(header + instruction(71, 4, 33, 0) + instruction(59, 3, 4, 2))
+        with self.assertRaises(ValueError):
+            partition_descriptor_sets(missing, "pixel")
 
     def test_input_rejected_before_tools_or_output_are_touched(self):
         root = Path(__file__).resolve().parents[1]

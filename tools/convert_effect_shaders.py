@@ -73,7 +73,43 @@ def run(command):
     return (result.stdout + result.stderr).strip()
 
 
-def convert(audit, shaders, compiler, validator, output):
+def partition_descriptor_sets(data, stage):
+    """Move default set-zero descriptors into vertex set 0 / fragment set 1.
+
+    This is an offline decoration-only change, avoiding incompatible uniform
+    and image declarations colliding at (set=0,binding=0) between stages.
+    Existing nonzero sets or grouped/nonliteral layouts fail explicitly.
+    """
+    if stage not in ("vertex", "pixel"):
+        raise ValueError("Unknown shader stage")
+    metadata = spirv_metadata(data)
+    descriptors = [v for v in metadata["variables"] if v["storage_class"] in (0, 2, 12)]
+    for variable in descriptors:
+        sets = [d for d in variable["decorations"] if d[0] == 34]
+        bindings = [d for d in variable["decorations"] if d[0] == 33]
+        if sets != [[34, 0]] or len(bindings) != 1 or len(bindings[0]) != 2:
+            raise ValueError("Descriptor layout is not a direct set-zero binding")
+    words = list(struct.unpack("<" + "I" * (len(data) // 4), data))
+    target = 0 if stage == "vertex" else 1
+    descriptor_ids = {v["id"] for v in descriptors}
+    changed = set()
+    pos = 5
+    while pos < len(words):
+        size, opcode = words[pos] >> 16, words[pos] & 0xffff
+        if opcode == 71 and size >= 3 and words[pos + 2] == 34:
+            if size != 4 or words[pos + 1] not in descriptor_ids or words[pos + 3] != 0:
+                raise ValueError("Unsupported descriptor set decoration")
+            words[pos + 3] = target
+            changed.add(words[pos + 1])
+        pos += size
+    if changed != descriptor_ids:
+        raise ValueError("Descriptor remapping did not cover every resource")
+    return struct.pack("<" + "I" * len(words), *words), {
+        "policy": "vertex_set_0_fragment_set_1", "descriptor_set": target,
+        "descriptor_count": len(descriptors)}
+
+
+def convert(audit, shaders, compiler, validator, output, stage_descriptor_sets=False):
     if audit.get("failed") or not audit.get("shaders"):
         raise ValueError("A nonempty passing shader audit is required")
     records = {}
@@ -107,6 +143,11 @@ def convert(audit, shaders, compiler, validator, output):
             row["compiler_diagnostic"] = run([compiler, "--strip-debug", "-x", "d3dbc", "-b", "spirv-binary",
                                                "-o", temporary, shaders / (digest + ".dx9")])
             data = temporary.read_bytes()
+            row["compiler_output_sha256"] = hashlib.sha256(data).hexdigest()
+            if stage_descriptor_sets:
+                data, mapping = partition_descriptor_sets(data, record["stage"])
+                temporary.write_bytes(data)
+                row["descriptor_mapping"] = mapping
             metadata = spirv_metadata(data)
             model = 0 if record["stage"] == "vertex" else 4
             if len(metadata["entry_points"]) != 1 or metadata["entry_points"][0]["execution_model"] != model:
@@ -127,6 +168,7 @@ def convert(audit, shaders, compiler, validator, output):
               "compiler_version": version, "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
               "validator_version": validator_version, "validator_sha256": hashlib.sha256(validator.read_bytes()).hexdigest(),
               "target_environment": "vulkan1.0", "strip_debug": True, "shader_records": len(audit["shaders"]),
+              "stage_descriptor_sets": stage_descriptor_sets,
               "input_verification": sorted({r["status"] for r in audit["shaders"]}),
               "unique_inputs": len(rows), "passed": sum(r["status"] == "converted_and_validated" for r in rows),
               "failed": sum(r["status"] == "failed" for r in rows), "shaders": rows,
@@ -143,8 +185,11 @@ if __name__ == "__main__":
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--validator", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--partition-descriptor-sets", action="store_true",
+                        help="Use set 0 for vertex resources and set 1 for fragment resources")
     args = parser.parse_args()
     report = convert(json.loads(args.audit.read_text(encoding="utf-8")), args.shaders,
-                     args.compiler.resolve(strict=True), args.validator.resolve(strict=True), args.output)
+                     args.compiler.resolve(strict=True), args.validator.resolve(strict=True), args.output,
+                     args.partition_descriptor_sets)
     print(json.dumps({k: report[k] for k in ["unique_inputs", "passed", "failed", "target_environment", "gpu_equivalence"]}))
     raise SystemExit(1 if report["failed"] else 0)

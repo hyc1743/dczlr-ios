@@ -144,8 +144,34 @@ ps_1_1 因 `cnd` 未实现而失败。结果位于
 `research/effect-parser/spirv-vkd3d-2.1-texmatrix/conversion-report.json`。
 新增 CND 扩展按微软指令定义生成严格 `>0.5` 比较与条件选择，ps_1_1..1_3 复制 alpha
 条件，ps_1_4 按分量选择。新增两个自制 CND 夹具，使完整工具回归增至十项；CND 扩展
-仍待云端实际构建和原版全量重跑。GPU 数值一致性仍待验证。这些汇编源码和生成字节码
-均为自制，不含原游戏 shader。
+已在提交 `365f488` 的 run `39928500917` 通过 Linux 和 Windows 的十项转换／校验，
+两端输出摘要一致。本地下载后核对三份工具和扩展源码摘要，再复验十项通过。
+这些汇编源码和生成字节码均为自制，不含原游戏 shader。
+
+最终工具对原版 158 个声明范围的 135 份不同输入已全部转换并通过 Vulkan 1.0
+`spirv-val`：135 份通过，0 份失败；每个文件的最终长度、SHA-256、入口 stage 和资源
+集合也已从当前落盘输出核对。报告位于
+`research/effect-parser/spirv-vkd3d-2.1-legacy/conversion-report.json`。
+其中 117 份为顶点 shader，18 份为像素 shader。原始字节码、转换结果和报告均留在
+本地忽略目录，未上传源码仓库或云端任务。工具身份为：
+
+- `vkd3d-compiler.exe`：`50f3dcf58a031ab253ad27a2de7363ad1f68bfa247d43113899477061041d5b2`
+- `libvkd3d-shader-1.dll`：`70bc83161c21670b5a7be7ded40e05570447939fca948f1e4b603e282b540a41`
+- `spirv-val.exe`：`847447a5c7058f39006b69f44f41f5cfc4f6f074beddf2dafbc0fc40477729a2`
+
+本次全量使用 `--partition-descriptor-sets`，将顶点阶段默认集合划到 set 0，像素阶段
+划到 set 1。初始默认布局会使不同阶段的 uniform 和 image 同占 `(set=0,binding=0)`；
+离线划分只改 DescriptorSet decoration，之后再次运行真实校验器。已有非零集合或不明
+布局会明确拒绝。报告保留编译器原输出和最终输出的分别摘要，运行时无需改 shader。
+
+**这些结果只证明转换和 SPIR-V 结构／环境校验。** 真实 Vulkan descriptor 类型／布局、
+shader 间输入输出链接、动态状态参数、GPU 输出与原版像素对照仍未完成，也不构成
+完整 effect 或原生游戏可玩性通过。特别是编译期默认值、投影与 bump 环境参数必须在
+后续图形接口整合中核对，不能仅凭校验器通过假定与游戏运行时一致。
+
+```powershell
+python tools/convert_effect_shaders.py --audit research/effect-parser/shaders/shader-audit.json --shaders research/effect-parser/shaders --compiler .tools/offline-shader-tools/365f488/vkd3d-compiler.exe --validator .tools/offline-shader-tools/365f488/spirv-val.exe --output research/effect-parser/spirv-vkd3d-2.1-legacy --partition-descriptor-sets
+```
 
 `tools/convert_effect_shaders.py` 在运行转换器前核对全部本地输入摘要；输出先写入独立
 临时文件，通过入口 stage 检查和 Vulkan 1.0 的 `spirv-val` 后才写入正式 `.spv`。
