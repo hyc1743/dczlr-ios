@@ -43,6 +43,15 @@ jobs:
               'native_source_sha256': hashlib.sha256(Path('native/resource/dc_pp.c').read_bytes()).hexdigest()}
           Path('out/native-iphoneos/build-report.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
+      - name: Exercise the actual Apple file adapter on ARM64 macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun clang -std=c11 -O2 -Wall -Wextra -Werror -fobjc-arc \
+            -Inative/include -Iios/Native tests/native/test_archive_adapter.m \
+            ios/Native/DCArchive.m native/resource/dc_pp.c -framework Foundation \
+            -o "$RUNNER_TEMP/portlab-archive-adapter-test"
+          "$RUNNER_TEMP/portlab-archive-adapter-test"
       - uses: actions/upload-artifact@v4
         with:
           name: reconstructed-native-iphoneos-core

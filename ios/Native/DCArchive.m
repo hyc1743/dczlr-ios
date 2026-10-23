@@ -2,11 +2,22 @@
 #include "dc_pp.h"
 #include <stdio.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <errno.h>
+#include <limits.h>
 
 static int read_at(void *context, uint64_t offset, void *out, size_t length) {
     FILE *file = context;
-    if (offset > INT64_MAX || fseeko(file, (off_t)offset, SEEK_SET)) return 0;
-    return fread(out, 1, length, file) == length;
+    if (offset > INT64_MAX || length > (uint64_t)INT64_MAX - offset) return 0;
+    size_t done = 0;
+    while (done < length) {
+        size_t count = MIN(length - done, (size_t)SSIZE_MAX);
+        ssize_t got = pread(fileno(file), (uint8_t *)out + done, count, (off_t)(offset + done));
+        if (got < 0 && errno == EINTR) continue;
+        if (got <= 0) return 0;
+        done += (size_t)got;
+    }
+    return 1;
 }
 
 static void report_error(NSError **error, NSInteger code) {

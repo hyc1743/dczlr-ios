@@ -30,7 +30,7 @@ cdecl 返回与输出哨兵；不启动 EXE 进程、不调用 Windows API、不
 
 已执行163组输入对照：21组合成边界／全字节／随机输入，以及142组实际归档名称和
 载荷前缀。新 C 解码器与原版结果逐字节一致，边界哨兵保持。完整归档加载器、
-文件名归一化和 iOS 执行仍分别待验证。
+该次解码对照未覆盖文件名归一化；后续名字扫描的对照结果见下段。iOS 执行仍待验证。
 
 随后已对原版名字扫描叶函数 `0x00423250` 的118字节实现做隔离对照。
 5,018组有效输入（全部5,011个识别出的条目名称及7组路径／双字节边界）与原生
@@ -40,6 +40,16 @@ cdecl 返回与输出哨兵；不启动 EXE 进程、不调用 Windows API、不
 上一版核心在云端 run `39890729083` 已通过 ARM64 macOS 原生 C 测试与 iPhoneOS
 ARM64 编译。当前 iOS 工程已接入相同 C 模块及 Objective-C 只读文件适配器，
 主页可检查导入后的 PP 索引和小段读取，仍未启动完整游戏或接入游戏渲染。
+
+集成版本已在 run `39898101455` 通过模拟器和设备构建。下载的阶段 IPA 为
+ARM64/iPhoneOS 映像，原生 `dc_pp_open`、`dc_pp_read` 与 `DCArchive` 符号均在包内；
+未打包 Windows EXE/DLL。产物名 `PortLab-native-resources-unsigned.ipa`，
+SHA-256 `f917f9c315a7f35408257d3fbc092bb73a7a9111f45921a8eacafd21ed0bd95a`。
+该包仍显示诊断 Metal 场景，不是已完成的原生游戏包。
+
+`tests/native/test_archive_adapter.m` 在苹果主机上用合成归档直接测试实际 Objective-C
+文件适配器，包括部分读取、输出上限、非法索引、损坏布局与文件截断后的 IO 错误。
+这与可移植 C 模块测试和 iOS SDK 编译分别记录，不能替代物理设备执行。
 
 公开的 `tests/fixtures/pp-codec-original-vectors.json` 只包含合成输入的生成参数与
 原版输出摘要，不含 EXE 指令或原游戏资源字节。ARM64 云端测试可用这些记录核对
