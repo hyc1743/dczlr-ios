@@ -131,6 +131,8 @@ def library():
     lib.dc_image_decode.restype = C.c_int
     lib.dc_sprite_build_plan.argtypes = [C.POINTER(SpriteDraw), C.c_uint32, C.POINTER(SpritePlan)]
     lib.dc_sprite_build_plan.restype = C.c_int
+    lib.dc_sprite_begin_plan.argtypes = [C.POINTER(SpritePlan)]
+    lib.dc_sprite_begin_plan.restype = C.c_int
     lib.dc_sprite_build_vertices.argtypes = [C.POINTER(SpritePose), C.POINTER(SpriteVertex)]
     lib.dc_sprite_build_vertices.restype = C.c_int
     return lib

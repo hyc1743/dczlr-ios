@@ -30,9 +30,21 @@ if __name__ == "__main__":
             raise SystemExit("Self-authored fixture shader framing failed")
         (folder / (row["sha256"] + ".dx9")).write_bytes(raw)
         row["status"] = "self_authored_fixture_framing_pass"
+    compat_root = fixture.parent / "shader-compat"
+    compat = json.loads((compat_root / "fixture-report.json").read_text(encoding="utf-8"))
+    if not compat["self_authored"] or compat["original_game_inputs"] or len(compat["shaders"]) != 5:
+        raise SystemExit("Unexpected legacy fixture provenance")
+    for recorded in compat["shaders"]:
+        source = (compat_root / recorded["source_file"]).read_bytes()
+        raw = (compat_root / recorded["binary_file"]).read_bytes()
+        if hashlib.sha256(source).hexdigest() != recorded["source_sha256"] or hashlib.sha256(raw).hexdigest() != recorded["sha256"]:
+            raise SystemExit("Legacy regression fixture differs from recorded source/binary")
+        row = dict(recorded)
+        (folder / (row["sha256"] + ".dx9")).write_bytes(raw)
+        records.append(row)
     audit = {"artifact_sha256": hashlib.sha256(data).hexdigest(), "failed": 0, "shaders": records}
     report = convert(audit, folder, args.compiler.resolve(strict=True), args.validator.resolve(strict=True), args.output)
-    if report["failed"] or report["passed"] != 3:
+    if report["failed"] or report["passed"] != 8:
         raise SystemExit("Self-authored shader conversion/validation failed")
     # Host/compiler binaries differ; compare only SPIR-V for identical inputs.
     if args.reference:

@@ -107,16 +107,31 @@ python -m unittest discover -s tests -p test_dx9_effect.py -v
 
 ## 离线转换器构建门槛
 
-`offline-shader-tools.yml` 固定下载 vkd3d 1.17、SPIRV-Tools 和 SPIRV-Headers
+`offline-shader-tools.yml` 现固定下载 vkd3d 2.1、SPIRV-Tools 和 SPIRV-Headers
 `vulkan-sdk-1.4.304.0` 源码，下载后先核对摘要。工作流先在 Linux 编译转换器，
-只转换本工程自制的三个 SM2 shader，再交叉编译 Windows x64 转换器／验证器，最后在
+只转换本工程自制的 shader，再交叉编译 Windows x64 转换器／验证器，最后在
 真实 Windows runner 上执行并比较相同输入的 SPIR-V 摘要。源码归档和许可证随工具
 产物保留。原版 shader 不进入这些云端任务。
 
 此前 run `39904758142` 已通过 Linux 上三个自制 shader 的转换和 `spirv-val` 校验，
 随后在 Windows 交叉编译检查 Vulkan 头文件时失败：复制的 Vulkan 头依赖未复制的
-`vk_video` 目录。提交 `512a13c` 已补齐该目录，新的工具构建 run `39921040563`
-仍在执行，尚不能宣称 Windows 工具已通过或原版 shader 已转换。
+`vk_video` 目录。提交 `512a13c` 补齐该目录后，run `39921040563` 的交叉配置又因
+全工程要求探测 Windows Vulkan 库而失败。提交 `3556f3e` 使用上游支持的
+`SONAME_LIBVULKAN` 参数（只构建离线 shader 工具），run `39924549009` 已成功构建
+1.17 工具，在 Windows 执行三个自制 shader 的转换／校验并与 Linux 输出摘要一致。
+下载后已核对工具文件摘要，本地也复验同样三项通过。
+
+但本地对 135 份不同原版输入的实际转换仅有 25 份通过，110 份失败：104 份 vs_2_0
+涉及未支持的 `lrp`／`nrm`／`rep` 等；另有 5 份 ps_1_1 和 1 份 ps_1_4 失败。
+已将全部结果保留在 `research/effect-parser/spirv-vkd3d-1.17/conversion-report.json`，
+不能用简单自制 shader 通过推断覆盖本游戏。
+
+官方 vkd3d 2.1 源码已核对含这些旧指令的降级路径，归档 SHA-256 为
+`7510146aff2adfb4ae07ab890701a607e5ff7c66e57100cfc9f630ec92eeda6a`。
+工作流已切换此版本，并增加五个自行编写、经微软汇编／长度／反汇编核对的回归 shader，
+覆盖 `nrm`、`lrp`、`rep`、`texcoord`、`texm3x2*`、`texbem`、ps_1_4 和 `_bx2`。
+新增夹具已在 1.17 上复现失败；新版本实际构建及完整原版转换仍待后续验证。
+这些汇编源码和生成字节码均为自制，不含原游戏 shader。
 
 `tools/convert_effect_shaders.py` 在运行转换器前核对全部本地输入摘要；输出先写入独立
 临时文件，通过入口 stage 检查和 Vulkan 1.0 的 `spirv-val` 后才写入正式 `.spv`。

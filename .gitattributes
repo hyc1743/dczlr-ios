@@ -6,3 +6,5 @@
 *.json text eol=lf
 *.fx text eol=lf
 *.fxbin binary
+*.asm text eol=lf
+*.dx9 binary

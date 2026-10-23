@@ -21,6 +21,23 @@ static void filters(dc_sprite_plan *plan, uint32_t value) {
     append(plan, DC_SPRITE_SAMPLER_STATE, 3, 0, 6, value, 0);
 }
 
+dc_status dc_sprite_begin_plan(dc_sprite_plan *out) {
+    if (!out) return DC_ARGUMENT;
+    dc_sprite_plan plan;
+    memset(&plan, 0, sizeof(plan));
+    plan.next_mode = DC_SPRITE_UNKNOWN_MODE;
+    append(&plan, DC_SPRITE_RENDER_STATE, 2, 28, 0, 0, 0);
+    append(&plan, DC_SPRITE_RENDER_STATE, 2, 27, 1, 0, 0);
+    append(&plan, DC_SPRITE_RENDER_STATE, 2, 14, 0, 0, 0);
+    stage(&plan, 1, 4);
+    stage(&plan, 2, 2);
+    stage(&plan, 3, 1);
+    stage(&plan, 4, 1);
+    append(&plan, DC_SPRITE_SAMPLER_STATE, 3, 0, 7, 0, 0);
+    *out = plan;
+    return DC_OK;
+}
+
 dc_status dc_sprite_build_plan(const dc_sprite_draw *draw, uint32_t cached_mode,
                                dc_sprite_plan *out) {
     if (!out || (cached_mode > 3 && cached_mode != DC_SPRITE_UNKNOWN_MODE)) return DC_ARGUMENT;

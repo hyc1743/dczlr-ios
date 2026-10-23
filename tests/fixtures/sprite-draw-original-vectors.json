@@ -7,6 +7,75 @@
   "jump_table_sha256": "54708fff82aa05a4bd770dda89b556a69d653234641d231bf5dda27e9cf3af4d",
   "generator": "sprite_cases.cases v1",
   "case_count": 965,
+  "begin_plan": {
+    "function_address": "0x41fe60",
+    "function_bytes": 241,
+    "function_sha256": "3abc2bd670658a19c8df087a84d9f7d32dafb676bd871404914bd6d98f66b20b",
+    "commands": [
+      [
+        1,
+        [
+          28,
+          0
+        ]
+      ],
+      [
+        1,
+        [
+          27,
+          1
+        ]
+      ],
+      [
+        1,
+        [
+          14,
+          0
+        ]
+      ],
+      [
+        2,
+        [
+          0,
+          1,
+          4
+        ]
+      ],
+      [
+        2,
+        [
+          0,
+          2,
+          2
+        ]
+      ],
+      [
+        2,
+        [
+          0,
+          3,
+          1
+        ]
+      ],
+      [
+        2,
+        [
+          0,
+          4,
+          1
+        ]
+      ],
+      [
+        3,
+        [
+          0,
+          7,
+          0
+        ]
+      ]
+    ],
+    "next_mode": 255
+  },
   "groups": {
     "0": {
       "cases": 193,

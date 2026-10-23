@@ -19,6 +19,24 @@ def words(data):
 
 
 class ShaderConversionTests(unittest.TestCase):
+    def test_legacy_regressions_are_self_authored_and_hash_bound(self):
+        import json
+        root = Path(__file__).parent / "fixtures/shader-compat"
+        report = json.loads((root / "fixture-report.json").read_text(encoding="utf-8"))
+        self.assertTrue(report["self_authored"])
+        self.assertFalse(report["original_game_inputs"])
+        self.assertFalse(report["gpu_used"])
+        self.assertEqual(len(report["shaders"]), 5)
+        for row in report["shaders"]:
+            source = (root / row["source_file"]).read_bytes()
+            binary = (root / row["binary_file"]).read_bytes()
+            self.assertEqual(hashlib.sha256(source).hexdigest(), row["source_sha256"])
+            self.assertEqual(hashlib.sha256(binary).hexdigest(), row["sha256"])
+            self.assertEqual(len(binary), row["bytes"])
+            token = struct.unpack_from("<I", binary)[0]
+            self.assertEqual(token >> 16, 0xfffe if row["stage"] == "vertex" else 0xffff)
+            self.assertEqual(struct.unpack_from("<I", binary, len(binary) - 4)[0], 0xffff)
+
     def test_entry_points_and_binding_metadata(self):
         # Structural fixture only; this is deliberately not a complete shader.
         data = [0x07230203, 0x10000, 0, 20, 0]

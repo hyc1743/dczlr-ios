@@ -14,6 +14,15 @@ from sprite_cases import cases
 
 
 class NativeSpriteTests(unittest.TestCase):
+    def test_original_sprite_entry_plan(self):
+        vectors = json.loads((Path(__file__).parent / "fixtures/sprite-draw-original-vectors.json").read_text())
+        result = SpritePlan()
+        self.assertEqual(library().dc_sprite_begin_plan(C.byref(result)), 0)
+        self.assertEqual(result.records(), vectors["begin_plan"]["commands"])
+        self.assertEqual(result.next_mode, vectors["begin_plan"]["next_mode"])
+        self.assertEqual(result.count, 8)
+        self.assertNotEqual(library().dc_sprite_begin_plan(None), 0)
+
     def plan(self, draw, cached):
         result = SpritePlan()
         self.assertEqual(library().dc_sprite_build_plan(C.byref(draw) if draw else None,

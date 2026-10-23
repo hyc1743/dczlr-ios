@@ -54,6 +54,11 @@ typedef struct dc_sprite_plan {
  * texture stages beyond stage zero, or other inherited D3D state. */
 DC_API dc_status dc_sprite_build_plan(const dc_sprite_draw *draw,
                                       uint32_t cached_mode, dc_sprite_plan *out);
+/* Observed sprite-entry routine 0x0041fe60: disables fog/depth writes, enables
+ * alpha blending, establishes stage-zero color/alpha state, disables mip
+ * filtering and invalidates the mode cache. Other pipeline state is inherited.
+ * This plan must precede sprite draws when entering from other render paths. */
+DC_API dc_status dc_sprite_begin_plan(dc_sprite_plan *out);
 
 typedef struct dc_sprite_pose {
     float width, height;

@@ -31,7 +31,9 @@ METHODS = {0xe4: (1, 2), 0x10c: (2, 3), 0x114: (3, 3), 0x134: (4, 1),
 
 
 class OriginalSprite:
-    def __init__(self, path):
+    def __init__(self, path, baseline=False):
+        entry, length = (0x41fe60, 241) if baseline else (ENTRY, LENGTH)
+        self.entry = entry
         data = path.read_bytes()
         if hashlib.sha256(data).hexdigest() != TARGET_SHA256:
             raise ValueError("Original input differs from pinned analyzed PE")
@@ -52,12 +54,12 @@ class OriginalSprite:
             _, rva, size, raw = struct.unpack_from("<IIII", data, address + 8)
             if size:
                 self.uc.mem_write(base + rva, data[raw:raw + size])
-        code = bytes(self.uc.mem_read(ENTRY, LENGTH))
+        code = bytes(self.uc.mem_read(entry, length))
         disassembler = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
         disassembler.detail = True
-        instructions = list(disassembler.disasm(code, ENTRY))
+        instructions = list(disassembler.disasm(code, entry))
         addresses = {i.address for i in instructions}
-        if sum(i.size for i in instructions) != LENGTH or instructions[-1].mnemonic != "ret":
+        if sum(i.size for i in instructions) != length or instructions[-1].mnemonic != "ret":
             raise ValueError("Function range differs from analyzed boundaries")
         for instruction in instructions:
             if instruction.mnemonic in ("int", "syscall", "sysenter"):
@@ -65,8 +67,8 @@ class OriginalSprite:
             if instruction.mnemonic.startswith("j") and instruction.operands[0].type == X86_OP_IMM:
                 if instruction.operands[0].imm not in addresses:
                     raise ValueError("Branch outside admitted function")
-        table = bytes(self.uc.mem_read(ENTRY + LENGTH, 16))
-        if any(target not in addresses for target in struct.unpack("<4I", table)):
+        table = bytes(self.uc.mem_read(entry + length, 16)) if not baseline else b""
+        if not baseline and any(target not in addresses for target in struct.unpack("<4I", table)):
             raise ValueError("Switch table leaves admitted function")
         self.code_sha256 = hashlib.sha256(code).hexdigest()
         self.jump_table_sha256 = hashlib.sha256(table).hexdigest()
@@ -88,7 +90,7 @@ class OriginalSprite:
         self.records = []
 
         def code_guard(uc, address, size, context):
-            if ENTRY <= address < ENTRY + LENGTH and address in addresses:
+            if entry <= address < entry + length and address in addresses:
                 return
             start = address & ~15
             if start not in self.stubs or address not in (start, start + 2):
@@ -129,7 +131,7 @@ class OriginalSprite:
         self.uc.reg_write(UC_X86_REG_ESP, STACK)
         self.uc.reg_write(UC_X86_REG_EBP, 0)
         self.records = []
-        self.uc.emu_start(ENTRY, STOP, timeout=1_000_000, count=3000)
+        self.uc.emu_start(self.entry, STOP, timeout=1_000_000, count=3000)
         if self.uc.reg_read(UC_X86_REG_EIP) != STOP or self.uc.reg_read(UC_X86_REG_ESP) != STACK + 4:
             raise RuntimeError("Original did not return through cdecl boundary")
         if bytes(self.uc.mem_read(SPRITE - 16, 0x5c + 32)) != b"\xa5" * 16 + bytes(sprite) + b"\xa5" * 16:
@@ -150,6 +152,12 @@ def main():
     args = parser.parse_args()
     original = OriginalSprite(args.exe)
     lib = library()
+    baseline = OriginalSprite(args.exe, baseline=True)
+    expected_begin = baseline.run({"cached_mode": 3, "draw": None})
+    begin_plan = SpritePlan()
+    if lib.dc_sprite_begin_plan(C.byref(begin_plan)) or {
+            "commands": begin_plan.records(), "next_mode": begin_plan.next_mode} != expected_begin:
+        raise RuntimeError("Native sprite-entry plan differs from original")
     digests, counts = {}, {}
     total = 0
     for case in cases():
@@ -169,6 +177,8 @@ def main():
                "function_address": hex(ENTRY), "function_bytes": LENGTH,
                "function_sha256": original.code_sha256, "jump_table_sha256": original.jump_table_sha256,
                "generator": "sprite_cases.cases v1", "case_count": total,
+               "begin_plan": {"function_address": "0x41fe60", "function_bytes": 241,
+                              "function_sha256": baseline.code_sha256, **expected_begin},
                "groups": {key: {"cases": counts[key], "original_commands_sha256": value.hexdigest()} for key, value in digests.items()}}
     result = {**vectors, "method": "Isolated original sprite routine with bounded synthetic COM capture versus native C command plan",
               "all_commands_and_cache_match": True, "real_d3d_calls": False, "gpu_execution": False,

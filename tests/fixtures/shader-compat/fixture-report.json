@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "method": "Microsoft D3DXAssembleShader with size and disassembly checks",
+  "self_authored": true,
+  "original_game_inputs": false,
+  "gpu_used": false,
+  "analysis_dll_sha256": {
+    "D3DCompiler_43.dll": "ffedb064adc25328b24dcf145b04045a867a5574c931516d7845babf2a08937f",
+    "D3DX9_43.dll": "36b84dfa0ef9d3ff3549a7ad54d2a8032bd22c879219ee1a959137c4ef8786c4"
+  },
+  "shaders": [
+    {
+      "source_file": "pixel-14.asm",
+      "source_sha256": "aef55abd18fb8f454849b28314db9b65d6ec1f1d06380d1076e56ee92bc24874",
+      "binary_file": "pixel-14.dx9",
+      "sha256": "1ea5c24a2944e277100443800fcdd6c8466cf3a069d495d53af2d648413ecd3f",
+      "bytes": 48,
+      "disassembly_sha256": "d4b728926e8f863bc697cf531f6a6532934be99396d518f2bfdd4336df577460",
+      "profile": "ps_1_4",
+      "stage": "pixel",
+      "status": "size_and_disassembly_pass"
+    },
+    {
+      "source_file": "pixel-bump.asm",
+      "source_sha256": "558692cd20234742fdcb3b699d96053ff9d10c5f0f1838b513d5b09fb3465033",
+      "binary_file": "pixel-bump.dx9",
+      "sha256": "f99376cc3c9230f92a238270244ad085beb65ce2870fae0eacb6b46211fec7d7",
+      "bytes": 40,
+      "disassembly_sha256": "8d9aec76253e334e4a2c6dacb8c49f70e4ad9ae73a7be357bdebef9ffaa7a130",
+      "profile": "ps_1_1",
+      "stage": "pixel",
+      "status": "size_and_disassembly_pass"
+    },
+    {
+      "source_file": "pixel-coord.asm",
+      "source_sha256": "1702b148dbe6f81a0e86a9e92eea2921ba33fb5289fa3bfbd875d7f53bd63959",
+      "binary_file": "pixel-coord.dx9",
+      "sha256": "aa32b91c65b660eec8cfce72d592c5ac1d1bcd76c0081720556ee12551b2edca",
+      "bytes": 28,
+      "disassembly_sha256": "d90dcdc0b0d9f2f3cccd321666b185b1a917998e6836a7c442c34a5337e16b55",
+      "profile": "ps_1_1",
+      "stage": "pixel",
+      "status": "size_and_disassembly_pass"
+    },
+    {
+      "source_file": "pixel-matrix.asm",
+      "source_sha256": "b3dbeaae26c78ef70dbd583e1dec076ceba9fb2aa48b34b42f8623e523935545",
+      "binary_file": "pixel-matrix.dx9",
+      "sha256": "e7272730eb3d96d6a3a1fbcc766a8cfe3ea01dfbc1f1937562bfceca169a6515",
+      "bytes": 52,
+      "disassembly_sha256": "a1bd0a13fd8af0b64449a5b028242716357a8b5caa2f0442ebfe09913929431c",
+      "profile": "ps_1_1",
+      "stage": "pixel",
+      "status": "size_and_disassembly_pass"
+    },
+    {
+      "source_file": "vertex-ops.asm",
+      "source_sha256": "aae5c6668091aabe38a87d6819c3d19b401138dd9e998d36c220a6f922078329",
+      "binary_file": "vertex-ops.dx9",
+      "sha256": "08949e3fdc3c410f81513f5b75ad748cdc45543d93d1e0f62a5e0e78832f58df",
+      "bytes": 140,
+      "disassembly_sha256": "ebb4e23160c5d78f6753e674136130c2d784bc46bb63859537028991b7107907",
+      "profile": "vs_2_0",
+      "stage": "vertex",
+      "status": "size_and_disassembly_pass"
+    }
+  ]
+}
