@@ -26,7 +26,7 @@ class ShaderConversionTests(unittest.TestCase):
         self.assertTrue(report["self_authored"])
         self.assertFalse(report["original_game_inputs"])
         self.assertFalse(report["gpu_used"])
-        self.assertEqual(len(report["shaders"]), 5)
+        self.assertEqual(len(report["shaders"]), 7)
         for row in report["shaders"]:
             source = (root / row["source_file"]).read_bytes()
             binary = (root / row["binary_file"]).read_bytes()

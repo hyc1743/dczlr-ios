@@ -32,7 +32,7 @@ if __name__ == "__main__":
         row["status"] = "self_authored_fixture_framing_pass"
     compat_root = fixture.parent / "shader-compat"
     compat = json.loads((compat_root / "fixture-report.json").read_text(encoding="utf-8"))
-    if not compat["self_authored"] or compat["original_game_inputs"] or len(compat["shaders"]) != 5:
+    if not compat["self_authored"] or compat["original_game_inputs"] or len(compat["shaders"]) != 7:
         raise SystemExit("Unexpected legacy fixture provenance")
     for recorded in compat["shaders"]:
         source = (compat_root / recorded["source_file"]).read_bytes()
@@ -44,7 +44,7 @@ if __name__ == "__main__":
         records.append(row)
     audit = {"artifact_sha256": hashlib.sha256(data).hexdigest(), "failed": 0, "shaders": records}
     report = convert(audit, folder, args.compiler.resolve(strict=True), args.validator.resolve(strict=True), args.output)
-    if report["failed"] or report["passed"] != 8:
+    if report["failed"] or report["passed"] != 10:
         print(json.dumps([{"source_sha256": row["source_sha256"], "profile": row["profile"],
                            "reason": row.get("reason")} for row in report["shaders"] if row["status"] == "failed"]), flush=True)
         raise SystemExit("Self-authored shader conversion/validation failed")

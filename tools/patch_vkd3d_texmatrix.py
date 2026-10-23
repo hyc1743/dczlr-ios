@@ -1,4 +1,4 @@
-"""Apply the scoped LGPL TEXM3X2 extension to hash-pinned vkd3d 2.1 IR.
+"""Apply scoped LGPL TEXM3X2/CND extensions to hash-pinned vkd3d 2.1 IR.
 
 The original upstream source archive, this script and the added C source are
 included with built tools so the exact modified library can be rebuilt.
@@ -31,6 +31,10 @@ def apply(source):
     function = replace_once(function, "    unsigned int tmp_idx = ~0u;\n",
                             "    unsigned int tmp_idx = ~0u;\n    unsigned int matrix_temp = ~0u, matrix_stage = ~0u;\n")
     function = replace_once(function, "            case VSIR_OP_TEXM3x2PAD:\n            case VSIR_OP_TEXM3x2TEX:\n", "")
+    function = replace_once(function, "            case VSIR_OP_BEM:\n",
+        "            case VSIR_OP_CND:\n"
+        "                ret = portlab_lower_cnd(program, &it);\n"
+        "                break;\n\n            case VSIR_OP_BEM:\n")
     function = replace_once(function, "            case VSIR_OP_TEXDP3:\n",
         "            case VSIR_OP_TEXM3x2PAD:\n            case VSIR_OP_TEXM3x2TEX:\n"
         "                ret = portlab_lower_texm3x2(program, &it, &matrix_temp, &matrix_stage, message_context);\n"
@@ -45,7 +49,7 @@ def apply(source):
     report = {"schema": 1, "upstream_version": "2.1", "license": "LGPL-2.1-or-later",
               "original_ir_sha256": ORIGINAL_IR_SHA256, "patched_ir_sha256": hashlib.sha256(patched).hexdigest(),
               "extension_sha256": hashlib.sha256(addition.read_bytes()).hexdigest(),
-              "scope": "ps_1_x consecutive TEXM3X2PAD/TEX, 2D nonprojected noncomparison sampler"}
+              "scope": "ps_1_x CND; consecutive TEXM3X2PAD/TEX, 2D nonprojected noncomparison sampler"}
     (source / "portlab-patch-report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
 

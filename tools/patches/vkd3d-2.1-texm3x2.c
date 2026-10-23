@@ -89,3 +89,47 @@ unsupported:
             "Unsupported TEXM3X2 sequence, projection, or sampler dimension.");
     return VKD3D_ERROR_NOT_IMPLEMENTED;
 }
+
+/* CND selects SRC1 when SRC0 is strictly greater than 0.5, otherwise SRC2.
+ * ps_1_1..1_3 broadcast source alpha; ps_1_4 selects per component.
+ * Save the comparison before writing the destination, which can alias SRC0.
+ */
+static enum vkd3d_result portlab_lower_cnd(struct vsir_program *program,
+        struct vsir_program_iterator *cnd)
+{
+    struct vkd3d_shader_instruction *ins = vsir_program_iterator_current(cnd);
+    const struct vkd3d_shader_location location = ins->location;
+    struct vsir_program_iterator before;
+    struct vsir_src_operand sources[3];
+    struct vsir_dst_operand destination;
+    enum vsir_dimension dimension;
+    unsigned int condition, flags;
+
+    if (program->shader_version.type != VKD3D_SHADER_TYPE_PIXEL
+            || program->shader_version.major != 1 || ins->dst_count != 1 || ins->src_count != 3)
+        return VKD3D_ERROR_NOT_IMPLEMENTED;
+    memcpy(sources, ins->src, sizeof(sources));
+    destination = ins->dst[0];
+    flags = ins->flags;
+    dimension = sources[0].reg.dimension;
+    if (program->shader_version.minor < 4)
+        sources[0].swizzle = vsir_combine_swizzles(sources[0].swizzle, VKD3D_SHADER_SWIZZLE(W, W, W, W));
+
+    ins = vsir_program_iterator_insert_before(cnd, &before, 1);
+    if (!ins || !vsir_instruction_init_with_params(program, ins, &location, VSIR_OP_LTO, 1, 2))
+        return VKD3D_ERROR_OUT_OF_MEMORY;
+    condition = program->ssa_count++;
+    vsir_dst_operand_init_ssa(&ins->dst[0], condition, VSIR_DATA_U32, dimension);
+    vsir_src_operand_init_const_f32(&ins->src[0], 0.5f);
+    ins->src[1] = sources[0];
+
+    ins = vsir_program_iterator_current(cnd);
+    if (!vsir_instruction_init_with_params(program, ins, &location, VSIR_OP_MOVC, 1, 3))
+        return VKD3D_ERROR_OUT_OF_MEMORY;
+    ins->flags = flags;
+    ins->dst[0] = destination;
+    vsir_src_operand_init_ssa(&ins->src[0], condition, VSIR_DATA_U32, dimension);
+    ins->src[1] = sources[1];
+    ins->src[2] = sources[2];
+    return VKD3D_OK;
+}

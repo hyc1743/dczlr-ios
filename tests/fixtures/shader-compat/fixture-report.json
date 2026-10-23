@@ -32,6 +32,28 @@
       "status": "size_and_disassembly_pass"
     },
     {
+      "source_file": "pixel-cnd.asm",
+      "source_sha256": "64156feb35d3e4a7f267f48b49872b6498e7177f5b76f0273144ffb709a8a608",
+      "binary_file": "pixel-cnd.dx9",
+      "sha256": "9913f5070224ce570fb34399a072a9415eeda2cd84f230735d2635764a532627",
+      "bytes": 56,
+      "disassembly_sha256": "e6ed8b6fed25dbcb71dd4152925e6dbd809e25e44f37337c30742aae137b9b06",
+      "profile": "ps_1_1",
+      "stage": "pixel",
+      "status": "size_and_disassembly_pass"
+    },
+    {
+      "source_file": "pixel-cnd14.asm",
+      "source_sha256": "42d2f0ac4cc8f407fcff52029d9fb42efdc354b38b57a76d352241627fc2123e",
+      "binary_file": "pixel-cnd14.dx9",
+      "sha256": "0448282d4a71ec91c3aa682632aea9dfb5ee94496c51054d4d4d5c1ed370b6c0",
+      "bytes": 52,
+      "disassembly_sha256": "3938d1e516e2bbb59b3490124ffbee598675bd42cda4efc6f6a527854c7a0f96",
+      "profile": "ps_1_4",
+      "stage": "pixel",
+      "status": "size_and_disassembly_pass"
+    },
+    {
       "source_file": "pixel-coord.asm",
       "source_sha256": "1702b148dbe6f81a0e86a9e92eea2921ba33fb5289fa3bfbd875d7f53bd63959",
       "binary_file": "pixel-coord.dx9",

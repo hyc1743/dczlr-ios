@@ -135,9 +135,17 @@ python -m unittest discover -s tests -p test_dx9_effect.py -v
 `tools/patches/vkd3d-2.1-texm3x2.c` 扩展只处理成对、连续 stage、2D、非投影和非比较
 采样的 ps_1_x 纹理矩阵指令，生成两次 DP3 和目的 stage 的采样；其他情况明确失败。
 应用脚本核对固定 `ir.c` 摘要后才修改，并记录修改前后摘要。它保留 LGPL 许可，
-仅进入离线转换工具，对应源码和应用脚本随产物保留。扩展尚待新一轮构建／回归，
-完整原版转换与 GPU 数值一致性仍待验证。这些汇编源码和生成字节码均为自制，
-不含原游戏 shader。
+仅进入离线转换工具，对应源码和应用脚本随产物保留。扩展已在 run `39927312366`
+通过 Linux／Windows 上八个自制 shader 的转换与校验，两端摘要一致；下载后的本地
+复验也通过，工具和扩展源码摘要均已核对。
+
+本地对完整 135 份原版输入重跑后，134 份通过 Vulkan 1.0 SPIR-V 校验，仅 PARA 的一份
+ps_1_1 因 `cnd` 未实现而失败。结果位于
+`research/effect-parser/spirv-vkd3d-2.1-texmatrix/conversion-report.json`。
+新增 CND 扩展按微软指令定义生成严格 `>0.5` 比较与条件选择，ps_1_1..1_3 复制 alpha
+条件，ps_1_4 按分量选择。新增两个自制 CND 夹具，使完整工具回归增至十项；CND 扩展
+仍待云端实际构建和原版全量重跑。GPU 数值一致性仍待验证。这些汇编源码和生成字节码
+均为自制，不含原游戏 shader。
 
 `tools/convert_effect_shaders.py` 在运行转换器前核对全部本地输入摘要；输出先写入独立
 临时文件，通过入口 stage 检查和 Vulkan 1.0 的 `spirv-val` 后才写入正式 `.spv`。

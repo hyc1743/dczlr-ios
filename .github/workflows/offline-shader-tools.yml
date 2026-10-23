@@ -111,7 +111,7 @@ jobs:
           import hashlib,json,os
           from pathlib import Path
           root=Path('out/offline-tools/windows')
-          report={'source_revision':os.environ['GITHUB_SHA'], 'vkd3d_version':'2.1+PortLab-texm3x2',
+          report={'source_revision':os.environ['GITHUB_SHA'], 'vkd3d_version':'2.1+PortLab-legacy',
               'spirv_tools_tag':'vulkan-sdk-1.4.304.0', 'original_game_inputs_used':False,
               'sha256':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()
                   for p in root.iterdir() if p.suffix in ('.exe','.dll')}}
