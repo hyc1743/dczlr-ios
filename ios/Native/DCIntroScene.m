@@ -20,6 +20,17 @@ static NSString *dcIntroDecode(const void *bytes,size_t length) {
     NSStringEncoding encoding=CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingDOSChineseSimplif);
     return [[NSString alloc] initWithBytes:bytes length:length encoding:encoding];
 }
+static CGFloat dcIntroWidthScale(NSString *label,UIFont *font,size_t byteCount) {
+    CGFloat width=[label sizeWithAttributes:@{NSFontAttributeName:font}].width;
+    /* D3DXCreateFontA requests integer height/2 width, so one DBCS byte-pair
+     * occupies twice that width, including two ordinary ASCII characters. */
+    return width>0 ? ((29/2)*byteCount)/width : 1;
+}
+static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDictionary *attributes,CGFloat horizontalScale) {
+    CGContextSaveGState(context);CGContextTranslateCTM(context,point.x,point.y);
+    CGContextScaleCTM(context,horizontalScale,1);
+    [label drawAtPoint:CGPointZero withAttributes:attributes];CGContextRestoreGState(context);
+}
 
 @implementation DCIntroScene {
     NSString *_directory;
@@ -183,8 +194,9 @@ static NSString *dcIntroDecode(const void *bytes,size_t length) {
     const int shadowX[4]={-1,1,-1,1},shadowY[4]={-1,1,1,-1};
     NSDictionary *speakerBlack=@{NSFontAttributeName:font,NSForegroundColorAttributeName:UIColor.blackColor};
     NSDictionary *speakerWhite=@{NSFontAttributeName:font,NSForegroundColorAttributeName:UIColor.whiteColor};
-    for(unsigned j=0;j<4;++j)[_speaker drawAtPoint:CGPointMake(58+shadowX[j],652+shadowY[j]) withAttributes:speakerBlack];
-    [_speaker drawAtPoint:CGPointMake(58,652) withAttributes:speakerWhite];
+    CGFloat speakerScale=dcIntroWidthScale(_speaker,font,_decoded.record.speaker.length);
+    for(unsigned j=0;j<4;++j)dcIntroDraw(context,_speaker,CGPointMake(58+shadowX[j],652+shadowY[j]),speakerBlack,speakerScale);
+    dcIntroDraw(context,_speaker,CGPointMake(58,652),speakerWhite,speakerScale);
     for(uint32_t i=0;i<_textPlan.count;++i) {
         const dc_text_glyph *glyph=&_textPlan.glyphs[i];
         size_t length=glyph->bytes[0] ? (glyph->bytes[1] ? 2 : 1) : 0;
@@ -196,8 +208,11 @@ static NSString *dcIntroDecode(const void *bytes,size_t length) {
             blue:(glyph->color&255)/255.0 alpha:alpha/255.0];
         NSDictionary *black=@{NSFontAttributeName:font,NSForegroundColorAttributeName:[UIColor colorWithWhite:0 alpha:alpha/255.0]};
         NSDictionary *foreground=@{NSFontAttributeName:font,NSForegroundColorAttributeName:color};
-        for(unsigned j=0;j<4;++j)[label drawAtPoint:CGPointMake(glyph->x+shadowX[j],glyph->y+shadowY[j]) withAttributes:black];
-        [label drawAtPoint:CGPointMake(glyph->x,glyph->y) withAttributes:foreground];
+        size_t visibleBytes=0;
+        for(size_t j=0;j<length;++j)visibleBytes+=glyph->bytes[j]!='\r' && glyph->bytes[j]!='\n';
+        CGFloat horizontalScale=dcIntroWidthScale(label,font,visibleBytes);
+        for(unsigned j=0;j<4;++j)dcIntroDraw(context,label,CGPointMake(glyph->x+shadowX[j],glyph->y+shadowY[j]),black,horizontalScale);
+        dcIntroDraw(context,label,CGPointMake(glyph->x,glyph->y),foreground,horizontalScale);
     }
     UIGraphicsPopContext();CGContextRelease(context);
     /* Renderer expects straight alpha. */

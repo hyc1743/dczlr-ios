@@ -35,5 +35,7 @@ speaker/body records and all 7,748 nonempty layout cells decode successfully.
 The earlier CP932 assumption was incorrect; 119 records fail that decoder.
 The Apple adapter now uses the CP936 encoding through CoreFoundation and
 renders original numeric positions, colors, alpha and four outline offsets.
-It uses an Apple fallback font; Windows font rasterization, speaker rendering
+Label advances are fitted to the original integer `height / 2` requested font
+width (14 at logical height 29); this prevents wider Apple ASCII pairs from
+overlapping neighboring cells. It uses an Apple fallback font; Windows font rasterization, speaker rendering
 and exact original GPU appearance remain unverified.
