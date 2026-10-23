@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "reviewed_on": "2026-10-23",
+  "sources": [
+    {
+      "repository": "ruje0504-2/biko3-switch-runtime",
+      "revision": "63fddc3830b991e725657689934c3b6e3b5786bb",
+      "role": "Windows-to-Switch native reconstruction methodology",
+      "published_nro_sha256": "31320a8ce44f8e1826fc90ed5b26cb714c551413b286f8c69adb03f9e8b07178",
+      "published_nro_bytes": 16408236,
+      "local_reference_nro_hash_and_size_match": true,
+      "source_build_reproduced": false,
+      "source_code_imported_into_product": false,
+      "overall_original_source_license": "not identified in reviewed snapshot"
+    },
+    {
+      "repository": "hyc1743/biko3-ios",
+      "revision": "14ab2b4863f1fe9929f080a98a16c7be581e2f26",
+      "role": "Existing ARM64 NRO adaptation, native platform services and MoltenVK bridge",
+      "local_directory": "../weixing3",
+      "source_code_imported_into_product_in_this_review": false
+    }
+  ]
+}

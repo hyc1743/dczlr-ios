@@ -1,6 +1,6 @@
 # Execution runtime investigation
 
-The current goal is native AArch64 execution with direct Metal and offline
+The current goal is native AArch64 execution with Vulkan/MoltenVK and offline
 shader translation, as defined in `native-runtime-design.md`. The interpreter
 work below is retained as a historical experiment; it is not the chosen
 delivery architecture and its phone tests are not a prerequisite.

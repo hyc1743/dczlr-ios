@@ -1,6 +1,8 @@
 # iOS PortLab
 
-The intended architecture is now native AArch64 game execution with a focused Apple-platform host, a direct Metal graphics implementation and offline-translated original shaders. See [native-runtime-design.md](docs/native-runtime-design.md) for the requirements and the current missing input: the supplied main executable is PE32 x86, and no usable AArch64 version or source build has been established. There is no verified playable game release yet.
+The intended architecture is now native AArch64 game execution with a focused Apple-platform host and Vulkan → MoltenVK → Metal graphics. Original shader semantics still need offline recovery and conversion. See [native-runtime-design.md](docs/native-runtime-design.md) for the requirements and the current missing input: the supplied main executable is PE32 x86, and no usable AArch64 version or source build has been established. There is no verified playable game release yet.
+
+The Windows-to-Switch reference source has now been located: `ruje0504-2/biko3-switch-runtime`, pinned at `63fddc3830b991e725657689934c3b6e3b5786bb`. Its published NRO hash and size match the local `weixing3` input. Its native reconstruction, isolated original-function comparisons and modular Vulkan approach are reviewed in [weixing3-porting-method.md](docs/weixing3-porting-method.md). This source match has not yet been reproduced by rebuilding the NRO, and no upstream implementation was imported into this product.
 
 The existing interpreter IPA belongs to an earlier experiment and does not satisfy this native architecture. Its phone checks are optional historical diagnostics, not a prerequisite for the native route.
 

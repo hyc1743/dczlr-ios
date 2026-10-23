@@ -2,13 +2,13 @@
 
 这份计划针对当前目录中的 Windows PE32 成品，参考 `../weixing3` 的 Switch→iOS 工程组织方式。它描述研究和验证顺序，不声称当前游戏已经能够运行。
 
-当前目标已明确为 **AArch64 原生游戏代码＋苹果平台宿主＋直接 Metal＋原版着色器离线转换**。
+当前目标已明确为 **AArch64 原生游戏代码＋苹果平台宿主＋Vulkan/MoltenVK＋原版着色器离线处理**。
 执行边界与验收以 [native-runtime-design.md](native-runtime-design.md) 为准。
 下文保留已有调查与候选路线记录；解释器方案不再作为交付目标。
 
 ## 已知起点
 
-主程序是 32 位 x86 PE，普通导入表包含 D3D9/D3DX9、DirectInput、Win32/GDI、WINMM、COM 和文件接口。`d3d9.dll` 是本地 x86 DLL，含有 DXVK 类型标记和 Vulkan loader 名称。没有原始源码、Windows→Switch 工程或 Switch 成品的来源说明。
+主程序是 32 位 x86 PE，普通导入表包含 D3D9/D3DX9、DirectInput、Win32/GDI、WINMM、COM 和文件接口。`d3d9.dll` 是本地 x86 DLL，含有 DXVK 类型标记和 Vulkan loader 名称。当前游戏仍没有可用原始源码或 ARM64 构建输入；参考游戏 `weixing3` 的 Windows→Switch 公开工程则已找到并核对，见 `weixing3-porting-method.md`。
 
 因此不能把 Switch 客体加载器、libnx 启动路径或 MoltenVK Vulkan hook 直接接到这个 PE 上。当前最有价值的可复用内容是资源导入、日志、存档、输入前端、生命周期处理和“编译/启动/首帧/可玩性”分层报告。
 
@@ -35,7 +35,7 @@
 4. 是否通过 COM 虚表或动态 `GetProcAddress` 调用普通导入表中未列出的 API。
 5. DirectInput 和 WINMM 调用的实际格式与时序。
 
-当前已经选择直接 Metal 后端。这一步的调用记录用于界定需要原生实现的 D3D9／D3DX9 语义与状态范围；不能从 DLL 名称推断完整接口覆盖。
+当前已经选择 Vulkan/MoltenVK 后端。这一步的调用记录用于界定需恢复的 D3D9／D3DX9 或原生渲染语义与状态范围；不能从 DLL 名称推断完整接口覆盖。
 
 ### 已确定的资源边界
 
@@ -85,6 +85,6 @@ REA 的 PE 资源解析已经确认主程序有 13 个资源，其中 7 个命�
 
 ## 当前阻塞
 
-当前缺少可用的 AArch64 游戏程序或源码构建输入。从现有 x86 成品离线恢复／重建后再编译是否可行，仍需证明。直接 Metal 的图形语义实现与完整离线 shader 转换也未完成。此前解释器 IPA 和 Wine 测试的成功记录见 `runtime-decision.md`，不能用于证明本次原生架构已实现。
+当前缺少可用的 AArch64 游戏程序或源码构建输入。从现有 x86 成品离线恢复／重建后再编译是否可行，仍需证明。本游戏的 Vulkan/MoltenVK 渲染与完整离线 shader 处理也未完成。参考项目的 Windows → Switch 公开工程已找到，NRO 摘要与本地输入一致；方法核对见 `weixing3-porting-method.md`。此前解释器 IPA 和 Wine 测试的成功记录见 `runtime-decision.md`，不能用于证明本次原生架构已实现。
 
 Ghidra 12.1.4 headless 已尝试对 ASCII 副本做静态导入，但上级 `weixing3` 安装目录拒绝写入 x86 语言缓存 `x86.sla`，因此没有导出函数或调用图。状态见 `research/ghidra-port-status.json`；本次没有执行或修改目标。
