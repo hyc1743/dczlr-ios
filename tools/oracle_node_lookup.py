@@ -42,9 +42,8 @@ class OriginalNodeLookup(OriginalAnimation):
 
     def lookup(self,depth,query):
         self.uc.mem_write(OBJECT,b'\0'*0x10000)
-        header=OBJECT+0x800;label=OBJECT+0x9000;argument=OBJECT+0xa000
-        self.uc.mem_write(OBJECT+0x218,struct.pack('<I',header))
-        self.uc.mem_write(header+8,struct.pack('<2I',1,NODE))
+        label=OBJECT+0x9000;argument=OBJECT+0xa000
+        self.uc.mem_write(OBJECT+0x218,struct.pack('<I',NODE))
         self.uc.mem_write(label,b'synthetic-node\0')
         self.uc.mem_write(argument,query)
         for i in range(depth+1):

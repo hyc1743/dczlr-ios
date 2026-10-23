@@ -64,7 +64,7 @@ DC_API dc_status dc_xx_texture_at(const dc_xx *model, uint32_t index, dc_xx_text
  * Missing matches return DC_NOT_FOUND; failure preserves index. */
 DC_API dc_status dc_xx_find_material_encoded(const dc_xx *model,
     const void *name, size_t length, uint32_t *index);
-/* Node lookup walks the whole preorder tree and keeps the LAST match, as
+/* Node lookup walks root descendants in preorder and keeps the LAST match, as
  * 0x4131f0/0x413270 do. This differs from material-name lookup above.
  * Node matrix copies the serialized local baseline; no hierarchy executes. */
 DC_API dc_status dc_xx_find_node_encoded(const dc_xx *model,

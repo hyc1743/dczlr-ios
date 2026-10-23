@@ -49,6 +49,13 @@ class NativeXXTests(unittest.TestCase):
                     matrix=Matrix()
                     self.assertEqual(self.lib.dc_xx_node_matrix(model.handle,result.value,C.byref(matrix)),0)
                     self.assertEqual(bytes(matrix),model.data[model.at('node',result.value).matrix_offset:][:64])
+        data=bytearray(fixture())
+        with XXModel(bytes(data)) as model:root=model.at('node',0).name
+        data[root.offset:root.offset+root.length]=bytes(b^255 for b in b'synthetic-root\0')
+        with XXModel(bytes(data)) as model:
+            encoded=bytes(b^255 for b in b'synthetic-root\0');result=C.c_uint32(123)
+            self.assertEqual(self.lib.dc_xx_find_node_encoded(model.handle,encoded,len(encoded),C.byref(result)),6)
+            self.assertEqual(result.value,123)
 
     def test_recorded_original_material_loader_outputs(self):
         reference = json.loads((ROOT / "tests/fixtures/xx-material-original-vectors.json").read_text())

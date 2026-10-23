@@ -224,7 +224,8 @@ dc_status dc_xx_find_node_encoded(const dc_xx *model, const void *name_bytes, si
     size_t query;
     if (!string_length(name_bytes, length, &query)) return DC_FORMAT;
     uint32_t selected = UINT32_MAX;
-    for (uint32_t i = 0; i < model->info.nodes; ++i) {
+    /* Original starts at the serialized root's children, not the root. */
+    for (uint32_t i = 1; i < model->info.nodes; ++i) {
         dc_xx_span span = model->nodes[i].name;
         size_t candidate;
         if (!string_length(model->data + span.offset, span.length, &candidate)) return DC_FORMAT;

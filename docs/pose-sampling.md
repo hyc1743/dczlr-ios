@@ -27,7 +27,8 @@ and are not normalized. Only mode 0 is implemented; the original mode-1 matrix
 decomposition branch remains excluded. Matrix multiplication permits aliased
 outputs and rejects nonfinite inputs/results without partial writes.
 
-XX node binding uses the last exact case-sensitive C-string match in preorder,
+XX node binding searches the root's descendants and uses the last exact
+case-sensitive C-string match in preorder. The serialized root is excluded,
 matching the full recursive traversal at `0x004131f0`/`0x00413270`. Material
 lookup keeps its separate first-match rule. Serialized local node matrices
 can be copied with `dc_xx_node_matrix`. Neither operation applies a hierarchy,
