@@ -48,7 +48,11 @@ native C implementations matching 2,916 isolated original-function cases. The
 query tests the current record's loop byte; it is not a timer-completion event.
 Numeric frame advancement and blend updates now also match isolated original
 functions; XA loading, pose/material sampling and transition rendering remain
-incomplete. The checker uses the native update to drive its self-authored
+incomplete. The native XA metadata reader now accounts for all 81 recognized
+local XA entries and decodes 74 clip tables (37,888 records); seven entries
+have no table. A 512-record isolated original-loader comparison also matches.
+This validates framing/numeric fields, not key sampling or model linking. See
+[xa-reader.md](docs/xa-reader.md). The checker uses the native update to drive its self-authored
 rotation and requires a positive-delta update before its simulator gate passes. See
 [animation-reconstruction.md](docs/animation-reconstruction.md).
 

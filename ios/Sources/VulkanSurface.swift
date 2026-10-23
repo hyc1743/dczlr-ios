@@ -82,7 +82,8 @@ final class SpritePresenter: NSObject {
                 }
                 if scene == .diagnostic, animationAdvanced, !self.reportedAnimationAdvance {
                     self.reportedAnimationAdvance = true
-                    self.model.record("原生动画更新器已推进精灵旋转并完成呈现", event: "PORTLAB_NATIVE_ANIMATION_ADVANCED")
+                    self.model.record("自制 XA 数据已通过原生读取并用于动画更新", event: "PORTLAB_NATIVE_XA_FIXTURE_LOADED")
+                    self.model.record("原生 XA 读取与动画更新已推进精灵旋转并完成呈现", event: "PORTLAB_NATIVE_ANIMATION_ADVANCED")
                 }
             }
     }

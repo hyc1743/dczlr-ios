@@ -1,0 +1,79 @@
+"""Audit local XA metadata and decoded clip bytes without exporting payloads."""
+import argparse
+import ctypes as C
+import hashlib
+import json
+from pathlib import Path
+from native_core import library, XAInfo, AnimationClip, AnimationTiming, PPArchive
+from xa_cases import numeric_reference
+
+
+def audit(directory, reference=None):
+    lib = library()
+    references = {(row["archive"], row["index"]): row for row in reference["entries"]} if reference else None
+    rows, unrecognized = [], []
+    for path in sorted(directory.glob("*.pp")):
+        try:
+            archive = PPArchive(path)
+        except ValueError:
+            unrecognized.append(path.name)
+            continue
+        with archive:
+            for index in range(archive.count):
+                entry = archive.entry(index)
+                if not entry.name_bytes.lower().endswith(b".xa"):
+                    continue
+                if entry.size > 128 * 1024 * 1024:
+                    raise ValueError("XA input exceeds audit allocation limit")
+                data = archive.read(index)
+                digest = hashlib.sha256(data).hexdigest()
+                info = XAInfo()
+                if lib.dc_xa_probe(data, len(data), C.byref(info)):
+                    raise ValueError(f"Native XA framing rejected {path.name}:{index}")
+                if references is not None:
+                    ref = references[(path.name, index)]
+                    if ref["source_sha256"] != digest or ref["status"] != "framing_consumes_entire_entry":
+                        raise ValueError("Independent reference input/profile does not match")
+                    for name in ("material_tracks", "event_tracks", "morph_index_sets", "morph_vector_sets", "morph_tracks", "bone_tracks"):
+                        if getattr(info, name) != ref["section_counts"].get(name, 0):
+                            raise ValueError("Native/reference section count mismatch: " + name)
+                    if (info.clip_table_offset if info.has_clip_table else None) != ref["clip_table_offset"]:
+                        raise ValueError("Native/reference clip-table offset mismatch")
+                clips, timing = (AnimationClip * 512)(), (AnimationTiming * 512)()
+                status = lib.dc_xa_load_clips(data, len(data), clips, timing, 512)
+                if info.has_clip_table:
+                    if status:
+                        raise ValueError("Native clip-table decode failed")
+                    raw = data[info.clip_table_offset:info.clip_table_offset + 512 * 108]
+                    expected = numeric_reference(raw)
+                    if (bytes(clips), bytes(timing)) != expected:
+                        raise ValueError("Native numeric fields differ from serialized bytes")
+                    decoded_digest = hashlib.sha256(bytes(clips) + bytes(timing)).hexdigest()
+                else:
+                    if status != 6:
+                        raise ValueError("Missing table was synthesized")
+                    decoded_digest = None
+                rows.append({"archive": path.name, "index": index, "bytes": entry.size,
+                             "source_sha256": digest, "info": info.record(),
+                             "numeric_table_sha256": decoded_digest, "status": "metadata_and_numeric_bytes_match"})
+    if references is not None and set(references) != {(r["archive"], r["index"]) for r in rows}:
+        raise ValueError("Independent reference entry coverage differs")
+    return {"schema": 1, "method": "native XA framing plus serialized-field byte comparison",
+            "independent_framing_reference": references is not None,
+            "entries": rows, "verified_xa": len(rows), "decoded_clip_records": sum(r["info"]["clip_count"] for r in rows),
+            "unrecognized_archives_not_inspected": unrecognized,
+            "payload_exported": False, "names_or_pose_values_exported": False,
+            "pose_material_sampling": "not verified", "game_playability": "not_verified"}
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", type=Path, required=True)
+    parser.add_argument("--reference", type=Path)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    reference = json.loads(args.reference.read_text(encoding="utf-8")) if args.reference else None
+    result = audit(args.data, reference)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({k: v for k, v in result.items() if k != "entries"}))

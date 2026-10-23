@@ -29,7 +29,8 @@ animation record's loop byte as a boolean, not a timer-expiry event. Its matchin
 native request/query operations and 2,916 isolated comparisons are documented in
 [animation-reconstruction.md](animation-reconstruction.md). Numeric frame and
 blend updates are now also reconstructed, and a synthetic clip table drives the
-complete two-card planner in a host-independent integration test. XA loading,
+complete two-card planner in a host-independent integration test. XA framing and
+numeric table decoding are now implemented separately; original resource binding,
 pose/material sampling and actual transition composition remain missing, so this does
 not yet connect the startup planner to the Vulkan view.
 

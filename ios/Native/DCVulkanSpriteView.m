@@ -4,10 +4,18 @@
 #include "dc_vk_sprite.h"
 #include "dc_sprite_spv.h"
 #include "dc_animation.h"
+#include "dc_xa.h"
 #import "DCArchive.h"
 #include <math.h>
+#include <string.h>
 
 static const char dcRenderQueueKey;
+
+static void dc_write_float_le(uint8_t *out, float value) {
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    for (uint32_t i = 0; i < 4; ++i) out[i] = (uint8_t)(bits >> (8 * i));
+}
 
 @implementation DCVulkanSpriteView {
     dc_vk_sprite *_renderer;
@@ -25,6 +33,8 @@ static const char dcRenderQueueKey;
     NSString *_deviceName;
     uint64_t _presentedFrames;
     dc_animation_state _diagnosticAnimation;
+    dc_animation_clip _diagnosticClip;
+    dc_animation_timing _diagnosticTiming;
     uint32_t _lastDiagnosticTick;
     BOOL _diagnosticTickInitialized;
     BOOL _diagnosticAnimationAdvanced;
@@ -249,14 +259,25 @@ static const char dcRenderQueueKey;
         uint32_t tick = (uint32_t)fmod(milliseconds, 4294967296.0);
         uint32_t delta = _diagnosticTickInitialized ? tick - _lastDiagnosticTick : 0;
         if (!_diagnosticTickInitialized) {
+            /* Self-authored XA bytes exercise the real resource-to-controller
+             * path. No original names, keys or game payloads are supplied. */
+            NSMutableData *fixture = [NSMutableData dataWithLength:8 + DC_XA_CLIP_COUNT * DC_XA_CLIP_RECORD_BYTES];
+            uint8_t *bytes = fixture.mutableBytes;
+            bytes[3] = 1;
+            dc_write_float_le(bytes + 4 + 64, 18.0f);
+            dc_write_float_le(bytes + 4 + 76, 6.283185307179586f);
+            bytes[4 + 80] = 1;
+            dc_animation_clip clips[DC_XA_CLIP_COUNT];
+            dc_animation_timing timing[DC_XA_CLIP_COUNT];
+            dc_status status = dc_xa_load_clips(bytes, fixture.length, clips, timing, DC_XA_CLIP_COUNT);
+            if (status != DC_OK)
+                return [NSString stringWithFormat:@"Native XA fixture rejected: %d", status];
+            _diagnosticClip = clips[0];
+            _diagnosticTiming = timing[0];
             _diagnosticAnimation = (dc_animation_state){.blend = 1};
         }
-        /* A self-authored repeating clip exercises the reconstructed numeric
-         * update in the actual host without supplying any original assets. */
-        dc_animation_clip clip = {.first_frame = 0, .last_frame = 6.283185307179586f, .loop = 1};
-        dc_animation_timing timing = {.duration_seconds = 18};
         dc_animation_tick_result update;
-        dc_status animationStatus = dc_animation_tick(&_diagnosticAnimation, &clip, &timing,
+        dc_status animationStatus = dc_animation_tick(&_diagnosticAnimation, &_diagnosticClip, &_diagnosticTiming,
             1, delta, 1, tick, &update);
         if (animationStatus != DC_OK)
             return [NSString stringWithFormat:@"Native animation tick failed: %d", animationStatus];

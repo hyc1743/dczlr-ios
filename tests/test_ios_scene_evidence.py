@@ -8,6 +8,16 @@ from check_ios_sprite import presented_scenes, scene_evidence, scene_ready
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_xa_pipeline_requires_its_own_report_after_scene_and_motion(self):
+        log = ("2026-10-23T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
+               "2026-10-23T12:00:01Z PORTLAB_NATIVE_ANIMATION_ADVANCED submitted\n")
+        self.assertFalse(scene_ready(log, "checker", require_animation=True, require_xa=True))
+        echoed = log + "2026-10-23T12:00:02Z command echo PORTLAB_NATIVE_XA_FIXTURE_LOADED\n"
+        self.assertFalse(scene_ready(echoed, "checker", require_animation=True, require_xa=True))
+        verified = log + "2026-10-23T12:00:02Z PORTLAB_NATIVE_XA_FIXTURE_LOADED submitted\n"
+        report = scene_evidence(verified, "checker", require_animation=True, require_xa=True)
+        self.assertEqual(report["native_xa_fixture"], "self-authored XA decode and animation pipeline reported")
+
     def test_first_frame_does_not_prove_animation_advancement(self):
         log = "2026-10-23T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
         self.assertFalse(scene_ready(log, "checker", require_animation=True))

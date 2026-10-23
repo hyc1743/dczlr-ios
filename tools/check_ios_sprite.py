@@ -23,19 +23,25 @@ def animation_advanced(log):
     return bool(re.search(r"(?m)^\S+ PORTLAB_NATIVE_ANIMATION_ADVANCED(?= |$)", log))
 
 
-def scene_ready(log, expected, require_animation=False):
-    return expected in presented_scenes(log) and (not require_animation or animation_advanced(log))
+def xa_fixture_loaded(log):
+    return bool(re.search(r"(?m)^\S+ PORTLAB_NATIVE_XA_FIXTURE_LOADED(?= |$)", log))
 
 
-def scene_evidence(log, expected, require_animation=False):
+def scene_ready(log, expected, require_animation=False, require_xa=False):
+    return (expected in presented_scenes(log) and (not require_animation or animation_advanced(log))
+            and (not require_xa or xa_fixture_loaded(log)))
+
+
+def scene_evidence(log, expected, require_animation=False, require_xa=False):
     if expected not in SCENES:
         raise ValueError("Unknown expected scene: " + expected)
     observed = presented_scenes(log)
-    if not scene_ready(log, expected, require_animation):
-        raise ValueError("Expected scene/animation progression was not reported: " + expected)
+    if not scene_ready(log, expected, require_animation, require_xa):
+        raise ValueError("Expected scene/animation/XA pipeline was not reported: " + expected)
     return {"scene": SCENES[expected], "required_scene": expected, "observed_scenes": observed,
             "resource_content": "not inspected by this presentation check",
             "native_animation_tick": "positive-delta advancement and presentation reported" if animation_advanced(log) else "not verified by this log",
+            "native_xa_fixture": "self-authored XA decode and animation pipeline reported" if xa_fixture_loaded(log) else "not verified by this log",
             "vulkan_first_present": "reported_by_native_view_after_successful_present",
             "physical_iphone": "not tested", "game_playability": "not verified"}
 
@@ -65,6 +71,7 @@ def select_device(output, runtime):
 
 def check(app, output, runtime, expected_scene="checker"):
     require_animation = expected_scene == "checker"
+    require_xa = expected_scene == "checker"
     app = app.resolve(strict=True)
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -111,7 +118,7 @@ def check(app, output, runtime, expected_scene="checker"):
         path = container / "Documents/log.txt" if container else None
         if path and path.exists():
             log = path.read_text(encoding="utf-8")
-            if scene_ready(log, expected_scene, require_animation) or "Vulkan 初始化或绘制失败" in log:
+            if scene_ready(log, expected_scene, require_animation, require_xa) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
     (output / "app.log").write_text(log, encoding="utf-8")
@@ -143,7 +150,7 @@ def check(app, output, runtime, expected_scene="checker"):
     except subprocess.TimeoutExpired as error:
         screenshot_log = str(error)
     (output / "screenshot-command.txt").write_text(screenshot_log, encoding="utf-8")
-    if not scene_ready(log, expected_scene, require_animation):
+    if not scene_ready(log, expected_scene, require_animation, require_xa):
         try:
             process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
                 capture_output=True, text=True, timeout=30)
@@ -156,7 +163,7 @@ def check(app, output, runtime, expected_scene="checker"):
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame; launch_timed_out=" +
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
     report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,
-              **scene_evidence(log, expected_scene, require_animation)}
+              **scene_evidence(log, expected_scene, require_animation, require_xa)}
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")

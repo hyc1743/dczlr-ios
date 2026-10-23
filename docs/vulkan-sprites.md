@@ -112,6 +112,12 @@ contains both `PORTLAB_SCENE_PRESENTED=checker` and
 and user-facing animation status without machine markers. The associated
 device IPA remains an unsigned diagnostic host with no bundled game resources.
 
+The checker now builds a self-authored XA fixture and decodes the animation
+descriptors through the native XA reader before updating rotation. Its next
+verification gate requires `PORTLAB_NATIVE_XA_FIXTURE_LOADED` in addition to
+presentation and advancement. This fixture contains no original names, keys or
+other game payloads; its successful execution must not certify original assets.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.

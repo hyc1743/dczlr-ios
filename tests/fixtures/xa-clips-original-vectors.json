@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "records": 512,
+  "output_sha256": "9889d864287c80d7707e302d74cab4ee185a6de472d5c7d191a1296cee3879ba",
+  "original_function_sha256": {
+    "0x40dc80": "025517aec3007723430d7b8e81591325508a5e129d6aa5608491114639e40b17",
+    "0x40d770": "661f31925f9437f43d8f49bca6347547ab5fc5672df525815647c303615fa29b"
+  },
+  "execution": "isolated original clip loader and name decoder; synthetic bounded memcpy",
+  "coverage": "numeric table fields with fresh zero iteration bytes; full XA prefix, names and key payload semantics excluded",
+  "source": "self-authored synthetic records including special float bit patterns",
+  "original_game_resources_used": false,
+  "game_playability": "not_verified"
+}

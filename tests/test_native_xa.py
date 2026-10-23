@@ -1,0 +1,117 @@
+import ctypes as C
+import hashlib
+import json
+from pathlib import Path
+import sys
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from native_core import library, XAInfo, AnimationClip, AnimationTiming, AnimationState, AnimationTickResult
+from xa_cases import fixture, clip_table, numeric_reference, looping_fixture
+
+
+class NativeXATests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.lib = library()
+
+    def buffers(self, count=512):
+        return (AnimationClip * count)(), (AnimationTiming * count)()
+
+    def test_recorded_original_clip_loader_output(self):
+        reference = json.loads((ROOT / "tests/fixtures/xa-clips-original-vectors.json").read_text())
+        data, _ = fixture(all_sections=False)
+        clips, timing = self.buffers()
+        self.assertEqual(self.lib.dc_xa_load_clips(data, len(data), clips, timing, 512), 0)
+        self.assertEqual(reference["records"], 512)
+        self.assertEqual(hashlib.sha256(bytes(clips) + bytes(timing)).hexdigest(), reference["output_sha256"])
+
+    def test_all_sections_and_exact_serialized_boundaries(self):
+        data, offset = fixture()
+        info = XAInfo()
+        self.assertEqual(self.lib.dc_xa_probe(data, len(data), C.byref(info)), 0)
+        self.assertEqual(info.record(), {"material_tracks": 1, "event_tracks": 1,
+            "morph_index_sets": 1, "morph_vector_sets": 1, "morph_tracks": 1,
+            "bone_tracks": 1, "has_clip_table": 1, "clip_count": 512,
+            "clip_table_offset": offset, "parsed_bytes": len(data)})
+
+    def test_all_slots_float_bits_and_output_canaries(self):
+        data, _ = fixture()
+        clips, timing = self.buffers(513)
+        C.memset(clips, 0xa5, C.sizeof(clips))
+        C.memset(timing, 0x5a, C.sizeof(timing))
+        extra_clip, extra_timing = bytes(clips[512]), bytes(timing[512])
+        self.assertEqual(self.lib.dc_xa_load_clips(data, len(data), clips, timing, 513), 0)
+        expected_clips, expected_timing = numeric_reference(clip_table())
+        self.assertEqual(bytes(clips)[:len(expected_clips)], expected_clips)
+        self.assertEqual(bytes(timing)[:len(expected_timing)], expected_timing)
+        self.assertEqual((bytes(clips[512]), bytes(timing[512])), (extra_clip, extra_timing))
+
+    def test_every_truncation_preserves_probe_output(self):
+        data, _ = fixture()
+        source = C.create_string_buffer(data)
+        info = XAInfo()
+        C.memset(C.byref(info), 0xa5, C.sizeof(info))
+        before = bytes(info)
+        for size in range(len(data)):
+            self.assertEqual(self.lib.dc_xa_probe(source, size, C.byref(info)), 3, size)
+            self.assertEqual(bytes(info), before, size)
+
+    def test_unknown_flags_counts_trailing_data_and_bad_tails_preserve_arrays(self):
+        valid, _ = fixture()
+        corrupt = [valid[:-1], valid + b"\0", b"\1\xff\xff\xff\xff",
+                   b"\0\1\xff\xff\xff\xff", b"\0\0\1\xff\xff\xff\xff"]
+        for index in range(4):
+            flags = bytearray(4)
+            flags[index] = 2
+            corrupt.append(bytes(flags))
+        clips, timing = self.buffers()
+        C.memset(clips, 0xa5, C.sizeof(clips))
+        C.memset(timing, 0x5a, C.sizeof(timing))
+        before = bytes(clips), bytes(timing)
+        for data in corrupt:
+            self.assertEqual(self.lib.dc_xa_load_clips(data, len(data), clips, timing, 512), 3)
+            self.assertEqual((bytes(clips), bytes(timing)), before)
+
+    def test_empty_profile_has_no_synthesized_table(self):
+        data, _ = fixture(all_sections=False, has_clips=False)
+        info = XAInfo()
+        self.assertEqual(self.lib.dc_xa_probe(data, len(data), C.byref(info)), 0)
+        self.assertEqual((info.has_clip_table, info.clip_count, info.parsed_bytes), (0, 0, 4))
+        clips, timing = self.buffers()
+        before = bytes(clips), bytes(timing)
+        self.assertEqual(self.lib.dc_xa_load_clips(data, len(data), clips, timing, 512), 6)
+        self.assertEqual((bytes(clips), bytes(timing)), before)
+
+    def test_arguments_capacity_and_overlapping_spans_are_rejected(self):
+        data, _ = fixture()
+        source = C.create_string_buffer(data)
+        clips, timing = self.buffers()
+        self.assertEqual(self.lib.dc_xa_probe(None, 0, C.byref(XAInfo())), 1)
+        self.assertEqual(self.lib.dc_xa_probe(source, len(data), None), 1)
+        self.assertEqual(self.lib.dc_xa_probe(source, len(data), C.cast(source, C.POINTER(XAInfo))), 1)
+        self.assertEqual(self.lib.dc_xa_load_clips(source, len(data), clips, timing, 511), 4)
+        self.assertEqual(self.lib.dc_xa_load_clips(None, 0, clips, timing, 512), 1)
+        self.assertEqual(self.lib.dc_xa_load_clips(source, len(data), None, timing, 512), 1)
+        self.assertEqual(self.lib.dc_xa_load_clips(source, len(data), clips, None, 512), 1)
+        before = source.raw, bytes(clips), bytes(timing)
+        self.assertEqual(self.lib.dc_xa_load_clips(source, len(data),
+            C.cast(source, C.POINTER(AnimationClip)), timing, 512), 1)
+        self.assertEqual(self.lib.dc_xa_load_clips(source, len(data), clips,
+            C.cast(clips, C.POINTER(AnimationTiming)), 512), 1)
+        self.assertEqual((source.raw, bytes(clips), bytes(timing)), before)
+
+    def test_decoded_self_authored_clip_drives_verified_controller(self):
+        data = looping_fixture()
+        clips, timing = self.buffers()
+        self.assertEqual(self.lib.dc_xa_load_clips(data, len(data), clips, timing, 512), 0)
+        state, result = AnimationState(blend=1), AnimationTickResult()
+        for delta, expected in ((125, 1), (1000, 1)):
+            self.assertEqual(self.lib.dc_animation_tick(C.byref(state), clips, timing, 512,
+                delta, 1, 0, C.byref(result)), 0)
+            self.assertEqual((result.sample_count, result.samples[0], state.frame), (1, expected, expected))
+
+
+if __name__ == "__main__":
+    unittest.main()

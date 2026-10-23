@@ -86,6 +86,15 @@ class AnimationTickResult(C.Structure):
     _fields_ = [("previous_frame", C.c_float), ("samples", C.c_float * 2), ("sample_count", C.c_uint32)]
 
 
+class XAInfo(C.Structure):
+    _fields_ = [(name, C.c_uint32) for name in ("material_tracks", "event_tracks",
+        "morph_index_sets", "morph_vector_sets", "morph_tracks", "bone_tracks",
+        "has_clip_table", "clip_count")] + [("clip_table_offset", C.c_size_t), ("parsed_bytes", C.c_size_t)]
+
+    def record(self):
+        return {name: getattr(self, name) for name, _ in self._fields_}
+
+
 class SpritePose(C.Structure):
     _fields_ = [(name, C.c_float) for name in (
         "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
@@ -130,12 +139,12 @@ def compiler_command():
 @lru_cache(maxsize=1)
 def library():
     command = compiler_command()
-    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c",
+    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c",
                ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
                ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -202,6 +211,11 @@ def library():
         C.POINTER(AnimationTiming), C.c_size_t, C.c_uint32, C.c_float,
         C.c_uint32, C.POINTER(AnimationTickResult)]
     lib.dc_animation_tick.restype = C.c_int
+    lib.dc_xa_probe.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(XAInfo)]
+    lib.dc_xa_probe.restype = C.c_int
+    lib.dc_xa_load_clips.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(AnimationClip),
+        C.POINTER(AnimationTiming), C.c_size_t]
+    lib.dc_xa_load_clips.restype = C.c_int
     return lib
 
 

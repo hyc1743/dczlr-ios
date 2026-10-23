@@ -126,7 +126,10 @@ SDK compilation. Downloaded artifacts were inspected as ARM64/iPhoneOS and
 their source hashes matched the pinned commit. These are diagnostic execution
 results, not original game or physical iPhone playability.
 
-The next evidence boundary is XA loading (`0x0040bd50`), pose/material sampling,
+The native XA metadata reader now supplies the verified controller descriptors;
+see [xa-reader.md](xa-reader.md) for the 81-entry framing audit and isolated
+original table-loader comparison. The next evidence boundary is model/resource
+binding, pose/material sampling,
 the fullscreen transition model and final composition. The view's existing
 fixed two-second title preview remains temporary. The complete game and physical
 device playability remain unverified.
