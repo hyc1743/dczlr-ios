@@ -11,10 +11,14 @@
 
 static const char dcRenderQueueKey;
 
+static void dc_write_word_le(uint8_t *out, uint32_t bits) {
+    for (uint32_t i = 0; i < 4; ++i) out[i] = (uint8_t)(bits >> (8 * i));
+}
+
 static void dc_write_float_le(uint8_t *out, float value) {
     uint32_t bits;
     memcpy(&bits, &value, sizeof(bits));
-    for (uint32_t i = 0; i < 4; ++i) out[i] = (uint8_t)(bits >> (8 * i));
+    dc_write_word_le(out, bits);
 }
 
 @implementation DCVulkanSpriteView {
@@ -35,9 +39,12 @@ static void dc_write_float_le(uint8_t *out, float value) {
     dc_animation_state _diagnosticAnimation;
     dc_animation_clip _diagnosticClip;
     dc_animation_timing _diagnosticTiming;
+    dc_material_key _diagnosticMaterialKeys[2];
+    dc_material_value _diagnosticMaterial, _diagnosticBaseline;
     uint32_t _lastDiagnosticTick;
     BOOL _diagnosticTickInitialized;
     BOOL _diagnosticAnimationAdvanced;
+    BOOL _diagnosticMaterialAdvanced;
     dispatch_queue_t _renderQueue;
 }
 + (Class)layerClass { return CAMetalLayer.class; }
@@ -71,6 +78,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         self->_presentedScene = DCVulkanSpriteSceneDiagnostic;
         self->_diagnosticTickInitialized = NO;
         self->_diagnosticAnimationAdvanced = NO;
+        self->_diagnosticMaterialAdvanced = NO;
         self->_width = self->_height = 0;
     });
 }
@@ -158,6 +166,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     _presentedScene = DCVulkanSpriteSceneDiagnostic;
     _diagnosticTickInitialized = NO;
     _diagnosticAnimationAdvanced = NO;
+    _diagnosticMaterialAdvanced = NO;
     _width = _height = 0;
 }
 - (void)dealloc {
@@ -201,6 +210,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     dc_vk_sprite_item draws[5] = {0};
     size_t drawCount = 0;
     BOOL animationMoved = NO;
+    BOOL materialMoved = NO;
     if (showTitle) {
         /* The original title assets and hit regions use 1024x768 coordinates. */
         float scale = fminf((float)_width / 1024.0f, (float)_height / 768.0f);
@@ -261,12 +271,22 @@ static void dc_write_float_le(uint8_t *out, float value) {
         if (!_diagnosticTickInitialized) {
             /* Self-authored XA bytes exercise the real resource-to-controller
              * path. No original names, keys or game payloads are supplied. */
-            NSMutableData *fixture = [NSMutableData dataWithLength:8 + DC_XA_CLIP_COUNT * DC_XA_CLIP_RECORD_BYTES];
+            const size_t keysOffset = 13, tableOffset = 160;
+            NSMutableData *fixture = [NSMutableData dataWithLength:tableOffset + 4 + DC_XA_CLIP_COUNT * DC_XA_CLIP_RECORD_BYTES];
             uint8_t *bytes = fixture.mutableBytes;
-            bytes[3] = 1;
-            dc_write_float_le(bytes + 4 + 64, 18.0f);
-            dc_write_float_le(bytes + 4 + 76, 6.283185307179586f);
-            bytes[4 + 80] = 1;
+            bytes[0] = 1;
+            dc_write_word_le(bytes + 1, 1); /* One material track with an empty name. */
+            dc_write_word_le(bytes + 9, 2);
+            for (uint32_t key = 0; key < 2; ++key) {
+                for (uint32_t component = 0; component < DC_MATERIAL_COMPONENTS; ++component)
+                    dc_write_float_le(bytes + keysOffset + key * 72 + component * 4, 1.0f);
+                dc_write_word_le(bytes + keysOffset + key * 72 + 68, key * 8);
+            }
+            dc_write_float_le(bytes + keysOffset + 12, 0.35f);
+            bytes[tableOffset - 1] = 1;
+            dc_write_float_le(bytes + tableOffset + 64, 18.0f);
+            dc_write_float_le(bytes + tableOffset + 76, 6.283185307179586f);
+            bytes[tableOffset + 80] = 1;
             dc_animation_clip clips[DC_XA_CLIP_COUNT];
             dc_animation_timing timing[DC_XA_CLIP_COUNT];
             dc_status status = dc_xa_load_clips(bytes, fixture.length, clips, timing, DC_XA_CLIP_COUNT);
@@ -274,6 +294,11 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 return [NSString stringWithFormat:@"Native XA fixture rejected: %d", status];
             _diagnosticClip = clips[0];
             _diagnosticTiming = timing[0];
+            status = dc_xa_load_material_keys(bytes, fixture.length, 0, _diagnosticMaterialKeys, 2);
+            if (status != DC_OK)
+                return [NSString stringWithFormat:@"Native XA material keys rejected: %d", status];
+            _diagnosticMaterial = _diagnosticMaterialKeys[0].value;
+            _diagnosticBaseline = _diagnosticMaterial;
             _diagnosticAnimation = (dc_animation_state){.blend = 1};
         }
         dc_animation_tick_result update;
@@ -284,12 +309,18 @@ static void dc_write_float_le(uint8_t *out, float value) {
         _diagnosticTickInitialized = YES;
         _lastDiagnosticTick = tick;
         animationMoved = delta > 0 && update.samples[0] != update.previous_frame;
+        float oldAlpha = _diagnosticMaterial.components[3];
+        dc_status materialStatus = dc_material_sample(_diagnosticMaterialKeys, 2, &_diagnosticBaseline,
+            update.samples[0], &_diagnosticMaterial);
+        if (materialStatus != DC_OK)
+            return [NSString stringWithFormat:@"Native material sampling failed: %d", materialStatus];
+        materialMoved = animationMoved && oldAlpha != _diagnosticMaterial.components[3];
         float side = fminf(_width, _height) * 0.4f;
         dc_vk_sprite_item *item = &draws[drawCount++];
         item->texture = _texture; item->blend_mode = 3; item->point_filter = 1;
         item->pose = (dc_sprite_pose){.width = side, .height = side,
             .x = _width * (0.5f + x * 0.3f), .y = _height * (0.5f - y * 0.3f), .z = 0.5f,
-            .origin_x = 0.5f, .origin_y = 0.5f, .scale_x = 1, .scale_y = 1, .alpha = 1,
+            .origin_x = 0.5f, .origin_y = 0.5f, .scale_x = 1, .scale_y = 1, .alpha = _diagnosticMaterial.components[3],
             .rotation = update.samples[0], .red = 1, .green = 1, .blue = 1,
             .u0 = 0, .u1 = 1, .v0 = 0, .v1 = 1};
     }
@@ -304,12 +335,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
     _presentedScene = showTitle ? DCVulkanSpriteSceneTitle :
         (_startupTexture ? DCVulkanSpriteSceneStartupCard : DCVulkanSpriteSceneDiagnostic);
     if (animationMoved) _diagnosticAnimationAdvanced = YES;
+    if (materialMoved) _diagnosticMaterialAdvanced = YES;
     ++_presentedFrames;
     return nil;
 }
 - (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching
-            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL))completion {
-    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO); return; }
+            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL))completion {
+    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO); return; }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     CGSize drawableSize = layer.drawableSize;
     uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
@@ -320,7 +352,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
             NSString *device = self->_deviceName ?: @"";
             DCVulkanSpriteScene scene = self->_presentedScene;
             BOOL advanced = self->_diagnosticAnimationAdvanced;
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced); });
+            BOOL materialAdvanced = self->_diagnosticMaterialAdvanced;
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced); });
         }
     });
 }

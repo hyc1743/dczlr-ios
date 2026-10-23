@@ -56,6 +56,13 @@ This validates framing/numeric fields, not key sampling or model linking. See
 rotation and requires a positive-delta update before its simulator gate passes. See
 [animation-reconstruction.md](docs/animation-reconstruction.md).
 
+The native material sampler and interval/fallback logic now match 826 isolated
+original-function calls. XA material-key extraction covers 487 tracks and 2,902
+records in the recognized local entries. The checker connects self-authored XA
+keys to the sampler and Vulkan sprite alpha. Actual XX material binding,
+baseline capture and startup composition remain incomplete. See
+[material-sampling.md](docs/material-sampling.md).
+
 Source `f9d275a` passed 86 portable tests, device IPA packaging and the iPhone
 simulator checker in run `39976603576`. The checker reported native XA fixture
 decoding and a positive-delta animation update followed by successful

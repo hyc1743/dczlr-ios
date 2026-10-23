@@ -1,6 +1,7 @@
 #ifndef DC_XA_H
 #define DC_XA_H
 #include "dc_animation.h"
+#include "dc_material.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -12,6 +13,11 @@ typedef struct dc_xa_info {
     uint32_t morph_tracks, bone_tracks, has_clip_table, clip_count;
     size_t clip_table_offset, parsed_bytes;
 } dc_xa_info;
+
+typedef struct dc_xa_material_track {
+    size_t name_offset, keys_offset;
+    uint32_t name_length, key_count;
+} dc_xa_material_track;
 
 /* Validate the admitted serialized XA profile without allocating or modifying
  * input: four 0/1 section flags, bounded variable blocks and (when present) the
@@ -29,6 +35,18 @@ DC_API dc_status dc_xa_probe(const void *bytes, size_t length, dc_xa_info *out);
  * two output array spans must not overlap. No raw names or key data are copied. */
 DC_API dc_status dc_xa_load_clips(const void *bytes, size_t length,
     dc_animation_clip *clips, dc_animation_timing *timing, size_t capacity);
+
+/* Material tracks retain file order. Name spans refer to encoded opaque input
+ * bytes; keys are 17 binary32 components and a signed timestamp per 72-byte
+ * record. The whole input profile is validated before returning a view or
+ * writing any keys. Track views contain offsets, not borrowed pointers.
+ * Model name matching, target binding and baseline capture are not performed.
+ * Missing tracks return DC_NOT_FOUND. Failures leave outputs unchanged.
+ * Input/output spans must not overlap. Empty tracks admit null keys/capacity 0. */
+DC_API dc_status dc_xa_material_track_at(const void *bytes, size_t length,
+    uint32_t index, dc_xa_material_track *out);
+DC_API dc_status dc_xa_load_material_keys(const void *bytes, size_t length,
+    uint32_t index, dc_material_key *keys, size_t capacity);
 
 #ifdef __cplusplus
 }

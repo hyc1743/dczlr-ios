@@ -29,6 +29,7 @@ final class SpritePresenter: NSObject {
     private var displayLink: CADisplayLink?
     private var lastReportedScene: DCVulkanSpriteScene?
     private var reportedAnimationAdvance = false
+    private var reportedMaterialAdvance = false
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -58,7 +59,7 @@ final class SpritePresenter: NSObject {
         guard model.active, !failed, !renderPending, let view = view else { return }
         renderPending = true
         view.requestDraw(atX: model.x, y: model.y, time: ProcessInfo.processInfo.systemUptime - start,
-            touching: model.touchActive) { [weak self] error, device, scene, animationAdvanced in
+            touching: model.touchActive) { [weak self] error, device, scene, animationAdvanced, materialAdvanced in
                 guard let self = self else { return }
                 self.renderPending = false
                 if let error = error {
@@ -84,6 +85,10 @@ final class SpritePresenter: NSObject {
                     self.reportedAnimationAdvance = true
                     self.model.record("自制 XA 数据已通过原生读取并用于动画更新", event: "PORTLAB_NATIVE_XA_FIXTURE_LOADED")
                     self.model.record("原生 XA 读取与动画更新已推进精灵旋转并完成呈现", event: "PORTLAB_NATIVE_ANIMATION_ADVANCED")
+                }
+                if scene == .diagnostic, materialAdvanced, !self.reportedMaterialAdvance {
+                    self.reportedMaterialAdvance = true
+                    self.model.record("原生 XA 材质采样已改变精灵透明度并完成呈现", event: "PORTLAB_NATIVE_MATERIAL_ADVANCED")
                 }
             }
     }

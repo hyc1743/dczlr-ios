@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(PortLabNative C)
-add_library(portlab_native STATIC resource/dc_pp.c resource/dc_image.c resource/dc_xa.c render/dc_sprite.c render/dc_sprite_vertices.c game/dc_startup.c game/dc_animation.c)
+add_library(portlab_native STATIC resource/dc_pp.c resource/dc_image.c resource/dc_xa.c render/dc_sprite.c render/dc_sprite_vertices.c game/dc_startup.c game/dc_animation.c game/dc_material.c)
 target_include_directories(portlab_native PUBLIC include)
 target_compile_features(portlab_native PUBLIC c_std_11)
 if(NOT WIN32)

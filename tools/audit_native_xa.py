@@ -3,8 +3,9 @@ import argparse
 import ctypes as C
 import hashlib
 import json
+import struct
 from pathlib import Path
-from native_core import library, XAInfo, AnimationClip, AnimationTiming, PPArchive
+from native_core import library, XAInfo, AnimationClip, AnimationTiming, PPArchive, XAMaterialTrack, MaterialKey
 from xa_cases import numeric_reference
 
 
@@ -53,17 +54,42 @@ def audit(directory, reference=None):
                     if status != 6:
                         raise ValueError("Missing table was synthesized")
                     decoded_digest = None
+                material_digest = hashlib.sha256()
+                material_keys = 0
+                offset = 5 if data[0] == 1 else 0
+                for track_index in range(info.material_tracks):
+                    name_length = struct.unpack_from("<I", data, offset)[0]
+                    name_offset = offset + 4
+                    count = struct.unpack_from("<I", data, name_offset + name_length)[0]
+                    keys_offset = name_offset + name_length + 4
+                    view = XAMaterialTrack()
+                    if lib.dc_xa_material_track_at(data, len(data), track_index, C.byref(view)):
+                        raise ValueError("Native material track lookup failed")
+                    if (view.name_offset, view.name_length, view.keys_offset, view.key_count) != (name_offset, name_length, keys_offset, count):
+                        raise ValueError("Material track view differs from independent serialized cursor")
+                    keys = (MaterialKey * count)()
+                    if lib.dc_xa_load_material_keys(data, len(data), track_index, keys, count):
+                        raise ValueError("Native material key decode failed")
+                    serialized = data[keys_offset:keys_offset + count * 72]
+                    if bytes(keys) != serialized:
+                        raise ValueError("Native material keys differ from serialized bytes")
+                    material_keys += count
+                    material_digest.update(bytes(keys))
+                    offset = keys_offset + count * 72
                 rows.append({"archive": path.name, "index": index, "bytes": entry.size,
                              "source_sha256": digest, "info": info.record(),
-                             "numeric_table_sha256": decoded_digest, "status": "metadata_and_numeric_bytes_match"})
+                             "numeric_table_sha256": decoded_digest, "material_keys": material_keys,
+                             "material_keys_sha256": material_digest.hexdigest(), "status": "metadata_and_numeric_bytes_match"})
     if references is not None and set(references) != {(r["archive"], r["index"]) for r in rows}:
         raise ValueError("Independent reference entry coverage differs")
     return {"schema": 1, "method": "native XA framing plus serialized-field byte comparison",
             "independent_framing_reference": references is not None,
             "entries": rows, "verified_xa": len(rows), "decoded_clip_records": sum(r["info"]["clip_count"] for r in rows),
+            "material_tracks": sum(r["info"]["material_tracks"] for r in rows),
+            "material_key_records": sum(r["material_keys"] for r in rows),
             "unrecognized_archives_not_inspected": unrecognized,
             "payload_exported": False, "names_or_pose_values_exported": False,
-            "pose_material_sampling": "not verified", "game_playability": "not_verified"}
+            "pose_material_sampling": "not verified by this audit; material key bytes only", "game_playability": "not_verified"}
 
 
 if __name__ == "__main__":

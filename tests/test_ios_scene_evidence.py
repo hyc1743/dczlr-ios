@@ -8,6 +8,19 @@ from check_ios_sprite import presented_scenes, scene_evidence, scene_ready
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_material_sampling_requires_changed_sample_and_presentation_report(self):
+        log = ("2026-10-23T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
+               "2026-10-23T12:00:01Z PORTLAB_NATIVE_ANIMATION_ADVANCED submitted\n"
+               "2026-10-23T12:00:01Z PORTLAB_NATIVE_XA_FIXTURE_LOADED submitted\n")
+        self.assertFalse(scene_ready(log, "checker", True, True, True))
+        with self.assertRaises(ValueError):
+            scene_evidence(log, "checker", True, True, True)
+        echoed = log + "2026-10-23T12:00:02Z command echo PORTLAB_NATIVE_MATERIAL_ADVANCED\n"
+        self.assertFalse(scene_ready(echoed, "checker", True, True, True))
+        observed = log + "2026-10-23T12:00:02Z PORTLAB_NATIVE_MATERIAL_ADVANCED submitted\n"
+        self.assertEqual(scene_evidence(observed, "checker", True, True, True)["native_material_sampling"],
+                         "changed alpha sample and presentation reported")
+
     def test_xa_pipeline_requires_its_own_report_after_scene_and_motion(self):
         log = ("2026-10-23T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
                "2026-10-23T12:00:01Z PORTLAB_NATIVE_ANIMATION_ADVANCED submitted\n")

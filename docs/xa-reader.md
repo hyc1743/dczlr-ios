@@ -80,5 +80,10 @@ the pinned source hashes; the device IPA was inspected as unsigned ARM64/iPhoneO
 with the matching manifest and no PP/XX/XA/resource-part/EXE bundle members.
 This verifies the self-authored diagnostic pipeline, not original game flow.
 
-Original resource binding, material/pose sampling, the startup transition
+Material-track views and numeric key extraction now connect the reader to the
+separately reconstructed one-track sampler. The local audit covers 487 material
+tracks and 2,902 key records; decoded bytes and independent cursor offsets match.
+See [material-sampling.md](material-sampling.md) for sampling semantics and limits.
+
+Original model resource binding, pose sampling, the startup transition
 composition and subsequent game flow remain incomplete.

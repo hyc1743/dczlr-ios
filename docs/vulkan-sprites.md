@@ -124,6 +124,12 @@ screenshot shows the self-authored sprite with its pipeline status. The
 associated device IPA and iPhoneOS native archive were downloaded and inspected;
 physical-device behavior and actual game playability remain unverified.
 
+The next checker revision includes self-authored XA material keys. Its decoded
+animation sample now drives the reconstructed material sampler and sets Vulkan
+sprite alpha. The gate additionally requires a changed alpha followed by
+successful presentation (`PORTLAB_NATIVE_MATERIAL_ADVANCED`). This extends the
+diagnostic pipeline without supplying original models or material baselines.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.

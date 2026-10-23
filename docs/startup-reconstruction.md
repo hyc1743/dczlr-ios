@@ -31,8 +31,12 @@ native request/query operations and 2,916 isolated comparisons are documented in
 blend updates are now also reconstructed, and a synthetic clip table drives the
 complete two-card planner in a host-independent integration test. XA framing and
 numeric table decoding are now implemented separately; original resource binding,
-pose/material sampling and actual transition composition remain missing, so this does
+pose sampling, actual XX material binding and transition composition remain missing, so this does
 not yet connect the startup planner to the Vulkan view.
+
+The scalar material sampler and XA material-key extraction are now implemented
+and separately verified; see [material-sampling.md](material-sampling.md). This
+does not recover the original fullscreen transition model or target baselines.
 
 The original comparisons use unsigned carry branches. Decompiler output alone
 misrepresents their signedness. The native implementation uses explicit unsigned

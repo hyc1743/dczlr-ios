@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 826,
+  "calls": {
+    "pair": 378,
+    "track": 448
+  },
+  "output_sha256": "13ee15a906414993d88fbf2982826a824caf0f8a21f9434ba0d663bd89adb6e2",
+  "original_function_sha256": {
+    "0x416cd0": "0f2241922447da2e72046e4be204861fd6cf9eac72df070f59d28c0790a9fadb",
+    "0x416ee0": "6e1484ed1d6dc39410387ad1663fde42b6e64b4188cab43ce7c535a47cd19e40"
+  },
+  "x87_control_words": [
+    639,
+    895
+  ],
+  "comparison": "exact 17-component output bytes",
+  "execution": "isolated original interpolation and one-track selection with synthetic bounded fallback memcpy",
+  "coverage": "self-authored finite keys; zero/one/duplicate/unordered keys, timestamps near signed limits, extrapolation and preserved components; original model binding and resources excluded",
+  "original_game_resources_used": false,
+  "game_playability": "not_verified"
+}

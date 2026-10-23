@@ -95,6 +95,19 @@ class XAInfo(C.Structure):
         return {name: getattr(self, name) for name, _ in self._fields_}
 
 
+class MaterialValue(C.Structure):
+    _fields_ = [("components", C.c_float * 17)]
+
+
+class MaterialKey(C.Structure):
+    _fields_ = [("value", MaterialValue), ("frame", C.c_int32)]
+
+
+class XAMaterialTrack(C.Structure):
+    _fields_ = [("name_offset", C.c_size_t), ("keys_offset", C.c_size_t),
+                ("name_length", C.c_uint32), ("key_count", C.c_uint32)]
+
+
 class SpritePose(C.Structure):
     _fields_ = [(name, C.c_float) for name in (
         "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
@@ -141,10 +154,10 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c",
                ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -216,6 +229,14 @@ def library():
     lib.dc_xa_load_clips.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(AnimationClip),
         C.POINTER(AnimationTiming), C.c_size_t]
     lib.dc_xa_load_clips.restype = C.c_int
+    lib.dc_xa_material_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAMaterialTrack)]
+    lib.dc_xa_material_track_at.restype = C.c_int
+    lib.dc_xa_load_material_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(MaterialKey), C.c_size_t]
+    lib.dc_xa_load_material_keys.restype = C.c_int
+    lib.dc_material_interpolate.argtypes = [C.POINTER(MaterialKey), C.POINTER(MaterialKey), C.c_float, C.POINTER(MaterialValue)]
+    lib.dc_material_interpolate.restype = C.c_int
+    lib.dc_material_sample.argtypes = [C.POINTER(MaterialKey), C.c_size_t, C.POINTER(MaterialValue), C.c_float, C.POINTER(MaterialValue)]
+    lib.dc_material_sample.restype = C.c_int
     return lib
 
 
