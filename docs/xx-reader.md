@@ -61,3 +61,11 @@ track name and supplies the baseline used by the numeric sampler. The exact
 advancement and successful presentation. This validates the resource chain,
 not a full model renderer or the original startup scene. Full game flow and
 physical-device playability remain unverified.
+
+Source `17e42d72cd288554dfd07d5a94ed0033b1a2075f` passed 111 portable
+tests and 78 ARM64 native tests. Native run `40008122611` compiled the iPhoneOS
+objects, including `dc_xx.o`. App run `40008100005` packaged the unsigned
+device IPA and passed the simulator checker on attempt 2. Attempt 1 timed out
+before any app log; its screenshot showed SpringBoard, and its failed evidence
+was retained. The passing screenshot shows the self-authored checker and its
+log contains all required XX/XA/animation/material presentation markers.

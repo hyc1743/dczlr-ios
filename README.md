@@ -73,6 +73,15 @@ pixels were compared only for the non-character transition's two images.
 Opaque model tails and the unknown archive remain unresolved. See
 [xx-reader.md](docs/xx-reader.md).
 
+Source `17e42d7` passed 111 portable tests, 78 ARM64 macOS native tests,
+iPhoneOS compilation and device IPA packaging. Run `40008100005` passed the
+iPhone 16 Pro/iOS 18.5 checker on attempt 2 after the first simulator launch
+timed out without an app log. The passing log reports XX texture decoding and
+XA material binding, animation advancement and changed alpha presentation;
+its screenshot was inspected. Native run `40008122611` passed separately.
+The unsigned stage IPA remains a diagnostic build; complete game flow and
+physical-device playability are unverified.
+
 Source `3186da4` passed 98 portable tests, device IPA packaging and the iPhone
 simulator checker in run `39980622644`. The checker reported native XA fixture
 decoding, animation advancement and changed material alpha followed by
