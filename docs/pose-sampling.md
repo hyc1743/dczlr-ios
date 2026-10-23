@@ -78,3 +78,12 @@ its planar translation, rotation and uniform scale into the checker sprite.
 positive animation delta is successfully presented. This is a resource and
 numeric integration check. The original transition mesh renderer, node
 hierarchy, remaining game flow and physical-device playability are unfinished.
+
+Source `6a0423dce789f4c920b3d742f39c4060ebc57e94` passed 119 portable
+tests and 85 ARM64 macOS native tests. Native run `40016609285` compiled the
+iPhoneOS archive including `dc_pose.o`. App run `40016597965` successfully
+packaged the unsigned device IPA and ran the iPhone 16 Pro/iOS 18.5 checker.
+The exact pose-advanced marker accompanies the existing XX/XA/animation/material
+presentation markers. The screenshot was inspected and shows the self-authored
+checker with the sampled planar node transform. Source hashes, platform,
+unsigned state and bundled manifest were verified on the downloaded artifacts.

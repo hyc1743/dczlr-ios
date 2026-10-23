@@ -89,6 +89,13 @@ its screenshot was inspected. Native run `40008122611` passed separately.
 The unsigned stage IPA remains a diagnostic build; complete game flow and
 physical-device playability are unverified.
 
+Source `6a0423d` additionally passed 119 portable tests, 85 ARM64 native tests,
+iPhoneOS compilation and unsigned IPA packaging. App run `40016597965` passed
+the checker with the independent changed-node-transform presentation marker;
+its screenshot was inspected. Native run `40016609285` passed separately.
+This validates the self-authored local-pose resource chain. Original startup
+composition, complete game flow and physical-device playability remain open.
+
 Source `3186da4` passed 98 portable tests, device IPA packaging and the iPhone
 simulator checker in run `39980622644`. The checker reported native XA fixture
 decoding, animation advancement and changed material alpha followed by
