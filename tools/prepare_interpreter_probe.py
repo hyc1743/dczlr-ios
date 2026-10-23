@@ -88,6 +88,32 @@ def fix_single_thread_vulkan(source):
         "#else\n    return 0;\n    }();\n#endif\n#else\n    (void)removed;")
 
 
+def fix_optional_fairness_statistics(source):
+    start_marker = "    static U64 lastThrottleUs = 0;"
+    end_marker = "\n    // What the guest spent inside the host's present path"
+    if source.count(start_marker) != 1 or source.count(end_marker) != 1:
+        raise ValueError("Vulkan fairness diagnostics changed")
+    start = source.index(start_marker)
+    end = source.index(end_marker, start)
+    body = source[start:end]
+    source = source[:start] + "#ifdef BOXEDWINE_MULTI_THREADED\n" + body + '''
+#else
+    klog_fmt("iOS guest performance: %.1f Vulkan frames/sec and %.1f X11 "
+             "patches/sec over %u ms; host CPU %.2f cores busy; "
+             "native-thread fairness counters do not apply to this interpreter",
+             (double)frames / wallSeconds,
+             (double)x11PatchDelta / wallSeconds, elapsed, coresBusy);
+#endif
+''' + source[end:]
+    update = ("    lastThrottleUs = throttleUs;\n"
+              "    lastThrottleCount = throttleCount;\n"
+              "    lastGetrusage = getrusage;\n"
+              "    lastSchedYield = schedYield;")
+    if source.count(update) != 1:
+        raise ValueError("Fairness diagnostic update changed")
+    return source.replace(update, "#ifdef BOXEDWINE_MULTI_THREADED\n" + update + "\n#endif")
+
+
 def prepare(root, mode="cpu-probe"):
     root = root.resolve()
     revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
@@ -105,7 +131,8 @@ def prepare(root, mode="cpu-probe"):
     thread = root / "include/kthread.h"
     fixed_thread = fix_rusage_cache_scope(thread.read_text(encoding="utf-8"))
     vulkan = root / "platform/sdl/kvulkanSDL.cpp"
-    fixed_vulkan = fix_single_thread_vulkan(vulkan.read_text(encoding="utf-8"))
+    fixed_vulkan = fix_optional_fairness_statistics(
+        fix_single_thread_vulkan(vulkan.read_text(encoding="utf-8")))
     source = source.replace(flag, "\n")
     cpu_cmake = '''
 # PortLab experiment: the interpreter is selected by omitting the JIT define.

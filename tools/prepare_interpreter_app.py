@@ -63,6 +63,20 @@ def stage(root):
 ''' + text[end:]
     runtime.write_text(text, encoding="utf-8")
 
+    # These are optional imports, not local weak definitions. Darwin needs
+    # weak_import so the existing nullptr checks survive absent DXMT libraries.
+    optional_imports = [
+        ("BVNGuestOverlay.mm", 'extern "C" uint64_t mythic_get_present_count(void) __attribute__((weak));'),
+        ("BVNAppDelegate.mm", 'extern "C" void mythic_set_vsync_locked(int mode) __attribute__((weak));'),
+    ]
+    for filename, declaration in optional_imports:
+        file = root / "ios/runtime/src" / filename
+        original = file.read_text(encoding="utf-8")
+        updated = replace_once(original, declaration,
+                               declaration.replace("((weak))", "((weak_import))"),
+                               "Optional DXMT import " + filename)
+        file.write_text(updated, encoding="utf-8")
+
     header = root / "ios/runtime/include/BVNRuntime.h"
     text = replace_once(header.read_text(encoding="utf-8"),
                         "void BVNGuestPointerSettingsSet(BVNPointerSettings settings);",
