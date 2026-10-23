@@ -1,0 +1,17 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "state_bytes": 59960,
+  "cases": 3,
+  "initial_patterns": [
+    165,
+    90,
+    255
+  ],
+  "output_sha256": "a565d4e58d7a5d815a7db890cbf868e444646b784d0314d0db0bceb85fea21b3",
+  "original_function_sha256": {
+    "0x50d920": "f0439b02106276668fe07e487c3defc93c0d84ebb98f14db962715efdbd92116"
+  },
+  "execution": "isolated new-game numeric initialization with exact synthetic memset boundaries",
+  "original_game_resources_used": false,
+  "actual_gameplay_or_save_file": "not verified"
+}

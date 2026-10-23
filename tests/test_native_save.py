@@ -52,5 +52,18 @@ class NativeSaveTests(unittest.TestCase):
         self.assertEqual(self.lib.dc_save_transform(None,0),0)
         self.assertEqual(self.lib.dc_save_transform(source,0x80000000),1)
 
+    def test_original_new_game_state_initialization_and_capacity_canary(self):
+        reference=json.loads((ROOT/'tests/fixtures/game-state-original-vectors.json').read_text())
+        length=reference['state_bytes']
+        for pattern in reference['initial_patterns']:
+            out=C.create_string_buffer(bytes([pattern])*(length+8),length+8)
+            before=out.raw
+            self.assertEqual(self.lib.dc_game_state_init(out,length-1),4)
+            self.assertEqual(out.raw,before)
+            self.assertEqual(self.lib.dc_game_state_init(out,length),0)
+            self.assertEqual(hashlib.sha256(out.raw[:length]).hexdigest(),reference['output_sha256'])
+            self.assertEqual(out.raw[length:],bytes([pattern])*8)
+        self.assertEqual(self.lib.dc_game_state_init(None,length),1)
+
 
 if __name__=='__main__':unittest.main()

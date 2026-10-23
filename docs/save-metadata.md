@@ -22,3 +22,13 @@ overlays, and never rewrites the file. This restores the title unlock decision;
 it does not implement load-game restoration, save-slot UI, full save validation,
 version migration or actual gameplay save writing. Existing diagnostic position
 files remain separate from game saves.
+
+`dc_game_state_init` restores the numeric new-game initialization at
+`0x0050d920`. It initializes the original three contiguous state regions
+(59,960 bytes), initial status/score fields and progression tables with explicit
+little-endian words. Three isolated original comparisons with distinct prior
+memory contents produce the same exact state digest; native replay verifies
+every byte and the surrounding capacity canary. This is runtime state
+initialization, not a claim that this blob alone is a valid serialized slot.
+The new-game dispatcher, continued game-state mutations and complete save-file
+layout still require integration before actual save/load is available.

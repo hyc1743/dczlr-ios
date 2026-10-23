@@ -340,6 +340,8 @@ def library():
     lib.dc_model_project.restype = C.c_int
     lib.dc_script_find.argtypes = [C.c_void_p,C.c_size_t,C.c_size_t,C.c_uint32,C.POINTER(ScriptRecord)]
     lib.dc_script_find.restype = C.c_int
+    lib.dc_game_state_init.argtypes = [C.c_void_p,C.c_size_t]
+    lib.dc_game_state_init.restype = C.c_int
     lib.dc_save_transform.argtypes = [C.c_void_p,C.c_size_t]
     lib.dc_save_transform.restype = C.c_int
     lib.dc_save_get_unlocks.argtypes = [C.c_void_p,C.c_size_t,C.POINTER(SaveUnlocks)]
