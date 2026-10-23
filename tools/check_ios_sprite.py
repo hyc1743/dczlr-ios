@@ -9,7 +9,7 @@ import time
 
 
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
-          "title": "original title-screen background and menu layers"}
+          "title": "title-screen background and menu layers"}
 
 
 def presented_scenes(log):

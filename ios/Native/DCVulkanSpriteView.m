@@ -110,6 +110,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
     }
     uintptr_t handles[9] = {0};
     uint32_t widths[9] = {0}, heights[9] = {0};
+    const uint32_t logicalWidths[9]={64,1024,256,256,256,256,256,256,256};
+    const uint32_t logicalHeights[9]={64,768,48,48,48,48,48,48,48};
     for (uint32_t i = 0; i < 9; ++i) {
         DCDecodedImage *image = [archive decodeImageAtIndex:indices[i] inputLimit:8 * 1024 * 1024
             outputLimit:64 * 1024 * 1024 error:&error];
@@ -118,8 +120,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
             for (uint32_t j = 0; j < i; ++j) dc_vk_sprite_remove_texture(_renderer, handles[j]);
             return NO;
         }
-        widths[i] = image.width;
-        heights[i] = image.height;
+        /* Original title setup supplies logical sprite sizes separately
+         * from the image payload dimensions, including patched textures. */
+        widths[i] = logicalWidths[i];
+        heights[i] = logicalHeights[i];
     }
     memcpy(_titleTextures, handles, sizeof(handles));
     memcpy(_titleWidths, widths, sizeof(widths));

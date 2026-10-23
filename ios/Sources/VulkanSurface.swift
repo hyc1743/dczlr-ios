@@ -67,11 +67,13 @@ final class SpritePresenter: NSObject {
                 if let error = error {
                     self.failed = true
                     self.displayLink?.isPaused = true
+                    self.model.gameError = "无法继续运行，请查看应用目录中的 log.txt。"
                     self.model.record("Vulkan 初始化或绘制失败：\(error)")
                     return
                 }
                 if self.lastReportedScene != scene {
                     self.lastReportedScene = scene
+                    if scene != .diagnostic { self.model.gameResourcesActive = true }
                     switch scene {
                     case .diagnostic:
                         self.model.record("Vulkan / MoltenVK 已显示自制检查精灵（\(device)）", event: "PORTLAB_SCENE_PRESENTED=checker")

@@ -7,6 +7,8 @@ final class LabModel: ObservableObject {
     @Published var y: Float = 0
     @Published var touchActive = false
     @Published var active = true
+    @Published var gameResourcesActive = false
+    @Published var gameError: String?
     @Published var status = "等待 Vulkan 初始化"
     private var player: AVAudioPlayer?
     private let root: URL
