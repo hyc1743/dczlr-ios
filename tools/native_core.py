@@ -138,6 +138,15 @@ class SaveUnlocks(C.Structure):
     _fields_ = [("edit",C.c_uint32),("extra",C.c_uint32)]
 
 
+class ScriptSpan(C.Structure):
+    _fields_ = [("offset",C.c_size_t),("length",C.c_size_t)]
+
+
+class ScriptRecord(C.Structure):
+    _fields_ = [("header",ScriptSpan),("speaker",ScriptSpan),("body",ScriptSpan),
+                ("marker_offset",C.c_size_t),("next_offset",C.c_size_t),("frame",C.c_uint32)]
+
+
 class SceneNode(C.Structure):
     _fields_ = [("parent", C.c_uint32), ("modifier", C.c_uint32),
                 ("hidden", C.c_uint8), ("billboard", C.c_uint8), ("reserved", C.c_uint8 * 2),
@@ -226,12 +235,12 @@ def compiler_command():
 @lru_cache(maxsize=1)
 def library():
     command = compiler_command()
-    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c",
+    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c",
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
                ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -329,6 +338,8 @@ def library():
         function.restype=C.c_int
     lib.dc_model_project.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t]
     lib.dc_model_project.restype = C.c_int
+    lib.dc_script_find.argtypes = [C.c_void_p,C.c_size_t,C.c_size_t,C.c_uint32,C.POINTER(ScriptRecord)]
+    lib.dc_script_find.restype = C.c_int
     lib.dc_save_transform.argtypes = [C.c_void_p,C.c_size_t]
     lib.dc_save_transform.restype = C.c_int
     lib.dc_save_get_unlocks.argtypes = [C.c_void_p,C.c_size_t,C.POINTER(SaveUnlocks)]
