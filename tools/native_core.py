@@ -33,6 +33,28 @@ class ImageInfo(C.Structure):
     _fields_ = [("width", C.c_uint32), ("height", C.c_uint32), ("rgba_bytes", C.c_size_t)]
 
 
+class SpriteDraw(C.Structure):
+    _fields_ = [("vertex_buffer", C.c_size_t), ("texture", C.c_size_t),
+                ("blend_mode", C.c_uint8), ("hidden", C.c_uint8),
+                ("point_filter", C.c_uint8), ("software_vertex", C.c_uint8)]
+
+
+class SpriteCommand(C.Structure):
+    _fields_ = [("kind", C.c_uint32), ("argument_count", C.c_uint32),
+                ("arguments", C.c_size_t * 4)]
+
+
+class SpritePlan(C.Structure):
+    _fields_ = [("count", C.c_uint32), ("next_mode", C.c_uint32),
+                ("commands", SpriteCommand * 17)]
+
+    def records(self):
+        if self.count > 17:
+            raise ValueError("Sprite command count exceeds plan capacity")
+        return [[command.kind, list(command.arguments[:command.argument_count])]
+                for command in self.commands[:self.count]]
+
+
 def compiler_command():
     explicit = os.environ.get("DC_NATIVE_COMPILER")
     if explicit:
@@ -50,8 +72,10 @@ def compiler_command():
 @lru_cache(maxsize=1)
 def library():
     command = compiler_command()
-    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c"]
-    inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h"]
+    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c",
+               ROOT / "native/render/dc_sprite.c"]
+    inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
+                        ROOT / "native/include/dc_sprite.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -94,6 +118,8 @@ def library():
     lib.dc_image_decode.argtypes = [C.c_void_p, C.c_size_t, C.c_int, C.c_void_p,
                                     C.c_size_t, C.POINTER(ImageInfo)]
     lib.dc_image_decode.restype = C.c_int
+    lib.dc_sprite_build_plan.argtypes = [C.POINTER(SpriteDraw), C.c_uint32, C.POINTER(SpritePlan)]
+    lib.dc_sprite_build_plan.restype = C.c_int
     return lib
 
 

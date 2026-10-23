@@ -31,20 +31,23 @@ jobs:
           xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" \
             -miphoneos-version-min=17.0 -std=c11 -O2 -Wall -Wextra -Werror \
             -Inative/include -c native/resource/dc_image.c -o out/native-iphoneos/dc_image.o
-          xcrun --sdk iphoneos libtool -static out/native-iphoneos/dc_pp.o out/native-iphoneos/dc_image.o \
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" \
+            -miphoneos-version-min=17.0 -std=c11 -O2 -Wall -Wextra -Werror \
+            -Inative/include -c native/render/dc_sprite.c -o out/native-iphoneos/dc_sprite.o
+          xcrun --sdk iphoneos libtool -static out/native-iphoneos/dc_pp.o out/native-iphoneos/dc_image.o out/native-iphoneos/dc_sprite.o \
             -o out/native-iphoneos/libportlab_native.a
           file out/native-iphoneos/dc_pp.o
           python3 - <<'PY'
           import hashlib,json,os
           from pathlib import Path
           result = {'source_revision': os.environ['GITHUB_SHA'],
-              'modules': ['indexed PP resource reader and byte codec', 'BMP/TGA/EMA RGBA decoder'],
+              'modules': ['indexed PP resource reader and byte codec', 'BMP/TGA/EMA RGBA decoder', 'sprite draw submission plan'],
               'host_tests': 'ARM64 macOS native C',
               'original_reference': 'synthetic decoder output digests recorded offline',
               'iphoneos': 'compiled ARM64 archive; device execution unverified',
               'cpu_emulator_in_product': False, 'game_playability': 'not verified',
               'native_source_sha256': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
-                  for p in ['native/resource/dc_pp.c', 'native/resource/dc_image.c']}}
+                  for p in ['native/resource/dc_pp.c', 'native/resource/dc_image.c', 'native/render/dc_sprite.c']}}
           Path('out/native-iphoneos/build-report.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
       - name: Exercise the actual Apple file adapter on ARM64 macOS

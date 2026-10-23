@@ -78,7 +78,7 @@ def convert(audit, shaders, compiler, validator, output):
         raise ValueError("A nonempty passing shader audit is required")
     records = {}
     for row in audit["shaders"]:
-        if row["status"] != "size_and_disassembly_pass":
+        if row["status"] not in ("size_and_disassembly_pass", "self_authored_fixture_framing_pass"):
             raise ValueError("Unverified input shader")
         digest = row["sha256"]
         if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
@@ -121,6 +121,7 @@ def convert(audit, shaders, compiler, validator, output):
               "compiler_version": version, "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
               "validator_version": validator_version, "validator_sha256": hashlib.sha256(validator.read_bytes()).hexdigest(),
               "target_environment": "vulkan1.0", "strip_debug": True, "shader_records": len(audit["shaders"]),
+              "input_verification": sorted({r["status"] for r in audit["shaders"]}),
               "unique_inputs": len(rows), "passed": sum(r["status"] == "converted_and_validated" for r in rows),
               "failed": sum(r["status"] == "failed" for r in rows), "shaders": rows,
               "gpu_equivalence": "not_tested", "effect_binding_integration": "not_performed",

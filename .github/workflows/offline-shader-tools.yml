@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           root="$RUNNER_TEMP/shader-tools"
           mkdir -p "$root/cross" "$root/headers"
-          cp -R /usr/include/vulkan /usr/include/spirv "$root/headers/"
+          cp -R /usr/include/vulkan /usr/include/vk_video /usr/include/spirv "$root/headers/"
           cd "$root/cross"
           CC=x86_64-w64-mingw32-gcc-posix CFLAGS='-O2 -static-libgcc' \
             LDFLAGS='-static-libgcc' CPPFLAGS="-I$root/headers" \

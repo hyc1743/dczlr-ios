@@ -17,14 +17,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
     fixture = Path(__file__).resolve().parents[1] / "tests/fixtures/effect-synthetic.fxbin"
     data = fixture.read_bytes()
+    reference = json.loads(fixture.with_name("effect-synthetic-reflection.json").read_text(encoding="utf-8"))
+    if hashlib.sha256(data).hexdigest() != reference["binary_sha256"]:
+        raise SystemExit("Self-authored fixture differs from recorded compiler output")
     effect = parse(data)
     records = shader_records(effect, data)
     folder = args.output / "inputs"
     folder.mkdir(parents=True, exist_ok=True)
     for row in records:
         raw = data[row["offset"]:row["offset"] + row["bytes"]]
+        if not row.get("shader_framing", {}).get("valid") or row["shader_framing"]["length"] != len(raw):
+            raise SystemExit("Self-authored fixture shader framing failed")
         (folder / (row["sha256"] + ".dx9")).write_bytes(raw)
-        row["status"] = "size_and_disassembly_pass"
+        row["status"] = "self_authored_fixture_framing_pass"
     audit = {"artifact_sha256": hashlib.sha256(data).hexdigest(), "failed": 0, "shaders": records}
     report = convert(audit, folder, args.compiler.resolve(strict=True), args.validator.resolve(strict=True), args.output)
     if report["failed"] or report["passed"] != 3:

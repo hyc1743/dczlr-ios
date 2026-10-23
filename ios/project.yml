@@ -10,6 +10,7 @@ targets:
       - Sources
       - Native
       - path: ../native/resource
+      - path: ../native/render
       - path: Resources
         type: folder
         buildPhase: resources
