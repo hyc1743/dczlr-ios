@@ -1,0 +1,146 @@
+{
+  "schema": 1,
+  "method": "Microsoft D3DX effect-compiler source reflection followed by CompileEffect",
+  "self_authored_source": "effect-synthetic.fx",
+  "source_sha256": "4bae3d326f33010f5796b7bf83811c11ecfb58b8b094cceeaf8b944739e34189",
+  "binary_sha256": "7059d4fb6ce89d045d344fda44921e30332add531a5c596147a40db7676e9644",
+  "analysis_dll_sha256": {
+    "D3DCompiler_43.dll": "ffedb064adc25328b24dcf145b04045a867a5574c931516d7845babf2a08937f",
+    "D3DX9_43.dll": "36b84dfa0ef9d3ff3549a7ad54d2a8032bd22c879219ee1a959137c4ef8786c4"
+  },
+  "gpu_used": false,
+  "original_game_input_used": false,
+  "parameters": [
+    {
+      "class_": 0,
+      "type": 1,
+      "rows": 1,
+      "columns": 1,
+      "elements": 0,
+      "annotations": 0,
+      "members": 0,
+      "flags": 0,
+      "name": "blend",
+      "semantic": null,
+      "words": [
+        1
+      ]
+    },
+    {
+      "class_": 0,
+      "type": 2,
+      "rows": 1,
+      "columns": 1,
+      "elements": 2,
+      "annotations": 0,
+      "members": 0,
+      "flags": 0,
+      "name": "ops",
+      "semantic": null,
+      "words": [
+        4,
+        1
+      ]
+    },
+    {
+      "class_": 0,
+      "type": 3,
+      "rows": 1,
+      "columns": 1,
+      "elements": 0,
+      "annotations": 1,
+      "members": 0,
+      "flags": 0,
+      "name": "gain",
+      "semantic": null,
+      "words": [
+        1056964608
+      ]
+    },
+    {
+      "class_": 1,
+      "type": 3,
+      "rows": 1,
+      "columns": 4,
+      "elements": 0,
+      "annotations": 0,
+      "members": 0,
+      "flags": 0,
+      "name": "tint",
+      "semantic": null,
+      "words": [
+        1048576000,
+        1056964608,
+        1061158912,
+        1065353216
+      ]
+    },
+    {
+      "class_": 4,
+      "type": 5,
+      "rows": 0,
+      "columns": 0,
+      "elements": 0,
+      "annotations": 0,
+      "members": 0,
+      "flags": 0,
+      "name": "decal",
+      "semantic": null
+    },
+    {
+      "class_": 4,
+      "type": 12,
+      "rows": 0,
+      "columns": 0,
+      "elements": 0,
+      "annotations": 0,
+      "members": 0,
+      "flags": 0,
+      "name": "base",
+      "semantic": null
+    },
+    {
+      "class_": 0,
+      "type": 2,
+      "rows": 1,
+      "columns": 1,
+      "elements": 0,
+      "annotations": 0,
+      "members": 0,
+      "flags": 0,
+      "name": "variant",
+      "semantic": null,
+      "words": [
+        1
+      ]
+    },
+    {
+      "class_": 4,
+      "type": 16,
+      "rows": 0,
+      "columns": 0,
+      "elements": 2,
+      "annotations": 0,
+      "members": 0,
+      "flags": 0,
+      "name": "variants",
+      "semantic": null
+    }
+  ],
+  "techniques": [
+    {
+      "name": "Synthetic",
+      "annotations": 0,
+      "passes": [
+        {
+          "name": "Fixed",
+          "annotations": 0
+        },
+        {
+          "name": "Shaded",
+          "annotations": 0
+        }
+      ]
+    }
+  ]
+}

@@ -1,39 +1,95 @@
-# Effect 转换工具路线
+# Effect 恢复与离线转换
 
-修正：早期宽松解析器的 comment/instruction 长度都少算一个 DWORD，生成的旧 raw IR 不可信。现已修正 token framing，并撤销凭 comment 数量自动挑选 shader 的做法。`build_dx9_ir.py` 只接受 schema 2，并要求显式指定 effect 和 offset；旧数据必须重新生成。详见 `runtime-decision.md`。这些 shader 工具仍不是 x86 游戏执行后端，当前主线是先验证实际 CPU/Windows 运行时。
+当前目标是 ARM64 原生游戏代码和 Vulkan／MoltenVK 图形接口；Wine 或 CPU 解释器不进入
+这条交付路线。下面的微软 D3DX 仅是 Windows 分析机上的离线对照工具，不进入 iOS。
 
-当前主机没有 FXC、DXC、SPIR-V 或 SPIRV-Cross。不要直接根据 D3DX effect 的头字段编写完整解析器。
+## 已恢复的 effect 记录
 
-## 首选解析参考
+`tools/parse_dx9_effect.py` 是新编写的有界读取器。格式核对参考固定 Wine 提交
+`840a939ee526137639665ff5f587224d6a36403f` 的 `dlls/d3dx9_36/effect.c` 和
+`preshader.c`；没有复制其运行时实现。
 
-Wine 的 `d3dx9` effect 实现包含从二进制 effect 初始化的路径，可以作为 D3DX9 effect 格式解析的参考实现。需要将其解析部分隔离成离线工具，只输出结构化 metadata 和 DX9 shader blob；不能把 Wine 的 Windows 图形运行时当作 iOS 后端。
+读取器恢复参数类型、默认数值、数组、sampler、annotation、technique、pass、状态和
+资源／对象绑定。数值、纹理／shader 对象及 sampler 是当前支持的类型；struct 等未支持
+类型明确失败。记录偏移、数量、名字长度、递归层数和对象索引均有限制。参数复制只识别
+经检查的单标量 MOV，其他 FXLC 运算保持 opaque，不把未知表达式当作已转换状态。
 
-## 转换阶段
+固定原始 EXE 的七个资源当前全部通过结构读取，共 256 个顶层参数、44 个 technique、
+45 个 pass、264 条资源绑定。输出保存在本地忽略目录：
 
-1. 用解析器读取一个 `IDR_*` payload，确认 technique、pass、常量、纹理和 shader blob 的范围。
-2. 对每个 shader blob 识别 shader model，并保存原始 SHA-256、输入偏移和长度。
-3. 使用能处理 DX9 shader model 的转换器生成 MSL 或 SPIR-V；输出 `.metallib` 必须在 macOS 上由 Metal 工具链编译。
-4. 写入 `ios/Resources/converted-effects.json`，通过 `tools/validate_effect_manifest.py` 校验。
-5. iOS 运行时只读取已校验的 manifest 和 `.metallib`，原始 `0xFEFF0901` blob 继续拒绝。
+```powershell
+python tools/parse_dx9_effect.py research/target.exe research/rea-pe-resources.json --output research/effect-parser/all-effects.json
+```
 
-## 当前可执行的最小切片
+输入必须与资源证据中的 EXE SHA-256、资源偏移、长度和 SHA-256 一致。输出是语义恢复的
+输入，尚不是运行时可直接加载的 pipeline。
 
-先只处理 `IDR_SPRITE`：一个 effect、一个 technique、一个 pass、alpha blend、关闭深度写入。`ios/Sources/MetalEffect.swift` 的合成 shader 已提供宿主管线替身。得到真实转换产物后，只替换 `MetalEffectFactory` 的 shader library 来源，不改变输入、存档、音频或生命周期代码。
+## shader 范围与独立对照
 
-## Shader 级别切片
+shader 范围取自真实对象／资源记录，再关联到声明和 pass。对 shader 数组保留所有静态
+候选，记录选择表达式的范围和摘要；不猜测游戏运行时实际选中哪个元素。此方法替代
+早先仅按 profile／END token 搜索并猜选 preferred shader 的流程。
 
-对齐 little-endian token 的扫描已经发现多个资源包含 `vs_2_0` / `ps_2_0`，记录在 `research/d3dx-shader-profiles.json`。因此转换器的第一阶段可限定为 DX9 Shader Model 2.0 的 vertex/pixel 指令，先验证 `IDR_WATER` 或 `IDR_GLARE` 的单一像素路径，再扩展到更复杂的 effect。该扫描没有完成指令边界解析；重复 token 可能来自 effect 元数据表。
+`tools/audit_dx9_effect_shaders.py` 使用 hash 固定的微软 `D3DX9_43.dll` 调用
+`D3DXGetShaderSize` 与 `D3DXDisassembleShader`。本地已核对 158 个声明范围，135 个不同
+SHA-256，所有长度相等且反汇编成功：
 
-`tools/extract_shader_candidates.py` 进一步用 DX9 profile token 和 `0x0000FFFF` 结束 token 记录候选范围，输出 `research/d3dx-shader-candidates.json`。候选范围仍需真正的 DX9 bytecode parser 复核，不能直接当作 technique/pass 的最终绑定。
+| Profile | 声明范围数 |
+| --- | ---: |
+| vs_2_0 | 137 |
+| ps_2_0 | 13 |
+| ps_1_1 | 7 |
+| ps_1_4 | 1 |
 
-`tools/parse_dx9_shader.py` 现在会处理 DX9 comment token、指令长度字段和结束 token，输出 `research/d3dx-shader-parse.json`。它做有界的宽松结构验证并记录不确定 token，不声称完成 DX9 语义反编译或 Metal 转换。
+这些统计含相同 shader 在不同 effect／对象中的重复声明。不能据此宣称只需支持 SM2；
+也不能将字节码长度／反汇编通过视为 SPIR-V 转换、GPU 执行或像素一致性通过。
 
-当多个候选重叠时，输出会标记一个保守的 `preferred` 候选（优先包含完整 comment 表且结构最短）。这只是后续 parser 的输入选择提示，不是 technique 归属证明。
+```powershell
+python tools/audit_dx9_effect_shaders.py --exe research/target.exe --evidence research/rea-pe-resources.json --dll-dir .tools/d3dx-reference/build/native/release/bin/x64 --output research/effect-parser/shaders --export-bytecode
+```
 
-`tools/build_dx9_ir.py` 将 preferred 候选转成 `dczlr-dx9-raw-ir-v1`，保存原始 operand token 和有限 opcode 标签。它是转换器输入，不是可执行 shader；下一步需要补寄存器类型、常量映射和控制流语义。
+报告为 `research/effect-parser/shaders/shader-audit.json`，反汇编及可选 `.dx9` 原始字节码
+只保存在本地忽略目录。命令不启动原 EXE，不执行 shader，不创建图形设备。读取库来自
+官方 NuGet 包 `Microsoft.DXSDK.D3DX` 版本 `9.29.952.8`，下载包 SHA-256 为
+`ead0906ae8a26c18a7525da7490127a2110f7c58f18293738283e30e97c6ea4b`。
+脚本在加载 DLL 前核对两份 DLL 的固定摘要，不把它们重新分发到源码仓库或 iOS。
 
-`tools/decode_dx9_operands.py` 在不丢弃原始 token 的前提下输出寄存器号、类型位候选、修饰位候选和相对寻址位候选。输出的字段名称明确带有 `candidate`，直到完整 DX9 指令语法验证前不能用于生成最终 MSL。
+## 精灵路径的新证据
 
-## 证据边界
+`IDR_SPRITE` 有 47 个参数、1 个 `giTechSprite` technique、1 个 `Pass0`，pass 中有
+97 条状态。Vertexshader 和 Pixelshader 都是明确的 NULL。其 140 条资源绑定包含
+134 个已识别的标量参数复制，以及 6 个参数／sampler 引用。
 
-`research/d3dx-effect-probe.json` 只证明资源头和参数名的静态观察；`research/effect-conversion-status.json` 记录转换器缺失。没有 parser 输出 technique/pass，也没有声称任何原始 shader 已经在 Metal 上运行。
+因此此 pass 的恢复重点是固定管线的纹理阶段、采样、混合及顶点行为；没有一个隐藏的
+SM2 精灵 shader 可以直接提取转换。effect 默认状态也不代表每次绘制的最终状态：固定
+EXE 的 Ghidra 导出 `0x00420e60` 静态显示逐精灵设置混合及纹理阶段，`0x00420a60`
+更新 32 字节顶点。两者还需要原函数行为对照和原生重建；本轮没有执行它们。
+
+## 可公开的编译器对照夹具
+
+`tests/fixtures/effect-synthetic.fx` 是本工程自行编写的 effect，涵盖数值默认值、数组、
+annotation、sampler、固定管线 pass、SM2 shader 和动态 shader 数组选择。
+`tools/compile_effect_fixture.py` 用同一固定微软库先读取源码反射信息，再调用
+`CompileEffect`，生成 `.fxbin` 和 `effect-synthetic-reflection.json`。
+测试将二进制读取结果与独立的源码反射逐项对比，并检查 shader 归属、所有截断位置、
+损坏引用、递归 sampler 和未知 preshader 指令。这些夹具不含游戏资源。
+
+```powershell
+python tools/compile_effect_fixture.py --dll-dir .tools/d3dx-reference/build/native/release/bin/x64 --source tests/fixtures/effect-synthetic.fx --output tests/fixtures/effect-synthetic.fxbin --reflection tests/fixtures/effect-synthetic-reflection.json
+python -m unittest discover -s tests -p test_dx9_effect.py -v
+```
+
+便携测试使用已记录的自制夹具，不需要 Windows DLL、原始 EXE 或 GPU。原版 effect 的
+完整微软运行时反射仍未验证；本机尝试创建 D3D9 设备未成功。源码反射夹具和原版 shader
+长度／反汇编对照分别记录，不将它们混称为原版 effect 已执行。
+
+## 下一转换门槛
+
+1. 对恢复出的 SM1／SM2 shader 离线生成 SPIR-V，检查每个 shader 的转换结果与绑定。
+2. 核对常量布局、相对寻址、sampler、坐标约定、pass 状态及游戏运行时参数更新。
+3. 为固定管线精灵生成等价的原生 shader，并重建逐精灵状态和顶点逻辑。
+4. 接入真实 Vulkan／MoltenVK，执行 GPU 回读对照后再接游戏流程。
+5. 若严格要求所有 Metal 库均离线生成，进一步核对 MoltenVK 的离线库加载路径。
+
+现有 `MetalEffect.swift` 仍是诊断场景。`converted-effects.schema.json` 和校验器继续约束
+已有 Metal 产物契约，但尚未产生满足实际游戏渲染要求的转换清单。

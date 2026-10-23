@@ -15,6 +15,14 @@ these decoded buffers to future texture uploads; game rendering and game logic
 remain incomplete. This comparison does not cover textures embedded in models
 or original D3DX sampling and resizing behavior.
 
+The offline effect reader now restores the seven original effect record graphs,
+including pass bindings and shader-array alternatives. Its 158 declared shader
+ranges (135 unique hashes) pass independent D3DX length/disassembly checks.
+The sprite effect explicitly disables both programmable shader stages and still
+needs a native reconstruction of its fixed-function draw behavior. These are
+offline recovery results; no game shader has yet been validated on the iOS GPU.
+See [effect-conversion-tools.md](docs/effect-conversion-tools.md).
+
 ## Previous interpreter experiment
 
 The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.
