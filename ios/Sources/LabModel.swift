@@ -60,14 +60,15 @@ final class LabModel: ObservableObject {
         }
     }
 
-    func record(_ message: String) {
+    func record(_ message: String, event: String? = nil) {
         status = message
         guard logReady else { return }
         do {
             let handle = try FileHandle(forWritingTo: root.appendingPathComponent("log.txt"))
             defer { try? handle.close() }
             try handle.seekToEnd()
-            let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+            let eventPrefix = event.map { $0 + " " } ?? ""
+            let line = "\(ISO8601DateFormatter().string(from: Date())) \(eventPrefix)\(message)\n"
             try handle.write(contentsOf: Data(line.utf8))
         } catch {
             status = "\(message)；日志写入失败：\(error.localizedDescription)"

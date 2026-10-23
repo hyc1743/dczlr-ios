@@ -4,10 +4,22 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_first_frame_does_not_prove_animation_advancement(self):
+        log = "2026-10-23T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
+        self.assertFalse(scene_ready(log, "checker", require_animation=True))
+        with self.assertRaises(ValueError):
+            scene_evidence(log, "checker", require_animation=True)
+        echoed = log + "2026-10-23T12:00:01Z command echo PORTLAB_NATIVE_ANIMATION_ADVANCED\n"
+        self.assertFalse(scene_ready(echoed, "checker", require_animation=True))
+        advanced = log + "2026-10-23T12:00:01Z PORTLAB_NATIVE_ANIMATION_ADVANCED submitted\n"
+        self.assertTrue(scene_ready(advanced, "checker", require_animation=True))
+        self.assertEqual(scene_evidence(advanced, "checker", require_animation=True)["native_animation_tick"],
+                         "positive-delta advancement and presentation reported")
+
     def test_checker_cannot_certify_original_startup_or_title(self):
         log = "2026-10-23T12:00:00Z PORTLAB_SCENE_PRESENTED=checker submitted\n"
         self.assertEqual(presented_scenes(log), ["checker"])

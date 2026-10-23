@@ -98,6 +98,14 @@ resources. These reporting changes passed device and simulator builds in run
 and the inspected screenshot shows the self-authored four-color sprite. This
 does not validate original startup/title resources or physical-device behavior.
 
+The checker rotation now calls the reconstructed native animation tick with a
+self-authored looping clip. `PORTLAB_NATIVE_ANIMATION_ADVANCED` is recorded only
+after a positive-delta tick changes the sample and its frame successfully
+presents. The checker gate waits for this marker as well as its scene marker;
+a static first frame is insufficient. The status text omits machine markers,
+while `log.txt` retains them for verification. Original startup/title previews
+still require their own flow and resource validation.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.

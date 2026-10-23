@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 3920,
+  "output_sha256": "2065961ac0b92c7f94a06f921b25a7d3f12b8eecdb4eb0e6f50ccaa95f013f30",
+  "original_function_sha256": {
+    "0x4046c0": "4202d12bf6f59668ad67532b22732dfca8bebf7b321afb8ebff824dd2ff24f33",
+    "0x464ab0": "938f8e3cffc0145fd4b3a03679caab6bcbf0d20fa4a3d48bdffd2afb96f28c9d",
+    "0x404bd0": "0cf668d3cad1f6a36ab0167e0c4c9cc9676fbcd718c8ef7cfb7531b446fdb434"
+  },
+  "x87_control_words": [
+    639,
+    895
+  ],
+  "return_boundary": "synthetic caller stores original ST0 as binary32",
+  "execution": "isolated numeric frame getter/request/query; synthetic memset and clock",
+  "coverage": "finite synthetic records, both lanes, clamp, loops and chaining; no blend promotion, XA loading, poses, materials or GPU",
+  "comparison": "exact state, iteration bytes, returned binary32 value and query",
+  "original_game_resources_used": false,
+  "game_playability": "not_verified"
+}

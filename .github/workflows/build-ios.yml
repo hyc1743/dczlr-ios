@@ -112,10 +112,10 @@ jobs:
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'not_embedded',
               'native_resource_module': 'PP reader and BMP/TGA/EMA decoder linked; device execution unverified',
-              'graphics_backend': 'native Vulkan sprite integration scene through MoltenVK; game not integrated',
+              'graphics_backend': 'native animation tick drives self-authored Vulkan sprite through MoltenVK; game not integrated',
               'game_playability': 'not_claimed',
               'resource_manifest': 'embedded',
-              'resource_parts': 'published_separately_as_release_assets',
+              'resource_parts': 'external local user files; not bundled or published by this workflow',
               'signing': 'unsigned',
           }
           Path('build/build-report.json').write_text(json.dumps(report, indent=2) + '\n')

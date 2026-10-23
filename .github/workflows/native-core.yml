@@ -50,9 +50,9 @@ jobs:
           import hashlib,json,os
           from pathlib import Path
           result = {'source_revision': os.environ['GITHUB_SHA'],
-              'modules': ['indexed PP resource reader and byte codec', 'BMP/TGA/EMA RGBA decoder', 'sprite draw submission plan and vertex generation', 'two-card startup update action planner', 'animation request and current-loop query'],
+              'modules': ['indexed PP resource reader and byte codec', 'BMP/TGA/EMA RGBA decoder', 'sprite draw submission plan and vertex generation', 'two-card startup update action planner', 'animation request, current-loop query, numeric frame advancement and blend update'],
               'host_tests': 'ARM64 macOS native C',
-              'original_reference': 'synthetic decoder output digests recorded offline',
+              'original_reference': 'isolated original-function output digests and self-authored fixtures',
               'iphoneos': 'compiled ARM64 archive; device execution unverified',
               'cpu_emulator_in_product': False, 'game_playability': 'not verified',
               'native_source_sha256': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest()

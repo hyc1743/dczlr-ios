@@ -77,6 +77,15 @@ class AnimationState(C.Structure):
         return {name: getattr(self, name) for name, _ in self._fields_}
 
 
+class AnimationTiming(C.Structure):
+    _fields_ = [("duration_seconds", C.c_float), ("next_clip", C.c_uint32),
+                ("loop_limit", C.c_uint8), ("chain", C.c_uint8), ("reserved", C.c_uint8 * 2)]
+
+
+class AnimationTickResult(C.Structure):
+    _fields_ = [("previous_frame", C.c_float), ("samples", C.c_float * 2), ("sample_count", C.c_uint32)]
+
+
 class SpritePose(C.Structure):
     _fields_ = [(name, C.c_float) for name in (
         "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
@@ -185,6 +194,14 @@ def library():
     lib.dc_animation_query.argtypes = [C.POINTER(AnimationState), C.POINTER(AnimationClip),
         C.c_size_t, C.POINTER(C.c_uint32), C.POINTER(C.c_uint32)]
     lib.dc_animation_query.restype = C.c_int
+    lib.dc_animation_advance.argtypes = [C.POINTER(AnimationState), C.POINTER(AnimationClip),
+        C.POINTER(AnimationTiming), C.c_size_t, C.c_uint32, C.c_uint32,
+        C.c_float, C.c_uint32, C.POINTER(C.c_float)]
+    lib.dc_animation_advance.restype = C.c_int
+    lib.dc_animation_tick.argtypes = [C.POINTER(AnimationState), C.POINTER(AnimationClip),
+        C.POINTER(AnimationTiming), C.c_size_t, C.c_uint32, C.c_float,
+        C.c_uint32, C.POINTER(AnimationTickResult)]
+    lib.dc_animation_tick.restype = C.c_int
     return lib
 
 

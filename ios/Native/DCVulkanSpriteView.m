@@ -3,6 +3,7 @@
 #import <QuartzCore/CAMetalLayer.h>
 #include "dc_vk_sprite.h"
 #include "dc_sprite_spv.h"
+#include "dc_animation.h"
 #import "DCArchive.h"
 #include <math.h>
 
@@ -23,6 +24,10 @@ static const char dcRenderQueueKey;
     CFTimeInterval _lastTitleScan;
     NSString *_deviceName;
     uint64_t _presentedFrames;
+    dc_animation_state _diagnosticAnimation;
+    uint32_t _lastDiagnosticTick;
+    BOOL _diagnosticTickInitialized;
+    BOOL _diagnosticAnimationAdvanced;
     dispatch_queue_t _renderQueue;
 }
 + (Class)layerClass { return CAMetalLayer.class; }
@@ -54,6 +59,8 @@ static const char dcRenderQueueKey;
         memset(self->_titleHeights, 0, sizeof(self->_titleHeights));
         self->_titleSceneLoaded = NO;
         self->_presentedScene = DCVulkanSpriteSceneDiagnostic;
+        self->_diagnosticTickInitialized = NO;
+        self->_diagnosticAnimationAdvanced = NO;
         self->_width = self->_height = 0;
     });
 }
@@ -139,6 +146,8 @@ static const char dcRenderQueueKey;
     memset(_titleHeights, 0, sizeof(_titleHeights));
     _titleSceneLoaded = NO;
     _presentedScene = DCVulkanSpriteSceneDiagnostic;
+    _diagnosticTickInitialized = NO;
+    _diagnosticAnimationAdvanced = NO;
     _width = _height = 0;
 }
 - (void)dealloc {
@@ -181,6 +190,7 @@ static const char dcRenderQueueKey;
     BOOL showTitle = titleReady && time >= 2.0;
     dc_vk_sprite_item draws[5] = {0};
     size_t drawCount = 0;
+    BOOL animationMoved = NO;
     if (showTitle) {
         /* The original title assets and hit regions use 1024x768 coordinates. */
         float scale = fminf((float)_width / 1024.0f, (float)_height / 768.0f);
@@ -234,13 +244,32 @@ static const char dcRenderQueueKey;
         item->pose.red = item->pose.green = item->pose.blue = 1;
         item->pose.u0 = 0; item->pose.u1 = 1; item->pose.v0 = 0; item->pose.v1 = 1;
     } else {
+        double milliseconds = time * 1000.0;
+        if (!isfinite(milliseconds) || milliseconds < 0) return @"Invalid diagnostic animation time";
+        uint32_t tick = (uint32_t)fmod(milliseconds, 4294967296.0);
+        uint32_t delta = _diagnosticTickInitialized ? tick - _lastDiagnosticTick : 0;
+        if (!_diagnosticTickInitialized) {
+            _diagnosticAnimation = (dc_animation_state){.blend = 1};
+        }
+        /* A self-authored repeating clip exercises the reconstructed numeric
+         * update in the actual host without supplying any original assets. */
+        dc_animation_clip clip = {.first_frame = 0, .last_frame = 6.283185307179586f, .loop = 1};
+        dc_animation_timing timing = {.duration_seconds = 18};
+        dc_animation_tick_result update;
+        dc_status animationStatus = dc_animation_tick(&_diagnosticAnimation, &clip, &timing,
+            1, delta, 1, tick, &update);
+        if (animationStatus != DC_OK)
+            return [NSString stringWithFormat:@"Native animation tick failed: %d", animationStatus];
+        _diagnosticTickInitialized = YES;
+        _lastDiagnosticTick = tick;
+        animationMoved = delta > 0 && update.samples[0] != update.previous_frame;
         float side = fminf(_width, _height) * 0.4f;
         dc_vk_sprite_item *item = &draws[drawCount++];
         item->texture = _texture; item->blend_mode = 3; item->point_filter = 1;
         item->pose = (dc_sprite_pose){.width = side, .height = side,
             .x = _width * (0.5f + x * 0.3f), .y = _height * (0.5f - y * 0.3f), .z = 0.5f,
             .origin_x = 0.5f, .origin_y = 0.5f, .scale_x = 1, .scale_y = 1, .alpha = 1,
-            .rotation = (float)fmod(time * 0.35, 6.283185307179586), .red = 1, .green = 1, .blue = 1,
+            .rotation = update.samples[0], .red = 1, .green = 1, .blue = 1,
             .u0 = 0, .u1 = 1, .v0 = 0, .v1 = 1};
     }
     const uint8_t clear[] = {10,15,26,255};
@@ -253,12 +282,13 @@ static const char dcRenderQueueKey;
      * texture or drawing the fallback must not certify a later game screen. */
     _presentedScene = showTitle ? DCVulkanSpriteSceneTitle :
         (_startupTexture ? DCVulkanSpriteSceneStartupCard : DCVulkanSpriteSceneDiagnostic);
+    if (animationMoved) _diagnosticAnimationAdvanced = YES;
     ++_presentedFrames;
     return nil;
 }
 - (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching
-            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene))completion {
-    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic); return; }
+            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL))completion {
+    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO); return; }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     CGSize drawableSize = layer.drawableSize;
     uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
@@ -268,7 +298,8 @@ static const char dcRenderQueueKey;
             NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching];
             NSString *device = self->_deviceName ?: @"";
             DCVulkanSpriteScene scene = self->_presentedScene;
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene); });
+            BOOL advanced = self->_diagnosticAnimationAdvanced;
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced); });
         }
     });
 }

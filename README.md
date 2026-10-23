@@ -46,7 +46,10 @@ states remain incomplete. See [startup-reconstruction.md](docs/startup-reconstru
 The external animation controller's request and current-record query now have
 native C implementations matching 2,916 isolated original-function cases. The
 query tests the current record's loop byte; it is not a timer-completion event.
-XA loading, frame advancement and transition rendering remain incomplete. See
+Numeric frame advancement and blend updates now also match isolated original
+functions; XA loading, pose/material sampling and transition rendering remain
+incomplete. The checker uses the native update to drive its self-authored
+rotation and requires a positive-delta update before its simulator gate passes. See
 [animation-reconstruction.md](docs/animation-reconstruction.md).
 
 Source `df701d6` passed 64 portable tests, device IPA packaging and the iPhone

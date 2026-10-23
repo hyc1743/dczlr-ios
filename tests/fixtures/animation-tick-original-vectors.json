@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 1584,
+  "output_sha256": "aa804acc2fec8fdda24e027b7fecc637732d1d1452affa7a07db7cac6696b7fc",
+  "original_function_sha256": {
+    "0x4046c0": "4202d12bf6f59668ad67532b22732dfca8bebf7b321afb8ebff824dd2ff24f33",
+    "0x464ab0": "938f8e3cffc0145fd4b3a03679caab6bcbf0d20fa4a3d48bdffd2afb96f28c9d",
+    "0x404bd0": "0cf668d3cad1f6a36ab0167e0c4c9cc9676fbcd718c8ef7cfb7531b446fdb434",
+    "0x405670": "1bd7799bdaf990d3f813f7c1a815fe50bf125f47407ac9e15320713dd3e7cc2d",
+    "0x412c40": "2d2f748812d8a0af2be6a3e9e8ae62032eb4d51dd4f6e18e7d8e98a9518c9f94",
+    "0x61e3c0": "f36f56e85a3b8f0b9f0aaa3f1a49f9bda1143c728ff69d6c27517e4f359a69b8"
+  },
+  "x87_control_words": [
+    639,
+    895
+  ],
+  "execution": "isolated original update, numeric getters/request/query, stack probe and empty-target pose walker",
+  "coverage": "one synthetic non-null bone track with null node; root/material/morph/event/visibility channels absent; scratch constructors and memset/clock are synthetic",
+  "comparison": "exact state, iteration bytes, previous frame and stored sample order",
+  "original_game_resources_used": false,
+  "game_playability": "not_verified"
+}

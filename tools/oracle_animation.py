@@ -32,7 +32,7 @@ CLIP_OFFSETS = {"first_frame": 0x48, "last_frame": 0x4c, "blend_duration": 0x5c,
 
 
 class OriginalAnimation:
-    def __init__(self, path):
+    def __init__(self, path, ranges=None):
         data = path.read_bytes()
         if hashlib.sha256(data).hexdigest() != TARGET_SHA256:
             raise ValueError("Original input differs from pinned analyzed PE")
@@ -52,7 +52,7 @@ class OriginalAnimation:
             self.uc.mem_write(base + rva, data[raw:raw + size])
         self.instructions, self.hashes = set(), {}
         disassembler = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
-        for start, length in RANGES.items():
+        for start, length in (RANGES if ranges is None else ranges).items():
             code = bytes(self.uc.mem_read(start, length))
             instructions = list(disassembler.disasm(code, start))
             if sum(i.size for i in instructions) != length or instructions[-1].mnemonic != "ret":
