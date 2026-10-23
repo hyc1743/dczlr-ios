@@ -11,6 +11,7 @@
 #import "DCStartupScene.h"
 #import "DCGameAudio.h"
 #include "dc_menu.h"
+#include "dc_save.h"
 #include <math.h>
 #include <string.h>
 
@@ -33,6 +34,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     DCGameAudio *_gameAudio;
     dc_menu_state _titleMenu;
     BOOL _titleMenuInitialized,_previousTitleTouch;
+    BOOL _titleUnlocksLoaded,_editUnlocked,_extraUnlocked;
     uintptr_t _titleTextures[9];
     uint32_t _width, _height;
     uint32_t _titleWidths[9], _titleHeights[9];
@@ -222,6 +224,26 @@ static void dc_write_float_le(uint8_t *out, float value) {
     BOOL materialMoved = NO;
     BOOL poseMoved = NO;
     if (showTitle) {
+        if (!_titleUnlocksLoaded) {
+            for (uint32_t slot=0;slot<80;++slot) {
+                NSString *name=[NSString stringWithFormat:@"save/RP_%02u.sav",slot];
+                NSString *path=[directory stringByAppendingPathComponent:name];
+                if (![NSFileManager.defaultManager fileExistsAtPath:path]) continue;
+                NSError *saveError=nil;
+                NSDictionary *attributes=[NSFileManager.defaultManager attributesOfItemAtPath:path error:&saveError];
+                if(!attributes || [attributes[NSFileSize] unsignedLongLongValue]<DC_SAVE_RECORD_BYTES)
+                    return @"Game save metadata has an invalid size";
+                NSFileHandle *handle=[NSFileHandle fileHandleForReadingAtPath:path];
+                if(!handle)return @"Game save metadata could not be opened";
+                NSData *data=[handle readDataUpToLength:DC_SAVE_RECORD_BYTES error:&saveError];
+                [handle closeFile];
+                if(!data)return saveError.localizedDescription;
+                dc_save_unlocks unlocked;
+                if(dc_save_get_unlocks(data.bytes,data.length,&unlocked)!=DC_OK)return @"Game save metadata was rejected";
+                _editUnlocked |= unlocked.edit!=0;_extraUnlocked |= unlocked.extra!=0;
+            }
+            _titleUnlocksLoaded=YES;
+        }
         if (!_gameAudio) {
             NSString *audioError=nil;
             _gameAudio=[[DCGameAudio alloc] initWithDirectory:directory error:&audioError];
@@ -243,7 +265,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 _titleMenuInitialized=YES;
             }
             dc_menu_button buttons[5]={0};
-            for(uint32_t i=0;i<5;++i)buttons[i]=(dc_menu_button){.x=702,.y=400+72*i,.width=256,.height=48,.disabled=i==2||i==3};
+            for(uint32_t i=0;i<5;++i)buttons[i]=(dc_menu_button){.x=702,.y=400+72*i,.width=256,.height=48,
+                .disabled=(i==2&&!_editUnlocked)||(i==3&&!_extraUnlocked)};
             uint8_t input=touching ? (_previousTitleTouch?2:1) : 3;
             int32_t result;
             dc_status menuStatus=dc_menu_step(&_titleMenu,buttons,5,(int32_t)gameX,(int32_t)gameY,1,input,&result);
@@ -265,8 +288,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
         ADD_TITLE_LAYER(1, 0, 0);
         if (_selectedTitleOption >= 2 && _selectedTitleOption <= 6)
             ADD_TITLE_LAYER((uint32_t)_selectedTitleOption, 702, 400 + 72 * (_selectedTitleOption - 2));
-        ADD_TITLE_LAYER(7, 702, 544);
-        ADD_TITLE_LAYER(8, 702, 616);
+        if (!_editUnlocked) ADD_TITLE_LAYER(7, 702, 544);
+        if (!_extraUnlocked) ADD_TITLE_LAYER(8, 702, 616);
         if (touching) {
             float screenX = (x + 1.0f) * 0.5f * _width;
             float screenY = (1.0f - y) * 0.5f * _height;

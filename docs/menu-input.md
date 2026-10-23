@@ -20,7 +20,9 @@ overlap order, exact edges, scaling, sentinel/disabled rows, integer pointer
 precision, hover, press and toggle behavior. Public replay stores only a digest;
 original code and game resources remain separate local analysis inputs.
 
-This module does not itself dispatch title actions, open the load screen or
-start gameplay. The original title driver and post-transition callbacks have
-been located; their host connections remain separate work. CPU oracle tests
-do not establish UIKit input or complete-game behavior.
+The Apple title view uses this module for pointer hover/release and selection
+audio, with edit/extra availability read from existing save metadata. It does
+not yet dispatch all title actions, open the load screen or start gameplay.
+The original title driver and post-transition callbacks have been located;
+their host connections remain separate work. CPU oracle tests do not establish
+UIKit input or complete-game behavior.

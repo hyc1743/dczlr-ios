@@ -27,5 +27,6 @@ output, correct loudness or original-sound equivalence.
 
 The title pointer adapter now uses the verified `dc_menu_step` for hover and
 selection sound. Its five menu actions still need the original callback/state
-dispatch, save-based unlock decisions and subsequent scenes. It does not
+dispatch and subsequent scenes. Save-prefix unlock decisions now supply its
+edit/extra availability; full save-game restore is separate. It does not
 claim that a click starts playable gameplay yet.

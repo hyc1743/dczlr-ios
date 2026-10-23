@@ -1,0 +1,12 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 48,
+  "output_sha256": "c2a564f1d478335ce7fa4e15b48f18480a09134b3ef8dd55f25404d3d6791e22",
+  "original_function_sha256": {
+    "0x45dc10": "b04065023bd5c3bdbf018108e599ae777e7e1a800b295b47ccecf95767d110d5"
+  },
+  "execution": "isolated original complete-word XOR codec; self-authored buffers and canaries",
+  "original_game_resources_used": false,
+  "full_save_restore_or_write": "not implemented",
+  "game_playability": "not verified"
+}
