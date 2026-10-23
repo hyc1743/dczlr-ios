@@ -18,8 +18,8 @@ or original D3DX sampling and resizing behavior.
 The offline effect reader now restores the seven original effect record graphs,
 including pass bindings and shader-array alternatives. Its 158 declared shader
 ranges (135 unique hashes) pass independent D3DX length/disassembly checks.
-The sprite effect explicitly disables both programmable shader stages and still
-needs a native reconstruction of its fixed-function draw behavior. These are
+The sprite effect explicitly disables both programmable shader stages. Its
+admitted fixed-function sprite profile now has a reconstructed native Vulkan backend. These are
 offline recovery results; no game shader has yet been validated on the iOS GPU.
 See [effect-conversion-tools.md](docs/effect-conversion-tools.md).
 
@@ -27,12 +27,19 @@ All 135 unique original shaders now translate offline to SPIR-V and pass
 Vulkan 1.0 validation with a pinned vkd3d 2.1 tool plus scoped LGPL legacy
 instruction extensions. The native sprite entry state, draw submission and
 vertex generation are also reconstructed and checked against isolated original
-routines. A native Vulkan sprite backend now passes 48-frame pixel gates on
-Mesa lavapipe (zero validation errors) and a local Intel UHD 630 GPU. The Apple
-host now has MoltenVK surface/swapchain integration for a self-authored sprite
-scene; its Apple execution checks are pending. Original effect integration and
+routines. The native Vulkan sprite backend now passes numeric pixel gates on
+Mesa lavapipe (zero validation errors), a local Intel UHD 630 GPU, and MoltenVK
+on an Apple Paravirtual GPU. The Apple gate also exercises actual Metal surface
+acquire/blit/present. The iOS host uses this route for a self-authored sprite
+scene; physical iPhone execution remains unverified. Original effect integration and
 game flow remain incomplete; this is not a playable release. See
 [vulkan-sprites.md](docs/vulkan-sprites.md).
+
+The first two-card startup update is also reconstructed as a native state/action
+planner. Its 5,600 isolated original-function comparisons pass, including exact
+skip input, ordered transition actions and unsigned timer wrap. It is not yet
+connected to the view's game flow; the external transition controller and next
+states remain incomplete. See [startup-reconstruction.md](docs/startup-reconstruction.md).
 
 ## Previous interpreter experiment
 

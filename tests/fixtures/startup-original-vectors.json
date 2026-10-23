@@ -1,0 +1,462 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 5600,
+  "output_sha256": "2b1b1d9529390e78f6563d771d34adf0131624d895647a56fff42d54ef440c05",
+  "original_function_sha256": {
+    "0x512050": "23040858ad9229ee6dbb99d7fef20ed11ba861de0a896be8a3b172516e26eb62",
+    "0x52bc10": "1abe11050c4023554483480d490ed3d5a3d47767dc460658572b70cb2895399e"
+  },
+  "execution": "isolated Unicorn x86 functions with synthetic host operations",
+  "coverage": "two-card update/state helper; external transitions and resources not executed",
+  "examples": [
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        0,
+        0,
+        0
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        1,
+        1,
+        0
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        2,
+        1,
+        0
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        3,
+        1,
+        0
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        4,
+        1,
+        0
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        0,
+        0,
+        1
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        1,
+        1,
+        1
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        2,
+        1,
+        1
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        3,
+        1,
+        1
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        4,
+        1,
+        1
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        0,
+        0,
+        2
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        1,
+        1,
+        2
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        2,
+        1,
+        2
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        3,
+        1,
+        2
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        4,
+        1,
+        2
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "state": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "input": [
+        -1,
+        0,
+        0,
+        3
+      ],
+      "output": {
+        "state": [
+          0,
+          1,
+          0,
+          0
+        ],
+        "actions": [
+          [
+            1,
+            3
+          ]
+        ]
+      }
+    }
+  ]
+}

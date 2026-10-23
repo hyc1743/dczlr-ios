@@ -39,6 +39,28 @@ class SpriteDraw(C.Structure):
                 ("point_filter", C.c_uint8), ("software_vertex", C.c_uint8)]
 
 
+class StartupState(C.Structure):
+    _fields_ = [("card", C.c_uint32), ("waiting", C.c_uint32),
+                ("advanced", C.c_uint32), ("elapsed", C.c_uint32)]
+
+
+class StartupInput(C.Structure):
+    _fields_ = [("delta", C.c_int32), ("transition_state", C.c_int32),
+                ("transition_complete", C.c_uint32), ("skip_code", C.c_uint8)]
+
+
+class StartupAction(C.Structure):
+    _fields_ = [("kind", C.c_uint32), ("value", C.c_uint32)]
+
+
+class StartupPlan(C.Structure):
+    _fields_ = [("next", StartupState), ("count", C.c_uint32), ("actions", StartupAction * 3)]
+
+    def record(self):
+        return {"state": [self.next.card, self.next.waiting, self.next.advanced, self.next.elapsed],
+                "actions": [[a.kind, a.value] for a in self.actions[:self.count]]}
+
+
 class SpritePose(C.Structure):
     _fields_ = [(name, C.c_float) for name in (
         "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
@@ -84,9 +106,10 @@ def compiler_command():
 def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c",
-               ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c"]
+               ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
+               ROOT / "native/game/dc_startup.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
-                        ROOT / "native/include/dc_sprite.h"]
+                        ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -135,6 +158,10 @@ def library():
     lib.dc_sprite_begin_plan.restype = C.c_int
     lib.dc_sprite_build_vertices.argtypes = [C.POINTER(SpritePose), C.POINTER(SpriteVertex)]
     lib.dc_sprite_build_vertices.restype = C.c_int
+    lib.dc_startup_begin_plan.argtypes = [C.POINTER(StartupPlan)]
+    lib.dc_startup_begin_plan.restype = C.c_int
+    lib.dc_startup_build_plan.argtypes = [C.POINTER(StartupState), C.POINTER(StartupInput), C.POINTER(StartupPlan)]
+    lib.dc_startup_build_plan.restype = C.c_int
     return lib
 
 

@@ -51,7 +51,16 @@ No playable build is established by this gate.
 The first cloud run `39932627781`, revision `d9107c0`, passed all 48 rendered
 frames on lavapipe with zero validation errors. The same gate also passed on a
 local Intel UHD 630 physical GPU, without an installed validation layer. The
-additional readback-free frame and Apple integration require their own checks.
+additional readback-free frame and Apple integration passed in `39933932173`.
+
+The expanded gate passed in run `39935745202`, revision `3aa5cce`: 51 frames in
+the main scenario plus three frames on a fresh renderer with inherited point
+sampling. It checks varying UV orientation, pivot rotation, restoration to
+linear after an override, and reset to the configured inherited state each
+frame. This passes on lavapipe with validation enabled and on MoltenVK's Apple
+Paravirtual GPU without the Khronos layer. The same 54-frame sequence passes
+both offscreen and with a CAMetalLayer swapchain. This Apple cloud GPU is not a
+physical iPhone. A local Intel UHD 630 also passes the expanded pixel gate.
 
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.

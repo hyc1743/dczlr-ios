@@ -25,6 +25,10 @@ def check(app, output):
     (output / "bundle.json").write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
     if not (app / info["CFBundleExecutable"]).is_file():
         raise ValueError("App bundle executable is missing")
+    # The CI build intentionally disables developer signing. Simulator installs
+    # use a local ad-hoc signature; no Apple identity or device provisioning.
+    run("codesign", "--force", "--sign", "-", "--timestamp=none", str(app))
+    run("codesign", "--verify", "--strict", str(app))
     devices = json.loads(run("xcrun", "simctl", "list", "devices", "available", "--json"))["devices"]
     phones = [device for entries in devices.values() for device in entries if device["name"].startswith("iPhone")]
     if not phones:
