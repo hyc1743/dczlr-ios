@@ -2,6 +2,7 @@
 #include <vulkan/vulkan.h>
 #ifdef __APPLE__
 #include <vulkan/vulkan_metal.h>
+#include <TargetConditionals.h>
 #endif
 #include <stdarg.h>
 #include <stdio.h>
@@ -603,6 +604,14 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
 }
 
 dc_status dc_vk_sprite_create(const dc_vk_sprite_config *config, dc_vk_sprite **out, char *error, size_t capacity) {
+#if TARGET_OS_SIMULATOR
+    /* iOS Simulator's SimMetalHost currently crashes while servicing
+     * MTLSimArgumentEncoder texture updates. MoltenVK's documented fallback
+     * binds descriptor resources without Metal argument buffers. Keep device
+     * builds on the default, faster argument-buffer path. */
+    if (!getenv("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS"))
+        setenv("MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", "0", 0);
+#endif
     if (out) *out = NULL;
     if (!config || !out || !config->width || !config->height || config->width > 4096 || config->height > 4096 ||
         !config->max_textures || config->max_textures > 4096 || config->initial_filter < 1 || config->initial_filter > 2 ||

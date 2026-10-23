@@ -49,7 +49,10 @@ and the original transition effects remain unimplemented.
 MoltenVK changes `CAMetalLayer` properties during swapchain creation, so the
 backend drains pending GPU work on its render queue and marshals swapchain
 creation to UIKit's main thread. Frame rendering and presentation stay on the
-serialized Vulkan worker.
+serialized Vulkan worker. On iOS Simulator only, the host disables Metal
+argument buffers before the first Vulkan call because the observed simulator
+`SimMetalHost` process terminated during descriptor texture updates. Physical
+iOS builds retain MoltenVK's default argument-buffer configuration.
 Readback can be omitted for presentation; the initial backend serializes frames
 and waits for completion, so it is a correctness foundation, not a tuned renderer.
 No playable build is established by this gate.
