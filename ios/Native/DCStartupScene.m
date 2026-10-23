@@ -23,6 +23,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     dc_xx *_xx;
     dc_xx_info _info;
     uintptr_t _cards[2],_textures[16];
+    DCDecodedImage *_cardImages[2];
     dc_startup_state _startup;
     uint32_t _card,_lastTick;
     BOOL _finished,_tickInitialized,_wasTouching,_cardReady;
@@ -77,15 +78,6 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     if (status!=DC_OK || _info.textures>16 || _info.submeshes>16) {
         if(error)*error=[NSString stringWithFormat:@"Startup model profile rejected: %d",status];return nil;
     }
-    for (uint32_t i=0;i<_info.textures;++i) {
-        dc_image_info image;
-        status=dc_xx_image_probe(_xx,i,&image);
-        if (status!=DC_OK || image.rgba_bytes>64*1024*1024) {if(error)*error=@"Startup image profile rejected";return nil;}
-        NSMutableData *pixels=[NSMutableData dataWithLength:image.rgba_bytes];
-        status=dc_xx_image_decode(_xx,i,pixels.mutableBytes,pixels.length,&image);
-        if (status==DC_OK) status=dc_vk_sprite_upload(_renderer,image.width,image.height,pixels.bytes,pixels.length,&_textures[i]);
-        if (status!=DC_OK) {if(error)*error=@"Startup transition texture upload failed";return nil;}
-    }
     DCArchive *cards=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
     if (!cards) {if(error)*error=reason.localizedDescription;return nil;}
     NSArray<NSString *> *names=@[@"illusion.ema",@"warning.ema"];
@@ -96,9 +88,10 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
         if (index==UINT32_MAX) {if(error)*error=@"Startup card resource is missing";return nil;}
         DCDecodedImage *image=[cards decodeImageAtIndex:index inputLimit:8*1024*1024 outputLimit:64*1024*1024 error:&reason];
         if (!image) {if(error)*error=reason.localizedDescription;return nil;}
-        status=dc_vk_sprite_upload(_renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_cards[target]);
-        if (status!=DC_OK) {if(error)*error=@"Startup card texture upload failed";return nil;}
+        _cardImages[target]=image;
     }
+    NSString *uploadFailure=[self attachRenderer:renderer];
+    if(uploadFailure) {if(error)*error=uploadFailure;return nil;}
     dc_startup_plan begin;
     status=dc_startup_begin_plan(&begin);
     NSString *failure=status==DC_OK ? [self applyPlan:&begin tick:0] : @"Startup initialization failed";
@@ -106,9 +99,35 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     return self;
 }
 - (void)dealloc {
-    for (uint32_t i=0;i<2;++i) if(_cards[i]) dc_vk_sprite_remove_texture(_renderer,_cards[i]);
-    for (uint32_t i=0;i<16;++i) if(_textures[i]) dc_vk_sprite_remove_texture(_renderer,_textures[i]);
+    [self detachRenderer];
     dc_model_close(_model);dc_xx_close(_xx);
+}
+- (void)detachRenderer {
+    if (_renderer) {
+        for (uint32_t i=0;i<2;++i) if(_cards[i]) dc_vk_sprite_remove_texture(_renderer,_cards[i]);
+        for (uint32_t i=0;i<16;++i) if(_textures[i]) dc_vk_sprite_remove_texture(_renderer,_textures[i]);
+    }
+    memset(_cards,0,sizeof(_cards));memset(_textures,0,sizeof(_textures));
+    _renderer=NULL;_tickInitialized=NO;
+}
+- (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
+    if (_renderer==renderer && _cards[0] && _cards[1]) return nil;
+    [self detachRenderer];_renderer=renderer;
+    for (uint32_t i=0;i<_info.textures;++i) {
+        dc_image_info image;
+        dc_status status=dc_xx_image_probe(_xx,i,&image);
+        if (status!=DC_OK || image.rgba_bytes>64*1024*1024) return @"Startup image profile rejected";
+        NSMutableData *pixels=[NSMutableData dataWithLength:image.rgba_bytes];
+        status=dc_xx_image_decode(_xx,i,pixels.mutableBytes,pixels.length,&image);
+        if(status==DC_OK) status=dc_vk_sprite_upload(_renderer,image.width,image.height,pixels.bytes,pixels.length,&_textures[i]);
+        if(status!=DC_OK) return @"Startup transition texture upload failed";
+    }
+    for (uint32_t i=0;i<2;++i) {
+        DCDecodedImage *image=_cardImages[i];
+        if(!image || dc_vk_sprite_upload(_renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_cards[i])!=DC_OK)
+            return @"Startup card texture upload failed";
+    }
+    return nil;
 }
 - (NSString *)drawAtTick:(uint32_t)tick touching:(BOOL)touching width:(uint32_t)width height:(uint32_t)height {
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;

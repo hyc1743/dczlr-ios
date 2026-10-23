@@ -77,3 +77,10 @@ the normal two-card sequence, requires the ordered presentation markers and
 hold times, and captures each stage. No original resources are used or uploaded
 for this CI gate. Local native checks separately execute actual transition
 model updates and RH projection; they do not establish original GPU output.
+
+The first integrated simulator run exposed a lifecycle bug: status-label size
+changes caused the viewport to rebuild its renderer and restart startup from
+card 0. `DCStartupScene` now retains its model, controller, timers and decoded
+card data while detaching/recreating only GPU textures. Detachment also resets
+the last host tick, so background time is not charged as startup elapsed time.
+Renderer recreation therefore preserves the game-state progression.

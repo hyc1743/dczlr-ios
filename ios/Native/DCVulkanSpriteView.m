@@ -71,22 +71,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
 - (uint64_t)presentedFrames { return _presentedFrames; }
 - (DCVulkanSpriteScene)presentedScene { return _presentedScene; }
 - (void)releaseRenderer {
-    dispatch_async(_renderQueue, ^{
-        self->_startupScene = nil;
-        dc_vk_sprite_destroy(self->_renderer);
-        self->_renderer = NULL;
-        self->_texture = 0;
-        memset(self->_titleTextures, 0, sizeof(self->_titleTextures));
-        memset(self->_titleWidths, 0, sizeof(self->_titleWidths));
-        memset(self->_titleHeights, 0, sizeof(self->_titleHeights));
-        self->_titleSceneLoaded = NO;
-        self->_presentedScene = DCVulkanSpriteSceneDiagnostic;
-        self->_diagnosticTickInitialized = NO;
-        self->_diagnosticAnimationAdvanced = NO;
-        self->_diagnosticMaterialAdvanced = NO;
-        self->_diagnosticPoseAdvanced = NO;
-        self->_width = self->_height = 0;
-    });
+    dispatch_async(_renderQueue, ^{ [self destroyRenderer]; });
 }
 - (BOOL)tryLoadTitleSceneFromDirectory:(NSString *)directory {
     if (_titleSceneLoaded || directory.length == 0) return _titleSceneLoaded;
@@ -132,7 +117,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     return YES;
 }
 - (void)destroyRenderer {
-    _startupScene = nil;
+    [_startupScene detachRenderer];
     dc_vk_sprite_destroy(_renderer);
     _renderer = NULL;
     _texture = 0;
@@ -140,6 +125,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     memset(_titleWidths, 0, sizeof(_titleWidths));
     memset(_titleHeights, 0, sizeof(_titleHeights));
     _titleSceneLoaded = NO;
+    _lastTitleScan = 0;
     _presentedScene = DCVulkanSpriteSceneDiagnostic;
     _diagnosticTickInitialized = NO;
     _diagnosticAnimationAdvanced = NO;
@@ -191,6 +177,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
         dc_vk_sprite_get_info(_renderer, &info);
         _deviceName = [NSString stringWithUTF8String:info.device_name];
         _width = width; _height = height;
+        if (_startupScene) {
+            NSString *startupError = [_startupScene attachRenderer:_renderer];
+            if (startupError) return startupError;
+        }
     }
     if (!_startupScene && directory.length && CACurrentMediaTime() - _lastStartupScan >= 1) {
         _lastStartupScan = CACurrentMediaTime();

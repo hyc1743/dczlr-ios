@@ -123,6 +123,17 @@ class Viewport(C.Structure):
     _fields_ = [(n,C.c_float) for n in ("x","y","width","height","min_z","max_z")]
 
 
+class MenuButton(C.Structure):
+    _fields_ = [(n,C.c_float) for n in ("x","y","width","height")]+[(n,C.c_uint32) for n in ("disabled","press_activate","toggle")]
+
+
+class MenuState(C.Structure):
+    _fields_ = [("selected",C.c_int32),("hover",C.c_int32),("active",C.c_uint32),("pressed",C.c_uint32*32),("toggled",C.c_uint32*32)]
+
+    def record(self):
+        return {n:list(getattr(self,n)) if n in ("pressed","toggled") else getattr(self,n) for n,_ in self._fields_}
+
+
 class SceneNode(C.Structure):
     _fields_ = [("parent", C.c_uint32), ("modifier", C.c_uint32),
                 ("hidden", C.c_uint8), ("billboard", C.c_uint8), ("reserved", C.c_uint8 * 2),
@@ -213,10 +224,10 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c",
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -314,6 +325,8 @@ def library():
         function.restype=C.c_int
     lib.dc_model_project.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t]
     lib.dc_model_project.restype = C.c_int
+    lib.dc_menu_step.argtypes = [C.POINTER(MenuState),C.POINTER(MenuButton),C.c_size_t,C.c_int32,C.c_int32,C.c_float,C.c_uint8,C.POINTER(C.c_int32)]
+    lib.dc_menu_step.restype = C.c_int
     lib.dc_scene_update.argtypes = [C.POINTER(SceneNode), C.c_size_t, C.POINTER(Matrix), C.POINTER(Matrix), C.c_size_t]
     lib.dc_scene_update.restype = C.c_int
     lib.dc_pose_select.argtypes = [C.POINTER(PoseKey), C.c_size_t, C.c_float, C.POINTER(PoseSelection)]

@@ -1,0 +1,13 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 3780,
+  "output_sha256": "fa2cb3eea47674e60ce3550f739bb4bdbee8dad61742ee5030eca8d9795e776b",
+  "original_function_sha256": {
+    "0x45f7c0": "0133ed9481cb376fec096580aad9f01fddad96b6170966a0fd21c7e2e92a0c34",
+    "0x45f600": "dcd7177f07ca492f2ce84e4409b1e663c5a15682583678a3e58ae34fb6d270a0"
+  },
+  "execution": "isolated original menu update and scaled hit tests; self-authored finite layouts and states",
+  "coverage": "first-hit, inclusive bounds, scale rounding, disabled/sentinel rows, hover/selection, press and toggle flags; no UI or OS input",
+  "original_game_resources_used": false,
+  "game_playability": "not verified"
+}

@@ -64,20 +64,23 @@ jobs:
           xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" \
             -miphoneos-version-min=17.0 -std=c11 -O2 -Wall -Wextra -Werror \
             -Inative/include -c native/render/dc_mesh.c -o out/native-iphoneos/dc_mesh.o
-          xcrun --sdk iphoneos libtool -static out/native-iphoneos/dc_pp.o out/native-iphoneos/dc_image.o out/native-iphoneos/dc_xa.o out/native-iphoneos/dc_xx.o out/native-iphoneos/dc_sprite.o out/native-iphoneos/dc_sprite_vertices.o out/native-iphoneos/dc_startup.o out/native-iphoneos/dc_animation.o out/native-iphoneos/dc_material.o out/native-iphoneos/dc_pose.o out/native-iphoneos/dc_scene.o out/native-iphoneos/dc_model.o out/native-iphoneos/dc_mesh.o \
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" \
+            -miphoneos-version-min=17.0 -std=c11 -O2 -Wall -Wextra -Werror \
+            -Inative/include -c native/game/dc_menu.c -o out/native-iphoneos/dc_menu.o
+          xcrun --sdk iphoneos libtool -static out/native-iphoneos/dc_pp.o out/native-iphoneos/dc_image.o out/native-iphoneos/dc_xa.o out/native-iphoneos/dc_xx.o out/native-iphoneos/dc_sprite.o out/native-iphoneos/dc_sprite_vertices.o out/native-iphoneos/dc_startup.o out/native-iphoneos/dc_animation.o out/native-iphoneos/dc_material.o out/native-iphoneos/dc_pose.o out/native-iphoneos/dc_scene.o out/native-iphoneos/dc_model.o out/native-iphoneos/dc_mesh.o out/native-iphoneos/dc_menu.o \
             -o out/native-iphoneos/libportlab_native.a
           file out/native-iphoneos/dc_pp.o
           python3 - <<'PY'
           import hashlib,json,os
           from pathlib import Path
           result = {'source_revision': os.environ['GITHUB_SHA'],
-              'modules': ['indexed PP resource reader and byte codec', 'BMP/TGA/EMA RGBA decoder', 'bounded XA framing, numeric clips and material keys', 'sprite draw submission plan and vertex generation', 'two-card startup update action planner', 'animation request, current-loop query, numeric frame advancement and blend update', 'one-track material sampling and interpolation', 'XA node keys and bounded mode-0 local pose sampling', 'node hierarchy modifiers, model runtime binding and unskinned mesh projection', 'bounded XX hierarchy/mesh/material metadata, baselines, encoded target matching and embedded images'],
+              'modules': ['indexed PP resource reader and byte codec', 'BMP/TGA/EMA RGBA decoder', 'bounded XA framing, numeric clips and material keys', 'sprite draw submission plan and vertex generation', 'two-card startup update action planner', 'animation request, current-loop query, numeric frame advancement and blend update', 'one-track material sampling and interpolation', 'XA node keys and bounded mode-0 local pose sampling', 'node hierarchy modifiers, model runtime binding and unskinned mesh projection', 'original menu hit and activation state', 'bounded XX hierarchy/mesh/material metadata, baselines, encoded target matching and embedded images'],
               'host_tests': 'ARM64 macOS native C',
               'original_reference': 'isolated original-function output digests and self-authored fixtures',
               'iphoneos': 'compiled ARM64 archive; device execution unverified',
               'cpu_emulator_in_product': False, 'game_playability': 'not verified',
               'native_source_sha256': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
-                  for p in ['native/resource/dc_pp.c', 'native/resource/dc_image.c', 'native/resource/dc_xa.c', 'native/resource/dc_xx.c', 'native/render/dc_sprite.c', 'native/render/dc_sprite_vertices.c', 'native/game/dc_startup.c', 'native/game/dc_animation.c', 'native/game/dc_material.c', 'native/game/dc_pose.c', 'native/game/dc_scene.c', 'native/game/dc_model.c', 'native/render/dc_mesh.c']}}
+                  for p in ['native/resource/dc_pp.c', 'native/resource/dc_image.c', 'native/resource/dc_xa.c', 'native/resource/dc_xx.c', 'native/render/dc_sprite.c', 'native/render/dc_sprite_vertices.c', 'native/game/dc_startup.c', 'native/game/dc_animation.c', 'native/game/dc_material.c', 'native/game/dc_pose.c', 'native/game/dc_scene.c', 'native/game/dc_model.c', 'native/render/dc_mesh.c', 'native/game/dc_menu.c']}}
           Path('out/native-iphoneos/build-report.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
       - name: Exercise the actual Apple file adapter on ARM64 macOS
