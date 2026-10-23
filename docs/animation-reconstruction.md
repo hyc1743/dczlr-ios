@@ -115,8 +115,16 @@ The Apple checker now uses a self-authored repeating numeric clip for rotation.
 It reports advancement only after a successful nonzero-delta update changes the
 sample and the frame presents. The simulator checker requires that report as
 well as the first-present marker. Machine markers stay in the log rather than
-being included in the user's status text. Apple compilation and execution of
-this revision still require their own successful build/runtime evidence.
+being included in the user's status text.
+
+Source `e5a76fc3d2032fa2c2f3ab2cde7a9b523bae7426` passed all 77 portable tests,
+device IPA packaging and the stricter iPhone 16 Pro/iOS 18.5 simulator gate in
+run `39968051678`. Its app log contains both the checker-present and native
+animation-advanced markers, and its screenshot shows the checker with clean
+status text. Run `39968085705` passed 47 ARM64 macOS native tests and iPhoneOS
+SDK compilation. Downloaded artifacts were inspected as ARM64/iPhoneOS and
+their source hashes matched the pinned commit. These are diagnostic execution
+results, not original game or physical iPhone playability.
 
 The next evidence boundary is XA loading (`0x0040bd50`), pose/material sampling,
 the fullscreen transition model and final composition. The view's existing

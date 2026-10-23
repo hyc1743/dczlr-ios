@@ -106,6 +106,12 @@ a static first frame is insufficient. The status text omits machine markers,
 while `log.txt` retains them for verification. Original startup/title previews
 still require their own flow and resource validation.
 
+The stronger gate passed at source `e5a76fc` in run `39968051678`: the app log
+contains both `PORTLAB_SCENE_PRESENTED=checker` and
+`PORTLAB_NATIVE_ANIMATION_ADVANCED`. The inspected screenshot shows the checker
+and user-facing animation status without machine markers. The associated
+device IPA remains an unsigned diagnostic host with no bundled game resources.
+
 `tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
 archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
 The all-platform archive includes device, simulator and macOS static slices.

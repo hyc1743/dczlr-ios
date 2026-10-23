@@ -52,9 +52,10 @@ incomplete. The checker uses the native update to drive its self-authored
 rotation and requires a positive-delta update before its simulator gate passes. See
 [animation-reconstruction.md](docs/animation-reconstruction.md).
 
-Source `df701d6` passed 64 portable tests, device IPA packaging and the iPhone
-simulator checker in run `39962543987`. Its native-core run `39962574609` also
-passed 35 ARM64 macOS tests and iPhoneOS SDK compilation. This remains a stage
+Source `e5a76fc` passed 77 portable tests, device IPA packaging and the iPhone
+simulator checker in run `39968051678`. The checker reported a positive-delta
+native animation update followed by successful presentation. Its native-core
+run `39968085705` also passed 47 ARM64 macOS tests and iPhoneOS SDK compilation. This remains a stage
 build, with game flow and physical-device playability incomplete. The public
 build workflow uploads host artifacts and the manifest; original game resources
 remain local and are not uploaded by `build-ios.yml`.
