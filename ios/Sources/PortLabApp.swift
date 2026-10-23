@@ -9,9 +9,9 @@ struct PortLabApp: App {
         WindowGroup {
             VStack(spacing: 12) {
                 Text("iOS 平台测试").font(.headline)
-                Text("自制测试场景 · 拖动画面移动三角形").font(.caption)
+                Text("自制精灵测试场景 · 拖动画面移动").font(.caption)
                 GeometryReader { geometry in
-                    MetalSurface(model: model)
+                    VulkanSurface(model: model)
                         .gesture(DragGesture(minimumDistance: 0).onChanged { event in
                             guard geometry.size.width > 0, geometry.size.height > 0 else { return }
                             model.x = Float(min(1, max(-1, 2 * event.location.x / geometry.size.width - 1)))

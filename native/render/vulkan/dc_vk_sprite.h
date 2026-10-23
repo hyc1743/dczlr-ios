@@ -18,6 +18,7 @@ typedef struct dc_vk_sprite_config {
     size_t vertex_spirv_bytes;
     const uint32_t *fragment_spirv;
     size_t fragment_spirv_bytes;
+    void *metal_layer; /* Optional retained-by-caller CAMetalLayer, Apple only. */
 } dc_vk_sprite_config;
 
 typedef struct dc_vk_sprite_item {
@@ -33,7 +34,7 @@ typedef struct dc_vk_sprite_info {
     uint64_t submitted_frames;
 } dc_vk_sprite_info;
 
-/* Serial, blocking offscreen Vulkan backend. No CPU rasterizer or emulation.
+/* Serial, blocking Vulkan backend with optional Apple surface presentation.
  * Scope: RGBA8, no depth test/culling, one repeated texture stage, one mip,
  * observed sprite blend modes. Unsupported effective state fails explicitly.
  * A visible textured draw requires a live texture handle. Alpha-op DISABLE is
@@ -51,6 +52,8 @@ DC_API dc_status dc_vk_sprite_remove_texture(dc_vk_sprite *renderer, uintptr_t h
 /* Executes native entry/draw plans and vertex generation, clears and renders
  * the full frame, then reads tightly packed top-left RGBA8 attachment bytes
  * without unpremultiplication.
+ * rgba may be NULL with capacity zero to omit CPU readback. An Apple surface,
+ * when configured, receives the Vulkan target through a GPU blit and swapchain.
  * Every frame establishes a fresh sprite state; min/mag starts at config's
  * explicit inherited value. Hidden value 1 skips an item without resolving it.
  * Semantic/admission errors do not submit a frame or modify output. */

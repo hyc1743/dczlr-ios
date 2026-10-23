@@ -12,8 +12,11 @@ targets:
       - path: ../native/resource
       - path: ../native/render
         excludes:
-          - vulkan
+          - vulkan/shaders
       - path: Resources
+        type: folder
+        buildPhase: resources
+      - path: Generated/MoltenVKNotices
         type: folder
         buildPhase: resources
     info:
@@ -39,6 +42,19 @@ targets:
       HEADER_SEARCH_PATHS:
         - $(inherited)
         - $(SRCROOT)/../native/include
+        - $(SRCROOT)/../native/render/vulkan
+        - $(SRCROOT)/Generated/sprite-shaders
+        - $(SRCROOT)/../.tools/moltenvk-1.4.2/MoltenVK/MoltenVK/include
+      OTHER_LDFLAGS:
+        - $(inherited)
+        - -lc++
+    dependencies:
+      - framework: ../.tools/moltenvk-1.4.2/MoltenVK/MoltenVK/static/MoltenVK.xcframework
+        embed: false
+      - sdk: Metal.framework
+      - sdk: QuartzCore.framework
+      - sdk: IOSurface.framework
+      - sdk: CoreGraphics.framework
 schemes:
   PortLab:
     build:

@@ -39,7 +39,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: brew install xcodegen glslang spirv-tools
+      - name: Prepare pinned MoltenVK and self-authored shaders
+        run: |
+          python3 tools/bootstrap_moltenvk.py --notices-output ios/Generated/MoltenVKNotices
+          python3 tools/build_sprite_shaders.py --output ios/Generated/sprite-shaders
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate --spec project.yml
@@ -63,7 +67,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: brew install xcodegen glslang spirv-tools
+      - name: Prepare pinned MoltenVK and self-authored shaders
+        run: |
+          python3 tools/bootstrap_moltenvk.py --notices-output ios/Generated/MoltenVKNotices
+          python3 tools/build_sprite_shaders.py --output ios/Generated/sprite-shaders
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate --spec project.yml
@@ -90,7 +98,7 @@ jobs:
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'not_embedded',
               'native_resource_module': 'PP reader and BMP/TGA/EMA decoder linked; device execution unverified',
-              'graphics_backend': 'diagnostic Metal scene; game Vulkan/MoltenVK not integrated',
+              'graphics_backend': 'native Vulkan sprite integration scene through MoltenVK; game not integrated',
               'game_playability': 'not_claimed',
               'resource_manifest': 'embedded',
               'resource_parts': 'published_separately_as_release_assets',

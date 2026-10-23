@@ -26,6 +26,7 @@ jobs:
           test -n "$icd"
           export VK_ICD_FILENAMES="$icd"
           out/vulkan/vulkan_sprite_gate 2>&1 | tee out/vulkan/pixel-gate.log
+          ! grep -q 'Vulkan validation error' out/vulkan/pixel-gate.log
           python3 - <<'PY'
           import json,os
           from pathlib import Path
@@ -43,3 +44,46 @@ jobs:
             out/vulkan/pixel-gate.log
             out/vulkan/report.json
             out/vulkan/sprite-shaders/
+  apple:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned public-API MoltenVK and shader tools
+        run: |
+          brew install glslang spirv-tools
+          python3 tools/bootstrap_moltenvk.py
+          python3 tools/build_sprite_shaders.py --output out/apple-vulkan/shaders
+      - name: Build and run the same pixel gate through MoltenVK
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=.tools/moltenvk-1.4.2/MoltenVK/MoltenVK
+          xcrun clang -std=c11 -O2 -Wall -Wextra -Werror \
+            -Inative/include -Inative/render/vulkan -Iout/apple-vulkan/shaders -I"$base/include" \
+            tests/native/test_vk_sprite.c native/render/vulkan/dc_vk_sprite.c \
+            native/render/dc_sprite.c native/render/dc_sprite_vertices.c \
+            "$base/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a" \
+            -framework Metal -framework QuartzCore -framework Foundation -framework IOKit \
+            -framework IOSurface -framework AppKit -framework CoreGraphics -lc++ \
+            -o out/apple-vulkan/pixel-gate
+          out/apple-vulkan/pixel-gate --no-validation 2>&1 | tee out/apple-vulkan/pixel-gate.log
+      - name: Run the pixel gate with an actual Metal surface and Vulkan swapchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=.tools/moltenvk-1.4.2/MoltenVK/MoltenVK
+          xcrun clang -O2 -Wall -Wextra -Werror -fobjc-arc -DPORTLAB_GATE_NO_MAIN \
+            -Inative/include -Inative/render/vulkan -Iout/apple-vulkan/shaders -I"$base/include" \
+            tests/native/test_vk_metal_surface.m tests/native/test_vk_sprite.c native/render/vulkan/dc_vk_sprite.c \
+            native/render/dc_sprite.c native/render/dc_sprite_vertices.c \
+            "$base/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a" \
+            -framework Metal -framework QuartzCore -framework Foundation -framework IOKit \
+            -framework IOSurface -framework AppKit -framework CoreGraphics -lc++ \
+            -o out/apple-vulkan/surface-gate
+          out/apple-vulkan/surface-gate 2>&1 | tee out/apple-vulkan/surface-gate.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: moltenvk-sprite-pixels
+          path: out/apple-vulkan/

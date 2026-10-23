@@ -26,14 +26,12 @@ static int pixel(const uint8_t *rgba, unsigned x, unsigned y, int red, int green
     return 1;
 }
 
-int main(int argc, char **argv) {
+int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     dc_vk_sprite *r = NULL;
     dc_vk_sprite_config config = {.width = 8, .height = 8, .max_textures = 2, .initial_filter = 2,
-        .validation = 1, .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
-        .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv)};
+        .validation = validation, .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
+        .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv), .metal_layer = metal_layer};
     char error[512];
-    /* MoltenVK builds may omit the optional Khronos layer; Linux CI requires it. */
-    if (argc > 1 && !strcmp(argv[1], "--no-validation")) config.validation = 0;
     dc_status status = dc_vk_sprite_create(&config, &r, error, sizeof(error));
     if (status != DC_OK) { fprintf(stderr, "Create failed: %s\n", error); return 1; }
     dc_vk_sprite_info info;
@@ -75,6 +73,7 @@ int main(int argc, char **argv) {
     draw.texture = transparent; draw.pose = pose(0.5f,0.5f);
     OK(dc_vk_sprite_render(r, &draw, 1, clear, rgba, sizeof(rgba)));
     CHECK(pixel(rgba,3,3,110,70,55,114,1));
+    OK(dc_vk_sprite_render(r, &draw, 1, clear, NULL, 0));
     draw.pose.alpha = 0.5f; /* native diffuse truncates to 127, not 128 */
     OK(dc_vk_sprite_render(r, &draw, 1, clear, rgba, sizeof(rgba)));
     CHECK(pixel(rgba,3,3,65,55,58,91,1));
@@ -130,3 +129,10 @@ failed:
     dc_vk_sprite_destroy(r);
     return 1;
 }
+
+#ifndef PORTLAB_GATE_NO_MAIN
+int main(int argc, char **argv) {
+    /* Linux CI requires validation; MoltenVK installations may omit the layer. */
+    return dc_vk_sprite_pixel_gate(NULL, !(argc > 1 && !strcmp(argv[1], "--no-validation")));
+}
+#endif

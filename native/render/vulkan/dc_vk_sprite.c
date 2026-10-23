@@ -1,5 +1,8 @@
 #include "dc_vk_sprite.h"
 #include <vulkan/vulkan.h>
+#ifdef __APPLE__
+#include <vulkan/vulkan_metal.h>
+#endif
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +39,12 @@ struct dc_vk_sprite {
     VkPhysicalDeviceMemoryProperties memory_properties;
     VkDevice device;
     VkQueue queue;
+    VkSurfaceKHR surface;
+    VkSwapchainKHR swapchain;
+    VkImage *present_images;
+    uint32_t present_count;
+    VkExtent2D present_extent;
+    VkSemaphore acquired, rendered;
     uint32_t queue_family;
     VkCommandPool command_pool;
     VkCommandBuffer command;
@@ -188,6 +197,9 @@ void dc_vk_sprite_destroy(dc_vk_sprite *r) {
     if (!r) return;
     if (r->device) {
         vkDeviceWaitIdle(r->device);
+        if (r->acquired) vkDestroySemaphore(r->device, r->acquired, NULL);
+        if (r->rendered) vkDestroySemaphore(r->device, r->rendered, NULL);
+        if (r->swapchain) vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
         if (r->textures)
             for (uint32_t i = 0; i < r->max_textures; ++i) drop_texture(r, &r->textures[i]);
         for (uint32_t i = 0; i < 3; ++i)
@@ -211,20 +223,35 @@ void dc_vk_sprite_destroy(dc_vk_sprite *r) {
         vkDestroyDevice(r->device, NULL);
     }
     if (r->debug && r->destroy_debug) r->destroy_debug(r->instance, r->debug, NULL);
+    if (r->surface) vkDestroySurfaceKHR(r->instance, r->surface, NULL);
     if (r->instance) vkDestroyInstance(r->instance, NULL);
     free(r->textures);
+    free(r->present_images);
     free(r);
 }
 
-static dc_status create_device(dc_vk_sprite *r, uint32_t validation) {
+static dc_status create_device(dc_vk_sprite *r, uint32_t validation, void *metal_layer) {
     uint32_t count = 0;
     VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &count, NULL));
     if (count > 4096) return fail(r, DC_RANGE, "Too many instance extensions");
     VkExtensionProperties *available = calloc(count ? count : 1, sizeof(*available));
     if (!available) return DC_MEMORY;
     VkResult result = vkEnumerateInstanceExtensionProperties(NULL, &count, available);
-    const char *extensions[2];
+    const char *extensions[4];
     uint32_t extension_count = 0;
+#ifdef __APPLE__
+    if (metal_layer) {
+        if (!extension_present(available, count, VK_KHR_SURFACE_EXTENSION_NAME) ||
+            !extension_present(available, count, VK_EXT_METAL_SURFACE_EXTENSION_NAME)) {
+            free(available);
+            return fail(r, DC_IO, "Vulkan Metal surface extensions unavailable");
+        }
+        extensions[extension_count++] = VK_KHR_SURFACE_EXTENSION_NAME;
+        extensions[extension_count++] = VK_EXT_METAL_SURFACE_EXTENSION_NAME;
+    }
+#else
+    if (metal_layer) { free(available); return fail(r, DC_ARGUMENT, "Metal layer requires Apple platform"); }
+#endif
     VkInstanceCreateFlags flags = 0;
     if (result == VK_SUCCESS && extension_present(available, count, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
         extensions[extension_count++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
@@ -251,6 +278,15 @@ static dc_status create_device(dc_vk_sprite *r, uint32_t validation) {
         .enabledExtensionCount = extension_count, .ppEnabledExtensionNames = extensions,
         .enabledLayerCount = validation ? 1u : 0u, .ppEnabledLayerNames = validation ? &layer : NULL};
     VK_CHECK(vkCreateInstance(&instance, NULL, &r->instance));
+#ifdef __APPLE__
+    if (metal_layer) {
+        VkMetalSurfaceCreateInfoEXT surface = {.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
+            .pLayer = metal_layer};
+        PFN_vkCreateMetalSurfaceEXT create_surface = (PFN_vkCreateMetalSurfaceEXT)vkGetInstanceProcAddr(r->instance, "vkCreateMetalSurfaceEXT");
+        if (!create_surface) return fail(r, DC_IO, "Missing Vulkan Metal surface entry point");
+        VK_CHECK(create_surface(r->instance, &surface, NULL, &r->surface));
+    }
+#endif
     if (validation) {
         PFN_vkCreateDebugUtilsMessengerEXT create = (PFN_vkCreateDebugUtilsMessengerEXT)
             vkGetInstanceProcAddr(r->instance, "vkCreateDebugUtilsMessengerEXT");
@@ -269,10 +305,13 @@ static dc_status create_device(dc_vk_sprite *r, uint32_t validation) {
         if (!queues || queues > 256) continue;
         VkQueueFamilyProperties properties[256];
         vkGetPhysicalDeviceQueueFamilyProperties(devices[i], &queues, properties);
-        for (uint32_t j = 0; j < queues; ++j)
-            if (properties[j].queueCount && (properties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
+        for (uint32_t j = 0; j < queues; ++j) {
+            VkBool32 present = VK_TRUE;
+            if (r->surface) VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(devices[i], j, r->surface, &present));
+            if (properties[j].queueCount && (properties[j].queueFlags & VK_QUEUE_GRAPHICS_BIT) && present) {
                 r->physical = devices[i]; r->queue_family = j; break;
             }
+        }
     }
     if (!r->physical) return fail(r, DC_IO, "No Vulkan graphics queue");
     VkPhysicalDeviceProperties properties;
@@ -297,16 +336,127 @@ static dc_status create_device(dc_vk_sprite *r, uint32_t validation) {
     result = vkEnumerateDeviceExtensionProperties(r->physical, NULL, &count, available);
     const char *subset = "VK_KHR_portability_subset";
     uint32_t portability = result == VK_SUCCESS && extension_present(available, count, subset);
+    uint32_t swapchain = result == VK_SUCCESS && extension_present(available, count, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
     free(available);
     if (result != VK_SUCCESS) return vk_fail(r, result, "Enumerating device extensions");
+    if (r->surface && !swapchain) return fail(r, DC_IO, "Vulkan swapchain extension unavailable");
+    const char *device_extensions[2];
+    uint32_t device_extension_count = 0;
+    if (portability) device_extensions[device_extension_count++] = subset;
+    if (r->surface) device_extensions[device_extension_count++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
     float priority = 1;
     VkDeviceQueueCreateInfo queue = {.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueFamilyIndex = r->queue_family, .queueCount = 1, .pQueuePriorities = &priority};
     VkDeviceCreateInfo device = {.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1, .pQueueCreateInfos = &queue,
-        .enabledExtensionCount = portability, .ppEnabledExtensionNames = portability ? &subset : NULL};
+        .enabledExtensionCount = device_extension_count, .ppEnabledExtensionNames = device_extensions};
     VK_CHECK(vkCreateDevice(r->physical, &device, NULL, &r->device));
     vkGetDeviceQueue(r->device, r->queue_family, 0, &r->queue);
+    return DC_OK;
+}
+
+static dc_status create_swapchain(dc_vk_sprite *r) {
+    VkSurfaceCapabilitiesKHR caps;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r->physical, r->surface, &caps));
+    if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+        return fail(r, DC_IO, "Surface does not support Vulkan transfer destination");
+    uint32_t count = 0;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(r->physical, r->surface, &count, NULL));
+    if (!count || count > 256) return fail(r, DC_IO, "No admitted Vulkan surface formats");
+    VkSurfaceFormatKHR formats[256], format = {VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
+    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(r->physical, r->surface, &count, formats));
+    for (uint32_t i = 0; i < count; ++i) {
+        if (formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR &&
+            (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM || formats[i].format == VK_FORMAT_R8G8B8A8_UNORM)) {
+            format = formats[i]; break;
+        }
+    }
+    if (count == 1 && formats[0].format == VK_FORMAT_UNDEFINED) format.format = VK_FORMAT_B8G8R8A8_UNORM;
+    if (format.format == VK_FORMAT_UNDEFINED) return fail(r, DC_IO, "Surface requires unsupported pixel encoding");
+    VkFormatProperties source, destination;
+    vkGetPhysicalDeviceFormatProperties(r->physical, VK_FORMAT_R8G8B8A8_UNORM, &source);
+    vkGetPhysicalDeviceFormatProperties(r->physical, format.format, &destination);
+    if (!(source.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
+        !(destination.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
+        return fail(r, DC_IO, "Surface format lacks Vulkan blit support");
+    VkExtent2D extent = caps.currentExtent;
+    if (extent.width == UINT32_MAX) {
+        extent.width = r->width; extent.height = r->height;
+        if (extent.width < caps.minImageExtent.width) extent.width = caps.minImageExtent.width;
+        if (extent.height < caps.minImageExtent.height) extent.height = caps.minImageExtent.height;
+        if (extent.width > caps.maxImageExtent.width) extent.width = caps.maxImageExtent.width;
+        if (extent.height > caps.maxImageExtent.height) extent.height = caps.maxImageExtent.height;
+    }
+    if (!extent.width || !extent.height) return fail(r, DC_IO, "Surface is not currently drawable");
+    uint32_t images = caps.minImageCount + 1;
+    if (caps.maxImageCount && images > caps.maxImageCount) images = caps.maxImageCount;
+    VkCompositeAlphaFlagBitsKHR alpha;
+    if (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    else if (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) alpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+    else return fail(r, DC_IO, "Surface requires unsupported alpha composition");
+    VK_CHECK(vkDeviceWaitIdle(r->device));
+    if (r->swapchain) vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
+    r->swapchain = VK_NULL_HANDLE;
+    free(r->present_images); r->present_images = NULL; r->present_count = 0;
+    VkSwapchainCreateInfoKHR create = {.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = r->surface, .minImageCount = images, .imageFormat = format.format, .imageColorSpace = format.colorSpace,
+        .imageExtent = extent, .imageArrayLayers = 1, .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE, .preTransform = caps.currentTransform,
+        .compositeAlpha = alpha, .presentMode = VK_PRESENT_MODE_FIFO_KHR, .clipped = VK_TRUE};
+    VK_CHECK(vkCreateSwapchainKHR(r->device, &create, NULL, &r->swapchain));
+    VK_CHECK(vkGetSwapchainImagesKHR(r->device, r->swapchain, &r->present_count, NULL));
+    if (!r->present_count || r->present_count > 64) return fail(r, DC_RANGE, "Unsupported Vulkan swapchain image count");
+    r->present_images = calloc(r->present_count, sizeof(*r->present_images));
+    if (!r->present_images) return DC_MEMORY;
+    VK_CHECK(vkGetSwapchainImagesKHR(r->device, r->swapchain, &r->present_count, r->present_images));
+    r->present_extent = extent;
+    return DC_OK;
+}
+
+static dc_status present_target(dc_vk_sprite *r) {
+    uint32_t index = 0;
+    VkResult result = vkAcquireNextImageKHR(r->device, r->swapchain, 1000000000ull, r->acquired, VK_NULL_HANDLE, &index);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        dc_status status = create_swapchain(r);
+        if (status != DC_OK) return status;
+        result = vkAcquireNextImageKHR(r->device, r->swapchain, 1000000000ull, r->acquired, VK_NULL_HANDLE, &index);
+    }
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return vk_fail(r, result, "Acquiring surface image");
+    /* After acquisition, any failure requires recreation to retire the semaphore. */
+    dc_status status = begin_commands(r);
+    if (status != DC_OK) { r->broken = 1; return status; }
+    VkImageMemoryBarrier barrier = {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT, .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, .image = r->present_images[index],
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1}};
+    vkCmdPipelineBarrier(r->command, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, NULL, 0, NULL, 1, &barrier);
+    VkImageBlit blit = {.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .srcOffsets = {{0,0,0}, {(int32_t)r->width,(int32_t)r->height,1}},
+        .dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
+        .dstOffsets = {{0,0,0}, {(int32_t)r->present_extent.width,(int32_t)r->present_extent.height,1}}};
+    vkCmdBlitImage(r->command, r->target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        r->present_images[index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_NEAREST);
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; barrier.dstAccessMask = 0;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL; barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    vkCmdPipelineBarrier(r->command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        0, 0, NULL, 0, NULL, 1, &barrier);
+    result = vkEndCommandBuffer(r->command);
+    VkPipelineStageFlags wait = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkSubmitInfo submit = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &r->acquired, .pWaitDstStageMask = &wait, .commandBufferCount = 1,
+        .pCommandBuffers = &r->command, .signalSemaphoreCount = 1, .pSignalSemaphores = &r->rendered};
+    if (result == VK_SUCCESS) result = vkQueueSubmit(r->queue, 1, &submit, VK_NULL_HANDLE);
+    if (result != VK_SUCCESS) { r->broken = 1; return vk_fail(r, result, "Submitting surface blit"); }
+    VkPresentInfoKHR present = {.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1, .pWaitSemaphores = &r->rendered, .swapchainCount = 1,
+        .pSwapchains = &r->swapchain, .pImageIndices = &index};
+    result = vkQueuePresentKHR(r->queue, &present);
+    VkResult idle = vkQueueWaitIdle(r->queue);
+    if (idle != VK_SUCCESS) { r->broken = 1; return vk_fail(r, idle, "Completing surface presentation"); }
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) return create_swapchain(r);
+    if (result != VK_SUCCESS) { r->broken = 1; return vk_fail(r, result, "Presenting surface image"); }
     return DC_OK;
 }
 
@@ -319,6 +469,13 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
     VK_CHECK(vkAllocateCommandBuffers(r->device, &command, &r->command));
     VkFenceCreateInfo fence = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
     VK_CHECK(vkCreateFence(r->device, &fence, NULL, &r->fence));
+    if (r->surface) {
+        VkSemaphoreCreateInfo semaphore = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        VK_CHECK(vkCreateSemaphore(r->device, &semaphore, NULL, &r->acquired));
+        VK_CHECK(vkCreateSemaphore(r->device, &semaphore, NULL, &r->rendered));
+        dc_status surface_status = create_swapchain(r);
+        if (surface_status != DC_OK) return surface_status;
+    }
     dc_status status = make_image(r, r->width, r->height,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         &r->target, &r->target_memory, &r->target_view);
@@ -433,7 +590,7 @@ dc_status dc_vk_sprite_create(const dc_vk_sprite_config *config, dc_vk_sprite **
     r->max_textures = config->max_textures; r->initial_filter = config->initial_filter;
     r->next_texture = 1;
     r->textures = calloc(r->max_textures, sizeof(*r->textures));
-    dc_status status = r->textures ? create_device(r, config->validation) : DC_MEMORY;
+    dc_status status = r->textures ? create_device(r, config->validation, config->metal_layer) : DC_MEMORY;
     if (status == DC_OK) status = create_resources(r, config);
     if (status != DC_OK) {
         if (error && capacity) snprintf(error, capacity, "%s", r->error[0] ? r->error : "Vulkan sprite allocation failed");
@@ -588,9 +745,9 @@ unsupported:
 
 dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, size_t count,
         const uint8_t clear[4], uint8_t *rgba, size_t capacity) {
-    if (!r || !clear || !rgba || (count && !items)) return DC_ARGUMENT;
+    if (!r || !clear || (!rgba && capacity) || (count && !items)) return DC_ARGUMENT;
     if (r->broken) return fail(r, DC_IO, "Renderer requires recreation after submission failure");
-    if (count > 4096 || capacity < (size_t)r->width * r->height * 4)
+    if (count > 4096 || (rgba && capacity < (size_t)r->width * r->height * 4))
         return fail(r, DC_RANGE, "Frame item count or output capacity out of range");
     prepared_draw *draws = calloc(count ? count : 1, sizeof(*draws));
     if (!draws) return DC_MEMORY;
@@ -646,6 +803,7 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
             vkCmdDraw(r->command, 4, 1, 0, 0);
         }
         vkCmdEndRenderPass(r->command);
+        if (rgba) {
         VkBufferImageCopy copy = {.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1},
             .imageExtent = {r->width, r->height, 1}};
         vkCmdCopyImageToBuffer(r->command, r->target, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, r->readback.buffer, 1, &copy);
@@ -655,9 +813,11 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
             .buffer = r->readback.buffer, .size = VK_WHOLE_SIZE};
         vkCmdPipelineBarrier(r->command, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT,
             0, 0, NULL, 1, &barrier, 0, NULL);
+        }
         status = submit_commands(r);
+        if (status == DC_OK && r->surface) status = present_target(r);
         if (status == DC_OK) {
-            memcpy(rgba, r->readback.mapped, (size_t)r->width * r->height * 4);
+            if (rgba) memcpy(rgba, r->readback.mapped, (size_t)r->width * r->height * 4);
             ++r->info.submitted_frames;
         }
     }

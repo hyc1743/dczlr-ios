@@ -6,7 +6,7 @@ final class LabModel: ObservableObject {
     @Published var x: Float = 0
     @Published var y: Float = 0
     @Published var active = true
-    @Published var status = "等待 Metal 初始化"
+    @Published var status = "等待 Vulkan 初始化"
     private var player: AVAudioPlayer?
     private let root: URL
     private var logReady = false

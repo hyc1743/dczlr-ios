@@ -6,6 +6,14 @@ The supplied Windows executable, DLLs, embedded resources, `Data` directory, sav
 
 The iOS experiment uses Apple system frameworks such as MetalKit, AVFoundation and CryptoKit. Xcode and the Apple SDK remain governed by Apple's terms. GitHub Actions uses third-party actions pinned by major version; each action retains its own license and terms.
 
+The native sprite host links the official public-API MoltenVK 1.4.2 release
+(Apache-2.0). Its all-platform archive
+is pinned by size and SHA-256 in `tools/bootstrap_moltenvk.py`. The extracted
+release retains its LICENSE and documentation under the ignored dependency
+directory. iOS build artifacts include the upstream license, user guide and provenance in the
+application resources. glslang and SPIRV-Tools compile/validate the self-authored
+sprite GLSL at build time and are not linked into the application.
+
 The independently written D3DX effect record reader uses the binary layout reviewed in Wine `effect.c` and `preshader.c` at `840a939ee526137639665ff5f587224d6a36403f` as a format reference. Wine implementation code is not copied or bundled. Any future imported shader converter must retain its upstream license.
 
 The optional Windows analysis tools load hash-pinned Microsoft D3DX/D3DCompiler DLLs from separately supplied `Microsoft.DXSDK.D3DX` 9.29.952.8. Those DLLs and their headers are not redistributed here or linked into iOS. The effect source, compiled fixture and source-reflection JSON under `tests/fixtures/effect-synthetic*` were generated from this project's self-authored source; they contain no original game shaders or resources. Original shader disassembly and extracted bytecode stay under ignored `research/` paths.

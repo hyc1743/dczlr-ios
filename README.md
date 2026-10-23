@@ -27,8 +27,12 @@ All 135 unique original shaders now translate offline to SPIR-V and pass
 Vulkan 1.0 validation with a pinned vkd3d 2.1 tool plus scoped LGPL legacy
 instruction extensions. The native sprite entry state, draw submission and
 vertex generation are also reconstructed and checked against isolated original
-routines. Actual Vulkan/MoltenVK rendering, effect integration and game flow
-are still incomplete; this is not a playable release.
+routines. A native Vulkan sprite backend now passes 48-frame pixel gates on
+Mesa lavapipe (zero validation errors) and a local Intel UHD 630 GPU. The Apple
+host now has MoltenVK surface/swapchain integration for a self-authored sprite
+scene; its Apple execution checks are pending. Original effect integration and
+game flow remain incomplete; this is not a playable release. See
+[vulkan-sprites.md](docs/vulkan-sprites.md).
 
 ## Previous interpreter experiment
 
@@ -48,7 +52,7 @@ The host already has the resource import contract needed for a future port. A bu
 
 ## Build in GitHub Actions
 
-The `Build PortLab iOS IPA` workflow runs portable Python checks on Ubuntu, then generates and builds the Swift/Metal host on macOS. It uploads an unsigned simulator app and an unsigned device IPA. A developer must sign the device app with their own Apple identity before installation.
+The `Build PortLab iOS IPA` workflow runs portable Python checks on Ubuntu, then prepares pinned MoltenVK, compiles the self-authored sprite shaders and builds the Swift/native Vulkan host on macOS. It uploads an unsigned simulator app and an unsigned device IPA. A developer must sign the device app with their own Apple identity before installation.
 
 The workflow does not download or embed the local game data. Publish the resource parts separately as GitHub Release assets after generating them locally.
 

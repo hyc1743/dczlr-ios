@@ -4,7 +4,8 @@
 draw plans and vertex generator through Vulkan 1.0. This is an optional backend;
 the CPU resource library does not depend on a Vulkan SDK. The current API renders
 to an offscreen RGBA8 attachment and blocks for tightly packed pixel readback.
-It does not yet present through the iOS host or execute the game state machine.
+The optional Apple path blits this target on the GPU to a Metal surface's Vulkan
+swapchain and presents through MoltenVK. It does not execute the game state machine.
 
 The two shaders are independently authored GLSL equivalents for the admitted
 fixed-function sprite profile. They are not the 135 converted original shaders.
@@ -41,5 +42,22 @@ filtering and repeat, native state transitions, hidden sprites, rejected frames,
 stale handles and repeated rendering. It requires zero validation errors.
 This checks real Vulkan execution against independent expected pixel values;
 it does not establish equivalence with original D3D9 GPU output or iPhone GPU
-behavior. The existing iOS host remains a direct Metal diagnostic until its
-MoltenVK integration is complete. No playable build is established by this gate.
+behavior. The iOS host now uses this backend for a self-authored checker sprite,
+replacing the direct Metal triangle. It submits no original game state or effect.
+Readback can be omitted for presentation; the initial backend serializes frames
+and waits for completion, so it is a correctness foundation, not a tuned renderer.
+No playable build is established by this gate.
+
+The first cloud run `39932627781`, revision `d9107c0`, passed all 48 rendered
+frames on lavapipe with zero validation errors. The same gate also passed on a
+local Intel UHD 630 physical GPU, without an installed validation layer. The
+additional readback-free frame and Apple integration require their own checks.
+
+`tools/bootstrap_moltenvk.py` verifies the official public-API 1.4.2 release
+archive against its pinned 180,474,368-byte length and SHA-256 before extraction.
+The all-platform archive includes device, simulator and macOS static slices.
+For local iOS builds, run this tool with
+`--notices-output ios/Generated/MoltenVKNotices` and generate the shader header under
+`ios/Generated/sprite-shaders` before running XcodeGen. The Apple CI job runs the
+same numeric pixel gate offscreen and with an actual CAMetalLayer swapchain.
+An API presentation success does not by itself prove a user inspected the screen.
