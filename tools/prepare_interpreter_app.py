@@ -128,8 +128,9 @@ extension AppModel {
                         'Text(model.jit.isUsable ? "JIT ready" : "JIT unavailable")',
                         "Text(model.cpuBackendStatus)", "Backend status label")
     text = text.replace("model.jit.isUsable", "model.cpuBackendReady")
-    text = replace_once(text, '            Section("Runtime") {',
-                        '''            Section("Compatibility check") {
+    text = replace_once(text, '        List {\n            Section("Runtime") {\n                NavigationLink {',
+                        '''        List {
+            Section("Compatibility check") {
                 Button("Run Win32 compatibility check") {
                     model.launchPortLabRuntimeCheck()
                 }
@@ -138,7 +139,8 @@ extension AppModel {
                 Text("Tests files, threads, offscreen GDI and a silent audio buffer. Import the Wine runtime in Settings first. Results appear in guest output; D3D9 and audible playback are not tested.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Runtime") {''', "Compatibility check entry point")
+            Section("Runtime") {
+                NavigationLink {''', "Compatibility check entry point")
     text = replace_once(text,
                         "            JITStatusSection()\n            JITHintSection()",
                         '''            if model.runtimeNeedsJIT {
