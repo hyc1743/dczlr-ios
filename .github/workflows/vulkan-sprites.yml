@@ -11,9 +11,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Vulkan CPU driver and shader tools
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://archive.ubuntu.com/ubuntu/|g' /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get update -qq
-          sudo apt-get install -y libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers glslang-tools spirv-tools ninja-build
+          for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list.d/ubuntu.sources; do
+            if [ -f "$source" ]; then
+              sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
+            fi
+          done
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libvulkan-dev mesa-vulkan-drivers vulkan-validationlayers glslang-tools spirv-tools ninja-build
       - name: Build the actual backend
         run: |
           cmake -S native -B out/vulkan -G Ninja -DPORTLAB_VULKAN_SPRITES=ON -DCMAKE_BUILD_TYPE=Debug

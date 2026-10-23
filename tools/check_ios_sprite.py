@@ -1,6 +1,7 @@
 """Launch the self-authored sprite integration scene on an iOS simulator."""
 import argparse
 import json
+import plistlib
 from pathlib import Path
 import subprocess
 import time
@@ -15,6 +16,10 @@ def run(*command, timeout=120):
 
 def check(app, output):
     output.mkdir(parents=True, exist_ok=True)
+    with (app / "Info.plist").open("rb") as source:
+        info = plistlib.load(source)
+    if info.get("CFBundleIdentifier") != "org.example.portlab" or not info.get("CFBundleExecutable"):
+        raise ValueError("App is missing expected bundle identity/executable metadata")
     devices = json.loads(run("xcrun", "simctl", "list", "devices", "available", "--json"))["devices"]
     phones = [device for entries in devices.values() for device in entries if device["name"].startswith("iPhone")]
     if not phones:
