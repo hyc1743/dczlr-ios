@@ -63,19 +63,39 @@ def stage(root):
 ''' + text[end:]
     runtime.write_text(text, encoding="utf-8")
 
-    # These are optional imports, not local weak definitions. Darwin needs
-    # weak_import so the existing nullptr checks survive absent DXMT libraries.
-    optional_imports = [
-        ("BVNGuestOverlay.mm", 'extern "C" uint64_t mythic_get_present_count(void) __attribute__((weak));'),
-        ("BVNAppDelegate.mm", 'extern "C" void mythic_set_vsync_locked(int mode) __attribute__((weak));'),
-    ]
-    for filename, declaration in optional_imports:
-        file = root / "ios/runtime/src" / filename
-        original = file.read_text(encoding="utf-8")
-        updated = replace_once(original, declaration,
-                               declaration.replace("((weak))", "((weak_import))"),
-                               "Optional DXMT import " + filename)
-        file.write_text(updated, encoding="utf-8")
+    # Resolve genuinely optional exports from already-loaded code. No dummy
+    # DXMT implementation is introduced when this 32-bit build omits DXMT.
+    overlay = root / "ios/runtime/src/BVNGuestOverlay.mm"
+    text = replace_once(overlay.read_text(encoding="utf-8"),
+        'extern "C" uint64_t mythic_get_present_count(void) __attribute__((weak));',
+        '''#include <dlfcn.h>
+using PortLabDxmtCounter = uint64_t (*)(void);
+static PortLabDxmtCounter PortLabFindDxmtCounter() {
+    return reinterpret_cast<PortLabDxmtCounter>(dlsym(RTLD_DEFAULT, "mythic_get_present_count"));
+}''', "Optional DXMT counter declaration")
+    text = replace_once(text,
+        "    if (mythic_get_present_count != nullptr) {\n"
+        "        const uint64_t guestPresents = mythic_get_present_count();",
+        "    const auto dxmtCounter = PortLabFindDxmtCounter();\n"
+        "    if (dxmtCounter != nullptr) {\n"
+        "        const uint64_t guestPresents = dxmtCounter();", "Optional DXMT counter call")
+    overlay.write_text(text, encoding="utf-8")
+
+    delegate = root / "ios/runtime/src/BVNAppDelegate.mm"
+    text = replace_once(delegate.read_text(encoding="utf-8"),
+        'extern "C" void mythic_set_vsync_locked(int mode) __attribute__((weak));',
+        '''#include <dlfcn.h>
+using PortLabDxmtVsync = void (*)(int);
+static PortLabDxmtVsync PortLabFindDxmtVsync() {
+    return reinterpret_cast<PortLabDxmtVsync>(dlsym(RTLD_DEFAULT, "mythic_set_vsync_locked"));
+}''', "Optional DXMT vsync declaration")
+    text = replace_once(text,
+        "    if (mythic_set_vsync_locked == nullptr) {",
+        "    const auto setDxmtVsync = PortLabFindDxmtVsync();\n"
+        "    if (setDxmtVsync == nullptr) {", "Optional DXMT vsync guard")
+    text = replace_once(text, "    mythic_set_vsync_locked(dxmtMode);",
+                        "    setDxmtVsync(dxmtMode);", "Optional DXMT vsync call")
+    delegate.write_text(text, encoding="utf-8")
 
     header = root / "ios/runtime/include/BVNRuntime.h"
     text = replace_once(header.read_text(encoding="utf-8"),
