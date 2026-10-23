@@ -101,7 +101,10 @@ def check(app, output, runtime):
             raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified.stderr[-1500:])
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame; launch_timed_out=" +
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
-    report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device, "scene": "self-authored checker sprite",
+    original_card = markers[0] in log
+    report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,
+              "scene": "original illusion.ema startup card" if original_card else "self-authored checker sprite",
+              "original_game_assets_in_app": False,
               "vulkan_first_present": "reported_by_native_view_after_successful_present",
               "physical_iphone": "not tested", "game_playability": "not verified"}
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

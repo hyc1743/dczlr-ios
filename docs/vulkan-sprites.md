@@ -46,6 +46,10 @@ behavior. The iOS host uses this backend for a self-authored checker while a
 user imports data. Once `RPP_02.pp` is available, the native archive/image path
 uploads and draws its original `illusion.ema` startup card. Later game states
 and the original transition effects remain unimplemented.
+MoltenVK changes `CAMetalLayer` properties during swapchain creation, so the
+backend drains pending GPU work on its render queue and marshals swapchain
+creation to UIKit's main thread. Frame rendering and presentation stay on the
+serialized Vulkan worker.
 Readback can be omitted for presentation; the initial backend serializes frames
 and waits for completion, so it is a correctness foundation, not a tuned renderer.
 No playable build is established by this gate.

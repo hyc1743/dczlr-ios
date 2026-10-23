@@ -8,6 +8,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
+#ifdef __APPLE__
+#include <dispatch/dispatch.h>
+#include <pthread.h>
+#endif
 
 typedef struct host_buffer {
     VkBuffer buffer;
@@ -355,7 +359,7 @@ static dc_status create_device(dc_vk_sprite *r, uint32_t validation, void *metal
     return DC_OK;
 }
 
-static dc_status create_swapchain(dc_vk_sprite *r) {
+static dc_status create_swapchain_impl(dc_vk_sprite *r) {
     VkSurfaceCapabilitiesKHR caps;
     VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r->physical, r->surface, &caps));
     if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT))
@@ -394,7 +398,6 @@ static dc_status create_swapchain(dc_vk_sprite *r) {
     if (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     else if (caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) alpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
     else return fail(r, DC_IO, "Surface requires unsupported alpha composition");
-    VK_CHECK(vkDeviceWaitIdle(r->device));
     if (r->swapchain) vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
     r->swapchain = VK_NULL_HANDLE;
     free(r->present_images); r->present_images = NULL; r->present_count = 0;
@@ -411,6 +414,30 @@ static dc_status create_swapchain(dc_vk_sprite *r) {
     VK_CHECK(vkGetSwapchainImagesKHR(r->device, r->swapchain, &r->present_count, r->present_images));
     r->present_extent = extent;
     return DC_OK;
+}
+
+#ifdef __APPLE__
+typedef struct swapchain_request { dc_vk_sprite *renderer; dc_status status; } swapchain_request;
+static void create_swapchain_main(void *context) {
+    swapchain_request *request = context;
+    request->status = create_swapchain_impl(request->renderer);
+}
+#endif
+
+static dc_status create_swapchain(dc_vk_sprite *r) {
+    /* Drain Vulkan work on the caller's thread before touching the layer. */
+    VK_CHECK(vkDeviceWaitIdle(r->device));
+#ifdef __APPLE__
+    /* MoltenVK updates CAMetalLayer properties during vkCreateSwapchainKHR.
+     * UIKit requires those layer changes on the main thread. Rendering and
+     * queue waits remain on the serialized Vulkan worker. */
+    if (!pthread_main_np()) {
+        swapchain_request request = {r, DC_IO};
+        dispatch_sync_f(dispatch_get_main_queue(), &request, create_swapchain_main);
+        return request.status;
+    }
+#endif
+    return create_swapchain_impl(r);
 }
 
 static dc_status present_target(dc_vk_sprite *r) {
