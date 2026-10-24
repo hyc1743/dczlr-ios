@@ -41,6 +41,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     dc_menu_state _titleMenu;
     BOOL _titleMenuInitialized,_previousTitleTouch;
     BOOL _previousGameplayTouch;
+    BOOL _suppressGameplayTouch;
     BOOL _titleUnlocksLoaded,_editUnlocked,_extraUnlocked;
     uintptr_t _titleTextures[9];
     uint32_t _width, _height;
@@ -146,6 +147,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
     if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
     _previousGameplayTouch=NO;
+    _suppressGameplayTouch=YES;
     return nil;
 }
 - (void)destroyRenderer {
@@ -161,6 +163,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     _titleSceneLoaded = NO;
     _gameScene = nil;
     _previousGameplayTouch = NO;
+    _suppressGameplayTouch = NO;
     _lastTitleScan = 0;
     _presentedScene = DCVulkanSpriteSceneDiagnostic;
     _diagnosticTickInitialized = NO;
@@ -261,9 +264,11 @@ static void dc_write_float_le(uint8_t *out, float value) {
             if(_introScene) {
                 NSString *gameError=[self startGameSceneFromDirectory:directory];
                 if(gameError)return gameError;
-                NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
+                BOOL gameTouch=touching;
+                if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
+                NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
                 if(gameFailure)return gameFailure;
-                _previousGameplayTouch=touching;
+                _previousGameplayTouch=gameTouch;
                 _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
                 ++_presentedFrames;
                 return nil;
@@ -409,9 +414,11 @@ static void dc_write_float_le(uint8_t *out, float value) {
 #undef ADD_TITLE_LAYER
     } else {
         if(_gameScene) {
-            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
+            BOOL gameTouch=touching;
+            if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
+            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
             if(gameFailure)return gameFailure;
-            _previousGameplayTouch=touching;
+            _previousGameplayTouch=gameTouch;
             _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
             ++_presentedFrames;
             return nil;
