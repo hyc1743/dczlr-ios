@@ -11,6 +11,7 @@ const presses = __PRESSES__;
 const forceMenu = __FORCE_MENU__;
 const forceChapter = __FORCE_CHAPTER__;
 const forceActions = __FORCE_ACTIONS__;
+const forceDispatch = __FORCE_DISPATCH__;
 const startedAt = Date.now();
 const seen = {};
 const hookedFunctions = {};
@@ -30,6 +31,7 @@ let introStateSnapshot = '';
 let dispatcherSnapshot = '';
 let forceChapterApplied = false;
 let forceActionsRemaining = forceActions ? (forceActions.frames || 3) : 0;
+let forceDispatchRemaining = forceDispatch ? (forceDispatch.frames || 3) : 0;
 let audioDispatcherSnapshot = '';
 const gameplayCallbackCounts = {};
 
@@ -465,12 +467,13 @@ function hookGameFunctions() {
   installOnce(audioDispatcherFn, 'FUN_00532240', {
     onEnter: function (args) {
       const values = [];
-      for (let index = 0; index < 3; ++index) {
+      for (let index = 0; index < 4; ++index) {
         const item = {index: index, pointer: pointerKey(args[index])};
         if (validPointer(args[index])) {
           try {
             item.slot106c = args[index].add(0x106c).readU32();
             item.slot1070 = args[index].add(0x1070).readU32();
+            item.state3 = args[index].add(3).readU8();
           } catch (_) {}
         }
         values.push(item);
@@ -489,6 +492,15 @@ function hookGameFunctions() {
       onEnter: function (args) {
         gameplayCallbackCounts[address] += 1;
         const count = gameplayCallbackCounts[address];
+        if (address === 0x00513690 && forceDispatch && forceDispatchRemaining > 0 &&
+            elapsed() >= forceDispatch.at) {
+          try {
+            base.add(0x437b68 + 0xf144 + 3).writeU8(3);
+            base.add(0x4393b4 + 6).writeU8(3);
+            forceDispatchRemaining -= 1;
+            emit('ForceAudioDispatch', {remaining: forceDispatchRemaining});
+          } catch (_) {}
+        }
         if (address === 0x00513690 && forceActions && forceActionsRemaining > 0 &&
             elapsed() >= forceActions.at) {
           try {
