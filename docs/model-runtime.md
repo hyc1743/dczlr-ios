@@ -7,9 +7,10 @@ matching the final original loader setup. Pose names bind to the last matching
 root descendant; material names bind to the first matching material. Missing
 targets are inert. Tracks retain file order and individual model baselines.
 
-The current explicit profile has mode-0 node tracks, material tracks,
-unskinned meshes and indexed four-matrix skinning. Crossfades, mode-1 poses,
-billboard transforms, events and morphs are still rejected. Failed updates
+The current explicit profile has mode-0 node tracks, material tracks, framed
+event tracks whose target/flag payload remains opaque, unskinned meshes and
+indexed four-matrix skinning. Crossfades, mode-1 poses, billboard transforms
+and morphs are still rejected. Failed updates
 preserve the model's clips, controller, node matrices, material values,
 palettes and deformed vertex buffers. This runtime is an integration
 step toward the original game; it does not certify all resources or game flow.
@@ -26,6 +27,16 @@ All 91 meshes project under a synthetic bounded camera. Across two world
 matrices, 196 node-global comparisons match the isolated original hierarchy
 driver with reference D3DX math exactly. This is not the original game camera,
 GPU appearance or scene execution. See `skinning.md` for the weighted path.
+
+The real chapter-3 path now also admits the original map-1 animation
+`RPP_10.pp/mn00_01.xa`: its clip 1 spans frames 10–50, binds 35 mode-0 node
+tracks to `mm00_01.xx`, and retains four event tracks as bounded opaque views.
+`DCGameScene` loads that XA only when the original map archive provides it;
+selector 0 and the other audited static maps continue through the explicit
+XX-only path. The event dispatcher changes target vertex channels in the
+original runtime; that channel update is still outside the native model
+controller, so the audit proves map pose motion and admission but not original
+effect-channel equivalence.
 
 `dc_scene_update` implements the default, modifier-1 and modifier-2 branches of
 `0x00415620`. The default is local times parent-global using row vectors.
