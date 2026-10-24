@@ -32,6 +32,7 @@ let dispatcherSnapshot = '';
 let forceChapterApplied = false;
 let forceActionsRemaining = forceActions ? (forceActions.frames || 3) : 0;
 let forceDispatchRemaining = forceDispatch ? (forceDispatch.frames || 3) : 0;
+let gameplayStateSnapshot = '';
 let audioDispatcherSnapshot = '';
 const gameplayCallbackCounts = {};
 
@@ -492,6 +493,18 @@ function hookGameFunctions() {
       onEnter: function (args) {
         gameplayCallbackCounts[address] += 1;
         const count = gameplayCallbackCounts[address];
+        if (address === 0x00513690) {
+          try {
+            const state = base.add(0x4393b4);
+            const bytes = [];
+            for (let i = 0; i < 0x80; ++i) bytes.push(state.add(i).readU8());
+            const fingerprint = JSON.stringify(bytes);
+            if (fingerprint !== gameplayStateSnapshot) {
+              gameplayStateSnapshot = fingerprint;
+              emit('GameplayState', {address: '0x008393b4', bytes: bytes});
+            }
+          } catch (_) {}
+        }
         if (address === 0x00513690 && forceDispatch && forceDispatchRemaining > 0 &&
             elapsed() >= forceDispatch.at) {
           try {
