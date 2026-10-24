@@ -61,6 +61,9 @@ struct dc_vk_sprite {
     VkImage target;
     VkDeviceMemory target_memory;
     VkImageView target_view;
+    VkImage depth;
+    VkDeviceMemory depth_memory;
+    VkImageView depth_view;
     VkRenderPass render_pass;
     VkFramebuffer framebuffer;
     VkDescriptorSetLayout descriptor_layout;
@@ -172,6 +175,25 @@ static dc_status make_image(dc_vk_sprite *r, uint32_t width, uint32_t height, Vk
     return DC_OK;
 }
 
+static dc_status make_depth_image(dc_vk_sprite *r, uint32_t width, uint32_t height,
+                                  VkImage *image, VkDeviceMemory *memory, VkImageView *view) {
+    VkImageCreateInfo create={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,
+        .format=VK_FORMAT_D32_SFLOAT,.extent={width,height,1},.mipLevels=1,.arrayLayers=1,
+        .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
+        .usage=VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,.sharingMode=VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout=VK_IMAGE_LAYOUT_UNDEFINED};
+    VK_CHECK(vkCreateImage(r->device,&create,NULL,image));
+    VkMemoryRequirements requirements;vkGetImageMemoryRequirements(r->device,*image,&requirements);
+    uint32_t type;if(!memory_type(r,requirements.memoryTypeBits,VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,&type) &&
+        !memory_type(r,requirements.memoryTypeBits,0,&type))return fail(r,DC_IO,"No compatible Vulkan depth memory");
+    VkMemoryAllocateInfo allocate={.sType=VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,.allocationSize=requirements.size,.memoryTypeIndex=type};
+    VK_CHECK(vkAllocateMemory(r->device,&allocate,NULL,memory));VK_CHECK(vkBindImageMemory(r->device,*image,*memory,0));
+    VkImageViewCreateInfo view_info={.sType=VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,.image=*image,
+        .viewType=VK_IMAGE_VIEW_TYPE_2D,.format=VK_FORMAT_D32_SFLOAT,
+        .subresourceRange={VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,1}};
+    VK_CHECK(vkCreateImageView(r->device,&view_info,NULL,view));return DC_OK;
+}
+
 static dc_status begin_commands(dc_vk_sprite *r) {
     VK_CHECK(vkResetCommandBuffer(r->command, 0));
     VkCommandBufferBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -225,6 +247,9 @@ void dc_vk_sprite_destroy(dc_vk_sprite *r) {
         if (r->target_view) vkDestroyImageView(r->device, r->target_view, NULL);
         if (r->target) vkDestroyImage(r->device, r->target, NULL);
         if (r->target_memory) vkFreeMemory(r->device, r->target_memory, NULL);
+        if (r->depth_view) vkDestroyImageView(r->device, r->depth_view, NULL);
+        if (r->depth) vkDestroyImage(r->device, r->depth, NULL);
+        if (r->depth_memory) vkFreeMemory(r->device, r->depth_memory, NULL);
         drop_buffer(r, &r->readback);
         drop_buffer(r, &r->vertices);
         if (r->fence) vkDestroyFence(r->device, r->fence, NULL);
@@ -512,15 +537,22 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         &r->target, &r->target_memory, &r->target_view);
     if (status != DC_OK) return status;
+    status = make_depth_image(r,r->width,r->height,&r->depth,&r->depth_memory,&r->depth_view);
+    if (status != DC_OK) return status;
     status = make_buffer(r, (VkDeviceSize)r->width * r->height * 4, VK_BUFFER_USAGE_TRANSFER_DST_BIT, &r->readback);
     if (status != DC_OK) return status;
-    VkAttachmentDescription attachment = {.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
+    VkAttachmentDescription attachments[2] = {{.format = VK_FORMAT_R8G8B8A8_UNORM, .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL};
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+        {.format = VK_FORMAT_D32_SFLOAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE, .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED, .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
     VkAttachmentReference reference = {0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+    VkAttachmentReference depth_reference = {1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
     VkSubpassDescription subpass = {.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1, .pColorAttachments = &reference};
+        .colorAttachmentCount = 1, .pColorAttachments = &reference,.pDepthStencilAttachment=&depth_reference};
     VkSubpassDependency dependencies[2] = {
         {.srcSubpass = VK_SUBPASS_EXTERNAL, .dstSubpass = 0,
          .srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT, .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -529,11 +561,12 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
          .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, .dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
          .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT}};
     VkRenderPassCreateInfo pass = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1, .pAttachments = &attachment, .subpassCount = 1, .pSubpasses = &subpass,
+        .attachmentCount = 2, .pAttachments = attachments, .subpassCount = 1, .pSubpasses = &subpass,
         .dependencyCount = 2, .pDependencies = dependencies};
     VK_CHECK(vkCreateRenderPass(r->device, &pass, NULL, &r->render_pass));
+    VkImageView framebuffer_views[2] = {r->target_view,r->depth_view};
     VkFramebufferCreateInfo framebuffer = {.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .renderPass = r->render_pass, .attachmentCount = 1, .pAttachments = &r->target_view,
+        .renderPass = r->render_pass, .attachmentCount = 2, .pAttachments = framebuffer_views,
         .width = r->width, .height = r->height, .layers = 1};
     VK_CHECK(vkCreateFramebuffer(r->device, &framebuffer, NULL, &r->framebuffer));
     VkDescriptorSetLayoutBinding binding = {.binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -591,6 +624,8 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         .lineWidth = 1};
     VkPipelineMultisampleStateCreateInfo samples = {.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT};
+    VkPipelineDepthStencilStateCreateInfo depth = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
     const VkBlendFactor sources[] = {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ZERO};
     const VkBlendFactor destinations[] = {VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_COLOR};
     for (uint32_t i = 0; i < 6; ++i) {
@@ -607,7 +642,7 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         VkGraphicsPipelineCreateInfo pipeline = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .stageCount = 2, .pStages = stages, .pVertexInputState = &input, .pInputAssemblyState = &assembly,
             .pViewportState = &view, .pRasterizationState = &raster, .pMultisampleState = &samples,
-            .pColorBlendState = &blending,.pDynamicState=&dynamic, .layout = r->pipeline_layout, .renderPass = r->render_pass};
+            .pDepthStencilState = &depth, .pColorBlendState = &blending,.pDynamicState=&dynamic, .layout = r->pipeline_layout, .renderPass = r->render_pass};
         VK_CHECK(vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &pipeline, NULL, &r->pipelines[i]));
     }
     return DC_OK;
@@ -888,11 +923,12 @@ static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t v
         status = begin_commands(r);
     }
     if (status == DC_OK) {
-        VkClearValue color = {0};
-        for (uint32_t i = 0; i < 4; ++i) color.color.float32[i] = clear[i] / 255.0f;
+        VkClearValue clear_values[2] = {{0},{0}};
+        for (uint32_t i = 0; i < 4; ++i) clear_values[0].color.float32[i] = clear[i] / 255.0f;
+        clear_values[1].depthStencil.depth = 1.0f;
         VkRenderPassBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = r->render_pass, .framebuffer = r->framebuffer,
-            .renderArea = {{0, 0}, {r->width, r->height}}, .clearValueCount = 1, .pClearValues = &color};
+            .renderArea = {{0, 0}, {r->width, r->height}}, .clearValueCount = 2, .pClearValues = clear_values};
         vkCmdBeginRenderPass(r->command, &begin, VK_SUBPASS_CONTENTS_INLINE);
         VkRect2D scissor={{0,0},{r->width,r->height}};
         if (clip) scissor=(VkRect2D){{(int32_t)clip->x,(int32_t)clip->y},{clip->width,clip->height}};

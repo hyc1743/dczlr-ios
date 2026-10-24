@@ -221,6 +221,27 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     CHECK(pixel(rgba,4,5,255,0,0,255,0));CHECK(pixel(rgba,4,2,20,40,60,100,0));
     CHECK(pixel(rgba,0,5,20,40,60,100,0));
     puts("PASS: eye-plane/near-plane clipped mesh and camera through actual Vulkan raster");
+    /* Depth ordering must be independent of submission order for the real
+     * map/actor triangle lists. Two opaque self-authored quads overlap at the
+     * center; the smaller Z wins in both orders. */
+    const uint8_t red_pixel[4]={255,0,0,255},green_pixel[4]={0,255,0,255};
+    uintptr_t red_texture=0,green_texture=0;
+    OK(dc_vk_sprite_upload(r,1,1,red_pixel,sizeof(red_pixel),&red_texture));
+    OK(dc_vk_sprite_upload(r,1,1,green_pixel,sizeof(green_pixel),&green_texture));
+    dc_sprite_vertex far_quad[6],near_quad[6];
+    const float xy[4][2]={{1,1},{7,1},{1,7},{7,7}};const unsigned qorder[6]={0,1,2,2,1,3};
+    for(unsigned i=0;i<6;++i) {
+        unsigned q=qorder[i];
+        far_quad[i]=(dc_sprite_vertex){.x=xy[q][0],.y=xy[q][1],.z=.8f,.rhw=1,.diffuse=0xffffffff,.u=0,.v=0};
+        near_quad[i]=(dc_sprite_vertex){.x=xy[q][0]+1,.y=xy[q][1]+1,.z=.2f,.rhw=1,.diffuse=0xffffffff,.u=0,.v=0};
+    }
+    dc_vk_geometry_item depth_items[2]={{.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3},
+        {.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3}};
+    OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,0,255,0,255,0));
+    dc_vk_geometry_item swapped=depth_items[0];depth_items[0]=depth_items[1];depth_items[1]=swapped;
+    OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,0,255,0,255,0));
+    OK(dc_vk_sprite_remove_texture(r,red_texture));OK(dc_vk_sprite_remove_texture(r,green_texture));
+    puts("PASS: depth-tested overlapping geometry is submission-order independent");
     dc_vk_sprite_destroy(r);
     return 0;
 failed:
