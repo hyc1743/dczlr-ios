@@ -34,3 +34,11 @@ The observed chain reaches `0x00512cc0` and loads `RPP_10`, `RPP_08`, `RPP_09`,
 an evidence aid for the unfinished original input path; it is not a claim that
 the iOS port should write these state fields. Runtime audio is still device
 untested, and the local PP data remains outside the public repository.
+
+The chapter-3 gameplay menu contains six entries. The first active target is
+stored at logical `x=920..1016`, `y=328..424` with the same `1.25` window scale,
+so its window-space center is about `(1200,470)`. A forced probe reaches the
+original menu result `3`; the following action transition additionally checks
+the context mode at `+0x504`, the action input byte at `+0x261`, and the local
+state flags before calling `0x00532240`. These gates are now observable in the
+probe, while a real user interaction still needs to drive them naturally.
