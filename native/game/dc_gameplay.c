@@ -27,6 +27,9 @@ dc_status dc_game_interaction_step(const dc_game_interaction_state *state,
         const dc_game_interaction_input *input,dc_game_interaction_state *out,
         dc_game_interaction_result *result){
     if(!state||!input||!out||!result)return DC_ARGUMENT;
+    if(overlap(state,sizeof(*state),out,sizeof(*out))||overlap(state,sizeof(*state),result,sizeof(*result))||
+       overlap(input,sizeof(*input),out,sizeof(*out))||overlap(input,sizeof(*input),result,sizeof(*result))||
+       overlap(out,sizeof(*out),result,sizeof(*result)))return DC_ARGUMENT;
     if(state->active>1||state->completed>1||input->new_touch>1||input->near_target>1)return DC_RANGE;
     dc_game_interaction_state next=*state;dc_game_interaction_result event={0};
     if(input->new_touch&&input->near_target&&!state->active&&!state->completed){
