@@ -12,6 +12,7 @@ import uuid
 
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
           "title": "title-screen background and menu layers", "intro": "first new-game script record and text adapter"}
+GAMEPLAY_SCENES = {"gameplay": "chapter 3 map and actor scene", "gameComplete": "completed chapter 3 map sequence"}
 
 
 def has_session(log,session):
@@ -61,6 +62,28 @@ def new_game_evidence(log):
         'resources':'self-authored generated PP/script/image/audio only','intro_audio_clocks':'music/sound/voice advanced',
         'records':records,'text_adapter':'original numeric byte-pair layout/fade/forward input; CP936 Apple font rasterization',
         'physical_device':'not tested','complete_game':'not verified'}
+
+
+def gameplay_scenes(log):
+    return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(gameplay|gameComplete)(?= |$)", log)
+
+
+def gameplay_evidence(log, require_complete=True):
+    scenes = gameplay_scenes(log)
+    if not scenes or scenes[0] != "gameplay":
+        raise ValueError("Chapter 3 gameplay scene was not presented")
+    interactions = re.findall(r"(?m)^\S+ PORTLAB_GAME_INTERACTION_COMPLETED(?= |$)", log)
+    if not interactions:
+        raise ValueError("No completed gameplay interaction was reported")
+    if require_complete and "gameComplete" not in scenes:
+        raise ValueError("Terminal gameplay scene was not presented")
+    return {
+        "scenes": scenes,
+        "completed_interactions": len(interactions),
+        "gameplay": "chapter 3 scene presented and at least one interaction completed",
+        "complete_game": "terminal chapter 3 scene presented" if "gameComplete" in scenes else "not required",
+        "physical_iphone": "not tested",
+    }
 
 
 def animation_advanced(log):

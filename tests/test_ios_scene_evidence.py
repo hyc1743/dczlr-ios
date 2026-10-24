@@ -4,7 +4,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,has_session
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session
 
 
 class SceneEvidenceTests(unittest.TestCase):
@@ -111,6 +111,20 @@ class SceneEvidenceTests(unittest.TestCase):
         self.assertEqual(report["physical_iphone"], "not tested")
         self.assertEqual(report["game_playability"], "not verified")
         self.assertEqual(report["resource_content"], "not inspected by this presentation check")
+
+    def test_gameplay_evidence_requires_interaction_and_terminal_scene(self):
+        base = "2026-10-25T00:00:00Z PORTLAB_SCENE_PRESENTED=gameplay submitted\n"
+        with self.assertRaises(ValueError):
+            gameplay_evidence(base)
+        interaction = base + "2026-10-25T00:00:01Z PORTLAB_GAME_INTERACTION_COMPLETED submitted\n"
+        with self.assertRaises(ValueError):
+            gameplay_evidence(interaction)
+        complete = interaction + "2026-10-25T00:00:02Z PORTLAB_SCENE_PRESENTED=gameComplete submitted\n"
+        complete += "2026-10-25T00:00:02Z PORTLAB_GAME_COMPLETED submitted\n"
+        report = gameplay_evidence(complete)
+        self.assertEqual(report["scenes"], ["gameplay", "gameComplete"])
+        self.assertEqual(report["completed_interactions"], 1)
+        self.assertEqual(report["complete_game"], "terminal chapter 3 scene presented")
 
 
 if __name__ == "__main__":
