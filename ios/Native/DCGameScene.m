@@ -3,6 +3,7 @@
 #include "dc_camera.h"
 #include "dc_model.h"
 #include <math.h>
+#include <float.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -35,6 +36,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     uint32_t _cameraPreset;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
+    float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
 }
@@ -84,6 +86,29 @@ static uint32_t gameColor(const dc_material_value *value) {
     }
     return UINT32_MAX;
 }
+- (void)computeWalkBounds {
+    dc_matrix identity=gameIdentity();
+    if(dc_model_tick(_map.model,0,0,&identity)!=DC_OK) {
+        _walkMinX=-100;_walkMaxX=100;_walkMinZ=-100;_walkMaxZ=100;return;
+    }
+    _walkMinX=FLT_MAX;_walkMaxX=-FLT_MAX;_walkMinZ=FLT_MAX;_walkMaxZ=-FLT_MAX;
+    for(uint32_t i=0;i<_map.info.submeshes;++i) {
+        dc_xx_submesh mesh;uint32_t visible=0;
+        if(dc_model_mesh(_map.model,i,&mesh)!=DC_OK || dc_model_mesh_visible(_map.model,i,&visible)!=DC_OK || !visible)continue;
+        dc_matrix global;if(dc_model_global(_map.model,mesh.node,&global)!=DC_OK)continue;
+        dc_mesh_vertex *vertices=calloc(mesh.vertex_count?mesh.vertex_count:1,sizeof(*vertices));
+        if(!vertices || dc_model_load_vertices(_map.model,i,vertices,mesh.vertex_count)!=DC_OK){free(vertices);continue;}
+        for(uint32_t j=0;j<mesh.vertex_count;++j) {
+            float x=vertices[j].position[0]*global.values[0]+vertices[j].position[1]*global.values[4]+vertices[j].position[2]*global.values[8]+global.values[12];
+            float z=vertices[j].position[0]*global.values[2]+vertices[j].position[1]*global.values[6]+vertices[j].position[2]*global.values[10]+global.values[14];
+            _walkMinX=fminf(_walkMinX,x);_walkMaxX=fmaxf(_walkMaxX,x);_walkMinZ=fminf(_walkMinZ,z);_walkMaxZ=fmaxf(_walkMaxZ,z);
+        }
+        free(vertices);
+    }
+    if(!isfinite(_walkMinX)||!isfinite(_walkMaxX)||_walkMinX>=_walkMaxX){_walkMinX=-100;_walkMaxX=100;}
+    if(!isfinite(_walkMinZ)||!isfinite(_walkMaxZ)||_walkMinZ>=_walkMaxZ){_walkMinZ=-100;_walkMaxZ=100;}
+    float margin=1.0f;_walkMinX+=margin;_walkMaxX-=margin;_walkMinZ+=margin;_walkMaxZ-=margin;
+}
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
@@ -112,6 +137,7 @@ static uint32_t gameColor(const dc_material_value *value) {
         orbit=(dc_camera_orbit){.base=gameIdentity(),.stored_distance=-1.5f};
     _cameraBase=orbit.base;
     _actor.world=_actorWorld;
+    [self computeWalkBounds];
     _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
@@ -156,8 +182,8 @@ static uint32_t gameColor(const dc_material_value *value) {
         if(_inputInitialized) {
             float dx=fmaxf(-.15f,fminf(.15f,x-_lastInputX));
             float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
-            _actor.world.values[12]=fmaxf(-100.0f,fminf(100.0f,_actor.world.values[12]+dx*80.0f));
-            _actor.world.values[14]=fmaxf(-100.0f,fminf(100.0f,_actor.world.values[14]-dz*80.0f));
+            _actor.world.values[12]=fmaxf(_walkMinX,fminf(_walkMaxX,_actor.world.values[12]+dx*80.0f));
+            _actor.world.values[14]=fmaxf(_walkMinZ,fminf(_walkMaxZ,_actor.world.values[14]-dz*80.0f));
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else _inputInitialized=NO;
