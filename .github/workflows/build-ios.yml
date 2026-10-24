@@ -2,6 +2,9 @@ name: Build PortLab iOS IPA
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - ipa-build
 
 permissions:
   contents: read
