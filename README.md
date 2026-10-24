@@ -68,6 +68,12 @@ The remaining unknown PP archive and runtime format coverage are separate
 compatibility work; a package roundtrip does not establish that every game
 resource is executable/renderable yet.
 
+Windows development does not require macOS. The real local resource loop can be
+audited with `tools/audit_playable_loop.py --data <local Data> --output <report>`;
+see [Windows native validation](docs/windows-native-validation.md). This uses
+the same native module boundary as the iOS host and keeps the original `Data`
+directory outside the repository.
+
 ## Previous interpreter experiment
 
 The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.

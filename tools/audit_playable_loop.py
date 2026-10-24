@@ -5,6 +5,7 @@ the auxiliary face/morph resource, then drives the native interaction, map and
 save transitions. It writes only hashes, counts and status metadata.
 """
 import ctypes as C
+import argparse
 import hashlib
 import json
 import math
@@ -59,25 +60,30 @@ def entry(path, name):
     raise ValueError(f"missing {path}/{name}")
 
 
-def main():
+def main(data_root=None, report_path=None):
+    data_root = (Path(data_root) if data_root is not None else ROOT / "Data").resolve()
+    if not data_root.is_dir():
+        raise SystemExit(f"missing Data directory: {data_root}")
+    report_path = (Path(report_path) if report_path is not None else
+                   ROOT / "research/native-core/local-playable-loop-audit.json").resolve()
     lib = library()
     identity_world = Matrix((C.c_float * 16)(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1))
-    with PPArchive(ROOT / "Data/RPP_03.pp") as camera_archive:
+    with PPArchive(data_root / "RPP_03.pp") as camera_archive:
         camera_names = [camera_archive.entry(i).name_bytes.decode("ascii") for i in range(camera_archive.count)]
     map_rows = []
     for selector in SEQUENCE:
-        data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
+        data = entry(data_root / "RPP_10.pp", f"mm00_{selector:02d}.xx")
         map_light_name = f"mp00_{selector:02d}.xl"
-        map_light_data = entry(ROOT / "Data/RPP_10.pp", map_light_name)
+        map_light_data = entry(data_root / "RPP_10.pp", map_light_name)
         map_light_info, map_light = XLInfo(), XLLight()
         if (lib.dc_xl_probe(map_light_data, len(map_light_data), C.byref(map_light_info)) or
                 not map_light_info.lights or
                 lib.dc_xl_light_at(map_light_data, len(map_light_data), 0, C.byref(map_light))):
             raise RuntimeError(f"map {selector} variant XL admission failed")
-        camera_data = entry(ROOT / "Data/RPP_03.pp", CAMERAS[selector])
+        camera_data = entry(data_root / "RPP_03.pp", CAMERAS[selector])
         animation_name = f"mn00_{selector:02d}.xa"
         try:
-            animation_data = entry(ROOT / "Data/RPP_10.pp", animation_name)
+            animation_data = entry(data_root / "RPP_10.pp", animation_name)
         except ValueError:
             animation_data = None
         animation_info = None
@@ -177,8 +183,8 @@ def main():
         finally:
             lib.dc_model_close(handle)
 
-    actor = entry(ROOT / "Data/RPP_08.pp", "am00_01.xx")
-    actor_xa = entry(ROOT / "Data/RPP_08.pp", "an00_02.xa")
+    actor = entry(data_root / "RPP_08.pp", "am00_01.xx")
+    actor_xa = entry(data_root / "RPP_08.pp", "an00_02.xa")
     skin_handle = C.c_void_p()
     if lib.dc_model_open(actor, len(actor), actor_xa, len(actor_xa), C.byref(skin_handle)):
         raise RuntimeError("actor skin audit admission failed")
@@ -226,11 +232,11 @@ def main():
         lib.dc_model_close(actor_handle)
         raise RuntimeError("actor initial tick failed")
 
-    face = entry(ROOT / "Data/RPP_09.pp", "ak00_00.xx")
-    morph = entry(ROOT / "Data/RPP_09.pp", "an00_01.xa")
+    face = entry(data_root / "RPP_09.pp", "ak00_00.xx")
+    morph = entry(data_root / "RPP_09.pp", "an00_01.xa")
     gameplay_effects = {}
     for effect_name in ("se016.wav", "se322.wav", "se332.wav"):
-        effect_data = entry(ROOT / "Data/RPP_14.pp", effect_name)
+        effect_data = entry(data_root / "RPP_14.pp", effect_name)
         gameplay_effects[effect_name] = {"bytes": len(effect_data), "sha256": hashlib.sha256(effect_data).hexdigest()}
     scene_dependencies = {}
     for archive_name, resource_names in {
@@ -239,13 +245,13 @@ def main():
     }.items():
         scene_dependencies[archive_name] = {}
         for resource_name in resource_names:
-            resource_data = entry(ROOT / "Data" / archive_name, resource_name)
+            resource_data = entry(data_root / archive_name, resource_name)
             scene_dependencies[archive_name][resource_name] = {
                 "bytes": len(resource_data),
                 "sha256": hashlib.sha256(resource_data).hexdigest(),
             }
-    eyes_data = entry(ROOT / "Data/RPP_04.pp", "ak00_00.eyes")
-    neck_data = entry(ROOT / "Data/RPP_04.pp", "am00_01.neck")
+    eyes_data = entry(data_root / "RPP_04.pp", "ak00_00.eyes")
+    neck_data = entry(data_root / "RPP_04.pp", "am00_01.neck")
     eyes_info, neck_info = EyeNeckInfo(), EyeNeckInfo()
     eyes_right, eyes_left, neck_head = EyeNeckSpan(), EyeNeckSpan(), EyeNeckSpan()
     if (lib.dc_eyeneck_probe(eyes_data, len(eyes_data), C.byref(eyes_info)) or
@@ -271,13 +277,13 @@ def main():
     }
     scene_dependencies["RPP_07.pp"] = {}
     for selector in SEQUENCE:
-        with PPArchive(ROOT / "Data/RPP_07.pp") as archive:
+        with PPArchive(data_root / "RPP_07.pp") as archive:
             prefix = f"pp{selector:02d}_".encode("ascii")
             candidates = [archive.entry(i).name_bytes.decode("ascii") for i in range(archive.count) if archive.entry(i).name_bytes.lower().startswith(prefix.lower())]
         if not candidates:
             raise RuntimeError(f"missing auxiliary XL resource for map {selector}")
         resource_name = sorted(candidates)[0]
-        resource_data = entry(ROOT / "Data/RPP_07.pp", resource_name)
+        resource_data = entry(data_root / "RPP_07.pp", resource_name)
         light_info = XLInfo()
         light = XLLight()
         if lib.dc_xl_probe(resource_data, len(resource_data), C.byref(light_info)) or not light_info.lights or \
@@ -323,7 +329,7 @@ def main():
             lib.dc_model_close(actor_handle)
             raise RuntimeError("face attachment tick failed")
         orbit = CameraOrbit()
-        camera_data = entry(ROOT / "Data/RPP_03.pp", CAMERAS[0])
+        camera_data = entry(data_root / "RPP_03.pp", CAMERAS[0])
         if lib.dc_camera_read_preset(camera_data, len(camera_data), 0, C.byref(orbit)):
             lib.dc_model_close(face_handle)
             lib.dc_model_close(actor_handle)
@@ -466,9 +472,9 @@ def main():
         }
         all_scene_rows = []
         for selector in SEQUENCE:
-            map_data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
+            map_data = entry(data_root / "RPP_10.pp", f"mm00_{selector:02d}.xx")
             try:
-                map_animation = entry(ROOT / "Data/RPP_10.pp", f"mn00_{selector:02d}.xa")
+                map_animation = entry(data_root / "RPP_10.pp", f"mn00_{selector:02d}.xa")
             except ValueError:
                 map_animation = None
             map_handle = C.c_void_p()
@@ -501,7 +507,7 @@ def main():
                     selected_camera = CAMERAS[selector]
                     def candidate_counts(name):
                         nonlocal camera
-                        candidate_data = entry(ROOT / "Data/RPP_03.pp", name)
+                        candidate_data = entry(data_root / "RPP_03.pp", name)
                         candidate_orbit = CameraOrbit()
                         candidate_camera = CameraMatrices()
                         if lib.dc_camera_read_preset(candidate_data, len(candidate_data), 0, C.byref(candidate_orbit)) or lib.dc_camera_build(C.byref(candidate_orbit), C.byref(lens), C.byref(candidate_camera)):
@@ -604,11 +610,18 @@ def main():
         "original_process": False,
         "limits": "local native admission and state transitions; no Apple GPU or original process execution",
     }
-    output = ROOT / "research/native-core/local-playable-loop-audit.json"
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"verified": True, "maps": len(map_rows), "interactions": len(interaction_rows)}))
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"verified": True, "maps": len(map_rows), "interactions": len(interaction_rows),
+                      "data_root": str(data_root), "output": str(report_path)}))
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data", type=Path, default=ROOT / "Data",
+                        help="local original Data directory (kept outside the repository)")
+    parser.add_argument("--output", type=Path,
+                        default=ROOT / "research/native-core/local-playable-loop-audit.json",
+                        help="JSON report path")
+    args = parser.parse_args()
+    main(args.data, args.output)
