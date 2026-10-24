@@ -161,7 +161,9 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(!nextData)return @"Next map resource is unavailable";
     [self detachModel:&_map];_map.xxData=nextData;_map.xaData=nil;_map.model=NULL;_map.xx=NULL;_map.info=(dc_xx_info){0};_map.textureCount=0;_map.textures=NULL;_map.world=gameIdentity();
     NSString *error=nil;if(![self openModel:&_map staticOnly:YES error:&error])return error ?: @"Next map could not be loaded";
-    _map.world=gameIdentity();_mapSelector=1;[self computeWalkBounds];
+    _map.world=gameIdentity();_mapSelector=1;
+    for(uint32_t i=1;i<_map.info.nodes;++i){dc_xx_node node;if(dc_xx_node_at(_map.xx,i,&node)!=DC_OK)continue;const uint8_t *raw=(const uint8_t *)_map.xxData.bytes+node.name.offset;size_t n=0;while(n<node.name.length&&raw[n]!=255)++n;char decoded[40];if(n>=sizeof(decoded))continue;for(size_t j=0;j<n;++j)decoded[j]=(char)(raw[j]^255);decoded[n]=0;if(!strcmp(decoded,"m_Nn_yuka_p_a")){dc_xx_node_matrix(_map.xx,i,&_actorWorld);_actor.world=_actorWorld;break;}}
+    [self computeWalkBounds];
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;_mapAdvanced=YES;return nil;
