@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from native_core import library, XAInfo, AnimationClip, AnimationTiming, AnimationState, AnimationTickResult, XAMorphIndexSet, XAMorphVectorSet, XAMorphTrack, XAMorphKey
+from native_core import library, XAInfo, AnimationClip, AnimationTiming, AnimationState, AnimationTickResult, XAEventTrack, XAEventKey, XAMorphIndexSet, XAMorphVectorSet, XAMorphTrack, XAMorphKey
 from xa_cases import fixture, clip_table, numeric_reference, looping_fixture
 
 
@@ -48,6 +48,32 @@ class NativeXATests(unittest.TestCase):
         self.assertEqual((track.name_length,track.target_length,track.key_count),(6,9,1))
         self.assertEqual(self.lib.dc_xa_morph_key_at(data,len(data),0,0,C.byref(key)),0)
         self.assertEqual((bytes(key.raw),key.value_length),(bytes(range(6)),8))
+
+    def test_event_views_preserve_serialized_fields_and_keys(self):
+        data, _ = fixture()
+        track, key = XAEventTrack(), XAEventKey()
+        self.assertEqual(self.lib.dc_xa_event_track_at(data, len(data), 0, C.byref(track)), 0)
+        self.assertEqual((track.type, track.name_length, track.parameter, track.key_count,
+                          track.flag_a, track.flag_b, track.flag_c, track.flag_d,
+                          track.tail_flag, track.tail_value),
+                         (7, 6, 0x05040302, 2, 0, 1, 6, 7, 0, 0x04030201))
+        self.assertEqual(self.lib.dc_xa_event_key_at(data, len(data), 0, 0, C.byref(key)), 0)
+        self.assertEqual((key.frame, key.value), (0x03020100, 4))
+        self.assertEqual(self.lib.dc_xa_event_key_at(data, len(data), 0, 1, C.byref(key)), 0)
+        self.assertEqual((key.frame, key.value), (0x08070605, 9))
+
+    def test_event_views_reject_absent_tracks_truncation_and_alias(self):
+        data, _ = fixture(all_sections=False)
+        track = XAEventTrack()
+        self.assertEqual(self.lib.dc_xa_event_track_at(data, len(data), 0, C.byref(track)), 6)
+        full, _ = fixture()
+        source = C.create_string_buffer(full)
+        before = bytes(track)
+        for size in range(len(full)):
+            self.assertEqual(self.lib.dc_xa_event_track_at(source, size, 0, C.byref(track)), 3)
+            self.assertEqual(bytes(track), before)
+        self.assertEqual(self.lib.dc_xa_event_track_at(source, len(full), 0,
+            C.cast(source, C.POINTER(XAEventTrack))), 1)
 
     def test_morph_views_reject_truncation_and_overlap(self):
         data, _ = fixture(); source=C.create_string_buffer(data); out=XAMorphTrack();before=bytes(out)

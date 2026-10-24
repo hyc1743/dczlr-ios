@@ -72,8 +72,11 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
     TRY(dc_xx_open(xx,xx_length,&m->xx));
     TRY(dc_xx_get_info(m->xx,&m->info));
     if (!static_only) TRY(dc_xa_probe(xa,xa_length,&m->xa_info));
-    if (m->xa_info.event_tracks || m->xa_info.morph_tracks ||
-        m->xa_info.morph_index_sets || m->xa_info.morph_vector_sets || m->xa_info.bone_tracks>4096 || m->xa_info.material_tracks>4096) { status=DC_FORMAT;goto failed; }
+    /* Event tracks are admitted after full XA framing validation. Their
+     * target/flag fields remain opaque to this model controller; map scene
+     * pose tracks can still run while the event consumer is reconstructed. */
+    if (m->xa_info.morph_tracks || m->xa_info.morph_index_sets ||
+        m->xa_info.morph_vector_sets || m->xa_info.bone_tracks>4096 || m->xa_info.material_tracks>4096) { status=DC_FORMAT;goto failed; }
     if (!static_only) TRY(dc_xa_load_clips(xa,xa_length,m->clips,m->timing,512));
     ALLOC(nodes,m->info.nodes);ALLOC(scratch_nodes,m->info.nodes);
     ALLOC(skins,m->info.nodes);

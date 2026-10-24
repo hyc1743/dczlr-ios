@@ -284,8 +284,10 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSString *nextName=[NSString stringWithFormat:@"mm00_%02u.xx",nextSelector];
     NSData *nextData=[self entry:nextName archive:archive error:nil];
     if(!nextData)return @"Next map resource is unavailable";
-    dc_game_model nextMap={0};nextMap.xxData=nextData;nextMap.world=gameIdentity();
-    NSString *error=nil;if(![self openModel:&nextMap staticOnly:YES error:&error]){[self detachModel:&nextMap];return error ?: @"Next map could not be loaded";}
+    NSString *nextAnimationName=[NSString stringWithFormat:@"mn00_%02u.xa",nextSelector];
+    NSData *nextAnimation=[self entry:nextAnimationName archive:archive error:nil];
+    dc_game_model nextMap={0};nextMap.xxData=nextData;nextMap.xaData=nextAnimation;nextMap.world=gameIdentity();
+    NSString *error=nil;if(![self openModel:&nextMap staticOnly:(nextAnimation==nil) error:&error]){[self detachModel:&nextMap];return error ?: @"Next map could not be loaded";}
     [self detachModel:&_map];_map=nextMap;
     _map.world=gameIdentity();_mapSelector=nextSelector;
     const char *anchors[]={(nextSelector==1?"m_Nn_yuka_p_a":nextSelector==3?"m_Nn_yuka_r_a":nextSelector==4?"m_Nn_yuka_5_a":nextSelector==5?"m_Nn_yuka_5_a":nextSelector==6?"m_Nn_yuka_2b_a":"m_Nn_yuka_5_a"),"m_Nn_yuka_3_a","m_Nn_yuka_2f_a"};

@@ -180,6 +180,84 @@ dc_status dc_xa_load_material_keys(const void *bytes, size_t length,
     return DC_OK;
 }
 
+static dc_status event_cursor(const void *bytes, size_t length, cursor *out,
+        uint32_t *count) {
+    if (!bytes || !out || !count) return DC_ARGUMENT;
+    dc_xa_info info;
+    dc_status status = dc_xa_probe(bytes, length, &info);
+    if (status != DC_OK) return status;
+    if (!info.event_tracks) return DC_NOT_FOUND;
+    cursor c = {(const uint8_t *)bytes, length, 0};
+    uint32_t present, section_count, key_count;
+    if (!flag(&c, &present)) return DC_FORMAT;
+    if (present) {
+        if (!records(&c, &section_count, 8)) return DC_FORMAT;
+        for (uint32_t i = 0; i < section_count; ++i) {
+            if (!block(&c) || !integer(&c, &key_count) || !array(&c, key_count, 72)) return DC_FORMAT;
+        }
+    }
+    if (!flag(&c, &present)) return DC_FORMAT;
+    if (!present) return DC_NOT_FOUND;
+    if (!records(&c, &section_count, 25)) return DC_FORMAT;
+    *out = c;
+    *count = section_count;
+    return DC_OK;
+}
+
+static int event_byte(cursor *c, uint8_t *out) {
+    if (c->position == c->length) return 0;
+    *out = c->data[c->position++];
+    return 1;
+}
+
+static int event_read(cursor *c, dc_xa_event_track *out) {
+    dc_xa_event_track track = {0};
+    if (!integer(c, &track.type)) return 0;
+    if (!integer(c, &track.name_length)) return 0;
+    track.name_offset = c->position;
+    if (!skip(c, track.name_length)) return 0;
+    if (!event_byte(c, &track.flag_a) || !event_byte(c, &track.flag_b) ||
+        !integer(c, &track.parameter) || !event_byte(c, &track.flag_c) ||
+        !event_byte(c, &track.flag_d) || !integer(c, &track.key_count)) return 0;
+    track.keys_offset = c->position;
+    if (!array(c, track.key_count, 5)) return 0;
+    track.tail_offset = c->position;
+    if (!event_byte(c, &track.tail_flag) || !integer(c, &track.tail_value)) return 0;
+    if (out) *out = track;
+    return 1;
+}
+
+dc_status dc_xa_event_track_at(const void *bytes, size_t length,
+        uint32_t index, dc_xa_event_track *out) {
+    if (!bytes || !out || overlaps(bytes, length, out, sizeof(*out))) return DC_ARGUMENT;
+    cursor c; uint32_t count;
+    dc_status status = event_cursor(bytes, length, &c, &count);
+    if (status != DC_OK) return status;
+    if (index >= count) return DC_NOT_FOUND;
+    for (uint32_t i = 0; i <= index; ++i) {
+        dc_xa_event_track track;
+        if (!event_read(&c, &track)) return DC_FORMAT;
+        if (i == index) { *out = track; return DC_OK; }
+    }
+    return DC_NOT_FOUND;
+}
+
+dc_status dc_xa_event_key_at(const void *bytes, size_t length,
+        uint32_t index, uint32_t key, dc_xa_event_key *out) {
+    if (!bytes || !out || overlaps(bytes, length, out, sizeof(*out))) return DC_ARGUMENT;
+    dc_xa_event_track track;
+    dc_status status = dc_xa_event_track_at(bytes, length, index, &track);
+    if (status != DC_OK) return status;
+    if (key >= track.key_count) return DC_NOT_FOUND;
+    cursor c = {(const uint8_t *)bytes, length, track.keys_offset};
+    for (uint32_t i = 0; i <= key; ++i) {
+        dc_xa_event_key value;
+        if (!integer(&c, &value.frame) || !event_byte(&c, &value.value)) return DC_FORMAT;
+        if (i == key) { *out = value; return DC_OK; }
+    }
+    return DC_NOT_FOUND;
+}
+
 dc_status dc_xa_pose_track_at(const void *bytes, size_t length, uint32_t index, dc_xa_pose_track *out) {
     if (!bytes || !out || overlaps(bytes, length, out, sizeof(*out))) return DC_ARGUMENT;
     dc_xa_info info;

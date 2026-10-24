@@ -11,12 +11,13 @@ typedef struct dc_model dc_model;
 enum dc_model_vertex_space { DC_MODEL_SPACE_LOCAL=0,DC_MODEL_SPACE_WORLD=1 };
 /* Runtime connection of decoded XX nodes/meshes/materials with XA numeric
  * controller, mode-0 poses and material tracks. Sources remain borrowed.
- * Explicit current admission: mode-0 poses, material tracks and indexed
- * four-matrix skinning. Events, morphs, billboards and crossfades remain
- * unsupported. Missing animation targets are inert; active skin bones need
+ * Explicit current admission: mode-0 poses, material tracks, and framed event
+ * tracks (opaque to the controller) plus indexed four-matrix skinning. Morphs,
+ * billboards and crossfades remain unsupported. Missing animation targets are inert; active skin bones need
  * a named target. Serialized indices and default palette255 are retained.
  * Root local starts as identity, matching the final original XX loader setup.
- * Unknown/unimplemented content fails; no resource fallback is substituted. */
+ * Unknown content still fails; framed event records remain borrowed and are
+ * not interpreted by this controller. No resource fallback is substituted. */
 DC_API dc_status dc_model_open(const void *xx,size_t xx_length,const void *xa,size_t xa_length,dc_model **out);
 /* Explicit XX-only static path. Original 0x45c090 leaves a model without XA
  * when archive lookup fails; 0x51e3b0 permits this for ordinary static maps.

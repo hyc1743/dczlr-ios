@@ -103,6 +103,16 @@ class XAMorphTrack(C.Structure):
 class XAMorphKey(C.Structure):
     _fields_=[('value_offset',C.c_size_t),('value_length',C.c_uint32),('raw',C.c_uint8*6)]
 
+class XAEventTrack(C.Structure):
+    _fields_=[('name_offset',C.c_size_t),('keys_offset',C.c_size_t),('tail_offset',C.c_size_t),
+              ('type',C.c_uint32),('name_length',C.c_uint32),('parameter',C.c_uint32),
+              ('key_count',C.c_uint32),('tail_value',C.c_uint32),
+              ('flag_a',C.c_uint8),('flag_b',C.c_uint8),('flag_c',C.c_uint8),
+              ('flag_d',C.c_uint8),('tail_flag',C.c_uint8)]
+
+class XAEventKey(C.Structure):
+    _fields_=[('frame',C.c_uint32),('value',C.c_uint8)]
+
 
 class MaterialValue(C.Structure):
     _fields_ = [("components", C.c_float * 17)]
@@ -435,6 +445,10 @@ def library():
     lib.dc_xa_material_track_at.restype = C.c_int
     lib.dc_xa_load_material_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(MaterialKey), C.c_size_t]
     lib.dc_xa_load_material_keys.restype = C.c_int
+    lib.dc_xa_event_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAEventTrack)]
+    lib.dc_xa_event_track_at.restype = C.c_int
+    lib.dc_xa_event_key_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.c_uint32, C.POINTER(XAEventKey)]
+    lib.dc_xa_event_key_at.restype = C.c_int
     lib.dc_xx_load_mesh_vertices.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t]
     lib.dc_xx_load_mesh_vertices.restype = C.c_int
     lib.dc_xx_load_mesh_indices.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(C.c_uint16),C.c_size_t]

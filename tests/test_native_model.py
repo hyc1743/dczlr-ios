@@ -5,7 +5,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
-from native_core import library,Matrix,MaterialValue,Viewport,SpriteVertex,MeshVertex,XXModel,AnimationState
+from native_core import library,Matrix,MaterialValue,Viewport,SpriteVertex,MeshVertex,XXModel,AnimationState,XAInfo
 from model_cases import fixture
 from scene_cases import matrix
 from xx_cases import diagnostic_fixture,fixture as xx_fixture
@@ -126,6 +126,17 @@ class NativeModelTests(unittest.TestCase):
         self.assertEqual(self.lib.dc_model_project(m,0,C.byref(vp),C.byref(view),0xffffffff,out,6),0)
         self.assertEqual([(v.u,v.v) for v in out],[(0,0),(1,0),(0,1),(0,1),(1,0),(1,1)])
         self.assertTrue(all(v.rhw==1 and v.z==.5 for v in out))
+
+    def test_framed_event_tracks_are_admitted_while_pose_controller_runs(self):
+        m,xx,xa=self.open(events=True);info=XAInfo()
+        self.assertEqual(self.lib.dc_xa_probe(xa,len(xa),C.byref(info)),0)
+        self.assertEqual(info.event_tracks,1)
+        world=matrix();before=Matrix();after=Matrix()
+        self.assertEqual(self.lib.dc_model_tick(m,0,0,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_global(m,1,C.byref(before)),0)
+        self.assertEqual(self.lib.dc_model_tick(m,100,100,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_global(m,1,C.byref(after)),0)
+        self.assertNotEqual(bytes(before),bytes(after))
 
     def test_transition_clip_chain_and_failed_tick_are_atomic(self):
         m,xx,xa=self.open();world=matrix();before=Matrix();current,ready=C.c_uint32(),C.c_uint32()

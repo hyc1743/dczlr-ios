@@ -62,11 +62,24 @@ def main():
     for selector in SEQUENCE:
         data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
         camera_data = entry(ROOT / "Data/RPP_03.pp", CAMERAS[selector])
+        animation_name = f"mn00_{selector:02d}.xa"
+        try:
+            animation_data = entry(ROOT / "Data/RPP_10.pp", animation_name)
+        except ValueError:
+            animation_data = None
+        animation_info = None
+        if animation_data is not None:
+            decoded_animation_info = XAInfo()
+            if lib.dc_xa_probe(animation_data, len(animation_data), C.byref(decoded_animation_info)):
+                raise RuntimeError(f"map {selector} animation framing failed")
+            animation_info = decoded_animation_info.record()
         camera = CameraOrbit()
         if lib.dc_camera_read_preset(camera_data, len(camera_data), 0, C.byref(camera)):
             raise RuntimeError(f"camera {selector} admission failed")
         handle = C.c_void_p()
-        status = lib.dc_model_open_static(data, len(data), C.byref(handle))
+        status = (lib.dc_model_open(data, len(data), animation_data, len(animation_data), C.byref(handle))
+                  if animation_data is not None else
+                  lib.dc_model_open_static(data, len(data), C.byref(handle)))
         if status:
             raise RuntimeError(f"map {selector} admission failed: {status}")
         try:
@@ -80,6 +93,9 @@ def main():
                 "nodes": native_info.nodes,
                 "submeshes": native_info.submeshes,
                 "textures": native_info.textures,
+                "animation": animation_name if animation_data is not None else None,
+                "animation_sha256": hashlib.sha256(animation_data).hexdigest() if animation_data is not None else None,
+                "animation_info": animation_info,
                 "camera": CAMERAS[selector],
                 "camera_sha256": hashlib.sha256(camera_data).hexdigest(),
                 "camera_distance": camera.stored_distance,
@@ -302,11 +318,20 @@ def main():
         all_scene_rows = []
         for selector in SEQUENCE:
             map_data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
+            try:
+                map_animation = entry(ROOT / "Data/RPP_10.pp", f"mn00_{selector:02d}.xa")
+            except ValueError:
+                map_animation = None
             map_handle = C.c_void_p()
-            if lib.dc_model_open_static(map_data, len(map_data), C.byref(map_handle)):
+            map_status = (lib.dc_model_open(map_data, len(map_data), map_animation, len(map_animation), C.byref(map_handle))
+                          if map_animation is not None else
+                          lib.dc_model_open_static(map_data, len(map_data), C.byref(map_handle)))
+            if map_status:
                 raise RuntimeError(f"map {selector} scene admission failed")
             try:
                 with XXModel(map_data) as map_xx:
+                    if map_animation is not None and lib.dc_model_tick(map_handle, 0, selector, C.byref(identity)):
+                        raise RuntimeError(f"map {selector} animation tick failed")
                     anchor = None
                     for node_index in range(map_xx.info().nodes):
                         node = map_xx.at("node", node_index)
@@ -353,6 +378,7 @@ def main():
                     all_scene_rows.append({
                         "selector": selector,
                         "anchor_node": anchor,
+                        "animation": f"mn00_{selector:02d}.xa" if map_animation is not None else None,
                         "camera": selected_camera,
                         "map": current_counts[0],
                         "actor": current_counts[1],

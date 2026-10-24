@@ -19,6 +19,18 @@ typedef struct dc_xa_material_track {
     size_t name_offset, keys_offset;
     uint32_t name_length, key_count;
 } dc_xa_material_track;
+/* Serialized event-track metadata. The original loader stores these fields
+ * next to the target object lookup; the flags and parameter remain opaque
+ * until their runtime consumer is verified. */
+typedef struct dc_xa_event_track {
+    size_t name_offset, keys_offset, tail_offset;
+    uint32_t type, name_length, parameter, key_count, tail_value;
+    uint8_t flag_a, flag_b, flag_c, flag_d, tail_flag;
+} dc_xa_event_track;
+typedef struct dc_xa_event_key {
+    uint32_t frame;
+    uint8_t value;
+} dc_xa_event_key;
 typedef struct dc_xa_pose_track {
     size_t name_offset, keys_offset;
     uint32_t name_length, key_count, mode;
@@ -59,6 +71,13 @@ DC_API dc_status dc_xa_material_track_at(const void *bytes, size_t length,
     uint32_t index, dc_xa_material_track *out);
 DC_API dc_status dc_xa_load_material_keys(const void *bytes, size_t length,
     uint32_t index, dc_material_key *keys, size_t capacity);
+/* Event tracks are admitted as bounded serialized views. Their target names,
+ * flags, parameter and byte-valued frame keys are exposed without assigning
+ * gameplay/effect semantics. */
+DC_API dc_status dc_xa_event_track_at(const void *bytes, size_t length,
+    uint32_t index, dc_xa_event_track *out);
+DC_API dc_status dc_xa_event_key_at(const void *bytes, size_t length,
+    uint32_t index, uint32_t key, dc_xa_event_key *out);
 /* Node/bone tracks follow the numeric clip table. The entire XA framing is
  * checked before outputs are written. Unknown mode values remain metadata;
  * dc_pose_sample separately admits mode 0. No target lookup or skinning. */
