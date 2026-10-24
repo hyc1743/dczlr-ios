@@ -9,6 +9,7 @@
 
 const presses = __PRESSES__;
 const forceMenu = __FORCE_MENU__;
+const forceGameMenu = __FORCE_GAME_MENU__;
 const forceChapter = __FORCE_CHAPTER__;
 const forceActions = __FORCE_ACTIONS__;
 const forceDispatch = __FORCE_DISPATCH__;
@@ -26,7 +27,9 @@ let gameKeyCallCount = 0;
 let cursorHooksInstalled = false;
 let inputArraySnapshot = '';
 let menuGeometrySent = false;
+let gameplayMenuGeometrySent = false;
 let forceMenuRemaining = forceMenu ? (forceMenu.frames || 5) : 0;
+let forceGameMenuRemaining = forceGameMenu ? (forceGameMenu.frames || 5) : 0;
 let introStateSnapshot = '';
 let dispatcherSnapshot = '';
 let forceChapterApplied = false;
@@ -346,12 +349,21 @@ function hookGameFunctions() {
         emit('ForceTitleMenu', {x: forceMenu.x | 0, y: forceMenu.y | 0,
                                 input: forceMenu.input === undefined ? 3 : forceMenu.input & 0xff,
                                 remaining: forceMenuRemaining});
+      } else if (forceGameMenu && forceGameMenuRemaining > 0 && elapsed() >= forceGameMenu.at) {
+        args[1] = ptr(forceGameMenu.x | 0);
+        args[2] = ptr(forceGameMenu.y | 0);
+        args[4] = ptr((forceGameMenu.input === undefined ? 3 : forceGameMenu.input) & 0xff);
+        forceGameMenuRemaining -= 1;
+        emit('ForceGameplayMenu', {x: forceGameMenu.x | 0, y: forceGameMenu.y | 0,
+                                    input: forceGameMenu.input === undefined ? 3 : forceGameMenu.input & 0xff,
+                                    remaining: forceGameMenuRemaining});
       }
       this.x = safeArgU32(args[1]);
       this.y = safeArgU32(args[2]);
       this.scale = safeArgU32(args[3]);
       this.input = safeArgU32(args[4]);
-      if (!menuGeometrySent && validPointer(args[0])) {
+      const shouldCaptureGeometry = !menuGeometrySent || (elapsed() >= 49 && !gameplayMenuGeometrySent);
+      if (shouldCaptureGeometry && validPointer(args[0])) {
         try {
           const count = args[0].add(0x50c).readU32();
           const entries = [];
@@ -368,7 +380,8 @@ function hookGameFunctions() {
             });
           }
           emit('MenuGeometry', {count: count, entries: entries});
-          menuGeometrySent = true;
+          if (elapsed() >= 49) gameplayMenuGeometrySent = true;
+          else menuGeometrySent = true;
         } catch (_) {}
       }
     },
@@ -498,10 +511,19 @@ function hookGameFunctions() {
             const state = base.add(0x4393b4);
             const bytes = [];
             for (let i = 0; i < 0x80; ++i) bytes.push(state.add(i).readU8());
-            const fingerprint = JSON.stringify(bytes);
+            const context = base.add(0x437b68);
+            const input = args[0];
+            const extra = {
+              context504: context.add(0x504).readU32(),
+              contextF142: context.add(0xf142).readU8(),
+              main260: validPointer(input) ? input.add(0x260).readU8() : -1,
+              main261: validPointer(input) ? input.add(0x261).readU8() : -1,
+              main26c: validPointer(input) ? input.add(0x26c).readU32() : 0
+            };
+            const fingerprint = JSON.stringify({bytes: bytes, extra: extra});
             if (fingerprint !== gameplayStateSnapshot) {
               gameplayStateSnapshot = fingerprint;
-              emit('GameplayState', {address: '0x008393b4', bytes: bytes});
+              emit('GameplayState', {address: '0x008393b4', bytes: bytes, extra: extra});
             }
           } catch (_) {}
         }
@@ -523,9 +545,14 @@ function hookGameFunctions() {
               main.add(0x261).writeU8(3);
               main.add(0x26c).writeS32(1);
               const input = base.add(0x4393b4);
+              input.add(5).writeU8(1);
+              input.add(6).writeU8(0);
               input.add(0x260).writeU8(3);
               input.add(0x261).writeU8(3);
               input.add(0x26c).writeS32(1);
+              const context = base.add(0x437b68);
+              context.add(0x504).writeS32(2);
+              context.add(0xf142).writeU8(0);
               forceActionsRemaining -= 1;
               emit('ForceGameplayActions', {remaining: forceActionsRemaining});
             }
