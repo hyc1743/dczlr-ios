@@ -47,8 +47,10 @@ after the local files are corrected. Directly supplied Data remains supported
 when no resource parts are present.
 
 The repository contains reconstructed native modules, the Apple host, manifest
-and build workflow. IPAs remain unsigned development stages, with complete
-gameplay and real game save/load unfinished.
+and build workflow. The Windows local audit now covers the real eight-map
+chapter-3 loop, actor/face resources, collision, interaction state and save
+roundtrips. IPAs remain unsigned development stages until Apple rendering,
+audio and device playability are independently verified.
 
 Import is resumable at the file level: an existing destination file is skipped only when its size and SHA-256 match the bundled manifest. Partial or modified files are replaced through a temporary file after a complete hash check.
 

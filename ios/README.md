@@ -42,3 +42,7 @@ bash ios/build.sh device
 当前环境为 Windows，没有 Swift、Xcode 或 Apple SDK。此工程尚未经过 Swift 编译、Metal shader 编译、模拟器或设备验证；未生成 IPA。静态结构检查通过不等于构建成功。
 
 原程序的依赖研究见 `../docs/ios-port-research.md`。此实验只建立通用平台基线，不代表原程序移植已完成。
+
+
+## Native gameplay path
+The iOS target now links the native chapter-3 scene path: real map/actor/face resources, indexed skinning, collision, save/load, the observed six-row gameplay menu, and the first observed voice chain. Windows local validation is available through `tools/audit_playable_loop.py`; Xcode/macOS is only needed to compile the Apple target and is not required for resource or gameplay development. Apple rendering, audio-device output and physical-device playability remain separate verification gates.

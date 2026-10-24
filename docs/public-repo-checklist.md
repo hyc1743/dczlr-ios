@@ -12,4 +12,7 @@ Before making the repository public:
 - Copy all resource parts into the installed app's Documents root or `ResourcePacks/` directory.
 - Export `log.txt` after import if a part is missing or hash validation fails.
 
-The current Windows workspace cannot prove macOS Xcode compilation, IPA installation, or actual game playability. Those claims require the GitHub macOS runner and a physical device.
+The current Windows workspace can prove the native resource/gameplay loop with
+the local `Data` directory, but it cannot prove macOS Xcode compilation, IPA
+installation, Apple GPU/audio execution or physical-device playability. Those
+Apple claims require the GitHub macOS runner and a physical device.
