@@ -15,6 +15,7 @@ import uuid
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
           "title": "title-screen background and menu layers", "intro": "first new-game script record and text adapter"}
 GAMEPLAY_SCENES = {"gameplay": "chapter 3 map and actor scene", "gameComplete": "completed chapter 3 map sequence"}
+SCENE_CHOICES = tuple(SCENES) + tuple(GAMEPLAY_SCENES)
 
 
 def has_session(log,session):
@@ -113,17 +114,20 @@ def pose_advanced(log):
 
 
 def scene_ready(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
-    return (expected in presented_scenes(log) and (not require_animation or animation_advanced(log))
+    observed = gameplay_scenes(log) if expected in GAMEPLAY_SCENES else presented_scenes(log)
+    return (expected in observed and (not require_animation or animation_advanced(log))
             and (not require_xa or xa_fixture_loaded(log)) and (not require_material or material_advanced(log))
             and (not require_xx or xx_fixture_loaded(log)) and (not require_pose or pose_advanced(log)))
 
 
 def scene_evidence(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
-    if expected not in SCENES:
+    if expected not in SCENES and expected not in GAMEPLAY_SCENES:
         raise ValueError("Unknown expected scene: " + expected)
-    observed = presented_scenes(log)
+    observed = gameplay_scenes(log) if expected in GAMEPLAY_SCENES else presented_scenes(log)
     if not scene_ready(log, expected, require_animation, require_xa, require_material, require_xx, require_pose):
         raise ValueError("Expected scene/animation/XA/material/XX/pose pipeline was not reported: " + expected)
+    if expected in GAMEPLAY_SCENES:
+        return gameplay_evidence(log, require_complete=expected == "gameComplete", require_skin=True)
     return {"scene": SCENES[expected], "required_scene": expected, "observed_scenes": observed,
             "resource_content": "not inspected by this presentation check",
             "native_animation_tick": "positive-delta advancement and presentation reported" if animation_advanced(log) else "not verified by this log",
@@ -365,7 +369,7 @@ if __name__ == "__main__":
     parser.add_argument("--app", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--runtime")
-    parser.add_argument("--expected-scene", choices=SCENES, default="checker")
+    parser.add_argument("--expected-scene", choices=SCENE_CHOICES, default="checker")
     parser.add_argument("--boot-only", action="store_true")
     parser.add_argument("--startup-fixture", action="store_true")
     parser.add_argument("--exercise-new-game", action="store_true")
