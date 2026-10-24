@@ -1,7 +1,8 @@
 #import <Foundation/Foundation.h>
 NS_ASSUME_NONNULL_BEGIN
-/* Archive-backed Apple audio adapter. Startup/title identifiers are taken
- * from the original setup; playback behavior is native AVFoundation. */
+/* Archive-backed Apple audio adapter. Startup/title identifiers and the
+ * chapter-3 RPP14 slot table are taken from the original setup; playback is
+ * native AVFoundation. */
 @interface DCGameAudio : NSObject
 @property(nonatomic,readonly) BOOL musicAdvanced;
 @property(nonatomic,readonly) BOOL selectionBusy;
