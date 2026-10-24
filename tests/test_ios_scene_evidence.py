@@ -4,10 +4,18 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,has_session
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_fresh_launch_session_rejects_old_or_echoed_markers(self):
+        session='a'*32
+        valid='2026-10-24T00:00:00Z PORTLAB_SESSION='+session+' started\n'
+        self.assertTrue(has_session(valid,session))
+        for text in ('',valid.replace(session,'b'*32),valid.replace(' PORTLAB',' echo PORTLAB'),valid.replace(session,session+'_pending'),valid.split(' ',1)[1]):
+            self.assertFalse(has_session(text,session))
+        self.assertFalse(has_session(valid,'invalid'))
+
     def test_intro_requires_complete_order_and_its_own_audio_marker(self):
         lines=['2026-10-24T12:00:00Z PORTLAB_SCENE_PRESENTED='+scene+' submitted' for scene in ('startup','warning','title','intro')]
         audio='2026-10-24T12:00:40Z PORTLAB_INTRO_AUDIO_ADVANCED submitted'

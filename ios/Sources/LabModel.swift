@@ -36,7 +36,12 @@ final class LabModel: ObservableObject {
             }
             try Data().write(to: current, options: .atomic)
             logReady = true
-            record("测试程序启动")
+            if let launchID = ProcessInfo.processInfo.environment["PORTLAB_LAUNCH_ID"],
+               launchID.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil {
+                record("测试程序启动", event: "PORTLAB_SESSION=\(launchID)")
+            } else {
+                record("测试程序启动")
+            }
         } catch {
             status = "日志初始化失败：\(error.localizedDescription)"
         }

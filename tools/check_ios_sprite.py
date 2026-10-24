@@ -7,10 +7,16 @@ from pathlib import Path
 import subprocess
 import time
 import os
+import uuid
 
 
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
           "title": "title-screen background and menu layers", "intro": "first new-game script record and text adapter"}
+
+
+def has_session(log,session):
+    if not re.fullmatch(r'[0-9a-f]{32}',session):return False
+    return bool(re.search(r'(?m)^\S+ PORTLAB_SESSION='+re.escape(session)+r'(?= |$)',log))
 
 
 def presented_scenes(log):
@@ -169,6 +175,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         profile=install(container/'Documents/game/Data')
         (output/'fixture.json').write_text(json.dumps(profile,indent=2)+'\n',encoding='utf-8')
     launch_environment=dict(os.environ)
+    session=uuid.uuid4().hex
+    launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
     if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
     if exercise_new_game:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_NEW_GAME']='1'
     # Cold CoreSimulator may queue the same request for over two minutes.
@@ -184,7 +192,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     while time.monotonic() < deadline:
         path = container / "Documents/log.txt" if container else None
         if path and path.exists():
-            log = path.read_text(encoding="utf-8")
+            candidate=path.read_text(encoding='utf-8')
+            if not has_session(candidate,session):
+                time.sleep(1);continue
+            log=candidate
             if startup_fixture:
                 for scene in presented_scenes(log):
                     if scene not in captured:
@@ -211,7 +222,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     launch=(output/'launch.txt').read_text(encoding='utf-8')
     launch_timed_out=launch_pending or launch_returncode!=0
     launch_state={'pid':launch_process.pid,'pending_when_frame_poll_ended':launch_pending,
-        'returncode_before_cleanup':launch_returncode,'frame_wait_seconds':wait_seconds,'single_launch_request':True}
+        'returncode_before_cleanup':launch_returncode,'frame_wait_seconds':wait_seconds,'single_launch_request':True,'session_id':session}
     (output/'launch-state.json').write_text(json.dumps(launch_state,indent=2)+'\n',encoding='utf-8')
     (output / "app.log").write_text(log, encoding="utf-8")
     try:
@@ -247,7 +258,9 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     # proof that the app failed to start.
     path=container/'Documents/log.txt' if container else None
     if path and path.exists():
-        log=path.read_text(encoding='utf-8');(output/'app.log').write_text(log,encoding='utf-8')
+        candidate=path.read_text(encoding='utf-8')
+        if has_session(candidate,session):log=candidate
+        (output/'app.log').write_text(log,encoding='utf-8')
     if not scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose):
         try:
             process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
