@@ -86,5 +86,14 @@ def verify_skin(data):
             at=(y*width+x)*channels;r,g,b=pixels[at:at+3]
             red+=r>g+35 and r>b+25
     if red<max(64,int(width*height*.0001)):raise ValueError('Generated textured skin surface is absent from exact GPU capture')
+    scale=min(width/1024,height/768);ox=(width-1024*scale)/2;oy=(height-768*scale)/2
+    left=max(0,int(ox)-2);right=min(width,int(ox+1024*scale+1)+2)
+    top=max(0,int(oy)-2);bottom=min(height,int(oy+768*scale+1)+2);outside=0
+    for y in range(height):
+        for x in range(width):
+            if left<=x<right and top<=y<bottom:continue
+            at=(y*width+x)*channels;outside+=max(pixels[at:at+3])>2
+    if outside:raise ValueError('Geometry escaped the letterboxed game viewport')
     return {'method':'exact GPU readback after changed world-space skin sample; generated textured-surface color presence',
-        'width':width,'height':height,'red_surface_pixels':red,'original_skin_or_image_equivalence':'not established'}
+        'width':width,'height':height,'red_surface_pixels':red,'nonblack_letterbox_pixels':outside,
+        'original_skin_or_image_equivalence':'not established'}

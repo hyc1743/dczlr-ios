@@ -187,6 +187,22 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     OK(dc_vk_sprite_get_info(r,&info));
     CHECK(info.submitted_frames==frame_count && info.validation_errors==0);
     puts("PASS: triangle-list mesh raster, perspective-correct UV, diffuse alpha and atomic admission");
+    geometry.texture=texture;
+    for(unsigned i=0;i<3;++i)triangle[i].diffuse=0xffffffff;
+    dc_vk_clip_rect clip={1,1,2,2};
+    OK(dc_vk_geometry_render_region(r,&geometry,1,clear,rgba,sizeof(rgba),&clip));
+    CHECK(pixel(rgba,1,1,255,0,0,255,0));CHECK(pixel(rgba,2,2,255,0,0,255,0));
+    CHECK(pixel(rgba,0,0,20,40,60,100,0));CHECK(pixel(rgba,3,1,20,40,60,100,0));
+    CHECK(pixel(rgba,1,3,20,40,60,100,0));
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,0,0,255,0,0,255,0));
+    memcpy(before,rgba,sizeof(rgba));OK(dc_vk_sprite_get_info(r,&info));frame_count=info.submitted_frames;
+    clip=(dc_vk_clip_rect){7,1,2,2};
+    CHECK(dc_vk_geometry_render_region(r,&geometry,1,clear,rgba,sizeof(rgba),&clip)==DC_RANGE);
+    clip=(dc_vk_clip_rect){0xffffffff,0,1,1};
+    CHECK(dc_vk_geometry_render_region(r,&geometry,1,clear,rgba,sizeof(rgba),&clip)==DC_RANGE);
+    CHECK(!memcmp(before,rgba,sizeof(rgba)));OK(dc_vk_sprite_get_info(r,&info));CHECK(info.submitted_frames==frame_count);
+    puts("PASS: explicit geometry scissor, full-frame reset and atomic invalid-region rejection");
     dc_vk_sprite_destroy(r);
     return 0;
 failed:

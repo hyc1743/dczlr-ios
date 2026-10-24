@@ -257,7 +257,12 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     BOOL skinMoved=skinSample && _skinSample && ![skinSample isEqualToData:_skinSample];
     BOOL captureSkin=_captureEnabled && !_capturedSkin && skinMoved;
     NSMutableData *pixels=readback ?: ((capture || captureSkin) ? [NSMutableData dataWithLength:(size_t)width*height*4] : nil);
-    status=dc_vk_geometry_render(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length);
+    uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f));
+    uint32_t right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f));
+    uint32_t bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));
+    if(right<=left || bottom<=top)return @"Game viewport has no drawable pixels";
+    dc_vk_clip_rect clip={left,top,right-left,bottom-top};
+    status=dc_vk_geometry_render_region(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length,&clip);
     if (status!=DC_OK) return [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
     if(skinMoved)_skinAdvanced=YES;
     if(skinSample)_skinSample=skinSample;

@@ -36,6 +36,7 @@ typedef struct dc_vk_geometry_item {
     uintptr_t texture;
     uint8_t blend_mode, hidden, point_filter, reserved;
 } dc_vk_geometry_item;
+typedef struct dc_vk_clip_rect { uint32_t x,y,width,height; } dc_vk_clip_rect;
 
 typedef struct dc_vk_sprite_info {
     char device_name[256];
@@ -73,6 +74,13 @@ DC_API dc_status dc_vk_sprite_render(dc_vk_sprite *renderer,
 DC_API dc_status dc_vk_geometry_render(dc_vk_sprite *renderer,
     const dc_vk_geometry_item *items, size_t count,
     const uint8_t clear_rgba[4], uint8_t *rgba, size_t capacity);
+/* Same geometry path with an explicit nonempty pixel scissor. The full target
+ * is still cleared/read back; only draws are clipped. NULL means full target.
+ * Every call establishes its own scissor; sprite/default geometry calls reset
+ * it to full target. Invalid regions do not submit or modify readback. */
+DC_API dc_status dc_vk_geometry_render_region(dc_vk_sprite *renderer,
+    const dc_vk_geometry_item *items,size_t count,const uint8_t clear_rgba[4],
+    uint8_t *rgba,size_t capacity,const dc_vk_clip_rect *clip);
 
 #ifdef __cplusplus
 }

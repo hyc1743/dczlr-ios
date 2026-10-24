@@ -50,6 +50,6 @@ camera, effects/lighting, auxiliary morph model and full gameplay.
 
 The generated Apple startup fixture now has a named bone and animated weighted
 quad. Its gate requires changed world-space geometry, successful GPU submission
-and an exact-frame textured-surface capture, alongside existing card/title/text
+and an exact-frame textured-surface capture with black letterbox bars, alongside existing card/title/text
 checks. Every pixel, key and model in this fixture is self-authored. This is a
 host integration check and cannot certify the original game's complete scenes.

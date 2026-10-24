@@ -8,10 +8,11 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
 from startup_pixels import decode,verify,verify_intro,verify_skin
 
 
-def png(color,width=8,height=8):
+def png(color,width=8,height=8,letterbox=False):
     def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
-    row=bytes((*color,255))*width
-    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress((b'\0'+row)*height))+chunk(b'IEND',b'')
+    row=bytes((*color,255))*width;black=bytes((0,0,0,255))*width
+    raw=b''.join(b'\0'+(black if letterbox and not height//8<=y<height-height//8 else row) for y in range(height))
+    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
 
 
 class StartupPixelTests(unittest.TestCase):
@@ -20,7 +21,8 @@ class StartupPixelTests(unittest.TestCase):
         # bone identity; the native change/presentation marker is separate.
         for data in (png((20,110,180)),png((0,0,0))):
             with self.assertRaises(ValueError):verify_skin(data)
-        self.assertGreater(verify_skin(png((255,80,40),64,64))['red_surface_pixels'],64)
+        self.assertGreater(verify_skin(png((255,80,40),64,64,letterbox=True))['red_surface_pixels'],64)
+        with self.assertRaises(ValueError):verify_skin(png((255,80,40),64,64))
     def test_intro_requires_background_and_body_region_pixels(self):
         def sample(body):
             def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)

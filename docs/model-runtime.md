@@ -59,6 +59,14 @@ UV interpolation; existing sprite vertices keep RHW=1. The pixel gate checks
 triangle coverage, a UV result that changes with RHW, alpha modulation and
 atomic invalid-input rejection in addition to its earlier sprite regressions.
 
+`dc_vk_geometry_render_region` adds an explicit pixel scissor for a game
+viewport inside a larger drawable. The target still clears/readbacks in full;
+all draws establish a fresh dynamic scissor, and default geometry/sprite calls
+restore the full target. The Apple game scene clips to the pixel centers of
+its letterboxed 4:3 viewport. This fixes the generated weighted surface
+spilling into black bars; the exact skin-image gate also checks the bars stay
+black. It does not replace perspective/frustum clipping or a depth renderer.
+
 These generic primitives do not by themselves prove the original transition's
 camera, draw sorting, lighting, texture stage state or final image. Original
 resource payloads remain local; public oracle fixtures use self-authored data.

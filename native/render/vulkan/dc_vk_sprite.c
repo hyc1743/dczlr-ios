@@ -583,6 +583,9 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
     VkRect2D scissor = {{0, 0}, {r->width, r->height}};
     VkPipelineViewportStateCreateInfo view = {.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount = 1, .pViewports = &viewport, .scissorCount = 1, .pScissors = &scissor};
+    VkDynamicState dynamic_scissor=VK_DYNAMIC_STATE_SCISSOR;
+    VkPipelineDynamicStateCreateInfo dynamic={.sType=VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount=1,.pDynamicStates=&dynamic_scissor};
     VkPipelineRasterizationStateCreateInfo raster = {.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_NONE, .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .lineWidth = 1};
@@ -604,7 +607,7 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         VkGraphicsPipelineCreateInfo pipeline = {.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .stageCount = 2, .pStages = stages, .pVertexInputState = &input, .pInputAssemblyState = &assembly,
             .pViewportState = &view, .pRasterizationState = &raster, .pMultisampleState = &samples,
-            .pColorBlendState = &blending, .layout = r->pipeline_layout, .renderPass = r->render_pass};
+            .pColorBlendState = &blending,.pDynamicState=&dynamic, .layout = r->pipeline_layout, .renderPass = r->render_pass};
         VK_CHECK(vkCreateGraphicsPipelines(r->device, VK_NULL_HANDLE, 1, &pipeline, NULL, &r->pipelines[i]));
     }
     return DC_OK;
@@ -789,7 +792,7 @@ unsupported:
 }
 
 static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t visible,
-    const uint8_t clear[4], uint8_t *rgba);
+    const uint8_t clear[4], uint8_t *rgba,const dc_vk_clip_rect *clip);
 
 dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, size_t count,
         const uint8_t clear[4], uint8_t *rgba, size_t capacity) {
@@ -822,16 +825,22 @@ dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, s
         ++visible;
     }
     if (status != DC_OK) { free(draws); return status; }
-    status = render_prepared(r, draws, visible, clear, rgba);
+    status = render_prepared(r, draws, visible, clear, rgba,NULL);
     free(draws);
     return status;
 }
 
 dc_status dc_vk_geometry_render(dc_vk_sprite *r, const dc_vk_geometry_item *items, size_t count,
         const uint8_t clear[4], uint8_t *rgba, size_t capacity) {
+    return dc_vk_geometry_render_region(r,items,count,clear,rgba,capacity,NULL);
+}
+dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item *items,size_t count,
+        const uint8_t clear[4],uint8_t *rgba,size_t capacity,const dc_vk_clip_rect *clip) {
     if (!r || !clear || (!rgba && capacity) || (count && !items)) return DC_ARGUMENT;
     if (r->broken) return fail(r, DC_IO, "Renderer requires recreation after submission failure");
     if (count > 4096 || (rgba && capacity < (size_t)r->width * r->height * 4)) return DC_RANGE;
+    if (clip && (!clip->width || !clip->height || clip->x>r->width || clip->y>r->height ||
+        clip->width>r->width-clip->x || clip->height>r->height-clip->y)) return DC_RANGE;
     prepared_draw *draws = calloc(count ? count : 1, sizeof(*draws));
     if (!draws) return DC_MEMORY;
     size_t visible = 0, total = 0;
@@ -856,13 +865,13 @@ dc_status dc_vk_geometry_render(dc_vk_sprite *r, const dc_vk_geometry_item *item
             .image = image, .pipeline = 3 + blend, .filter = item->point_filter ? 0 : 1, .alpha_op = 4};
         total += item->vertex_count;
     }
-    if (status == DC_OK) status = render_prepared(r, draws, visible, clear, rgba);
+    if (status == DC_OK) status = render_prepared(r, draws, visible, clear, rgba,clip);
     free(draws);
     return status;
 }
 
 static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t visible,
-        const uint8_t clear[4], uint8_t *rgba) {
+        const uint8_t clear[4], uint8_t *rgba,const dc_vk_clip_rect *clip) {
     dc_status status = DC_OK;
     VkDeviceSize vertex_bytes = 0;
     for (size_t i = 0; i < visible; ++i) {
@@ -885,6 +894,9 @@ static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t v
             .renderPass = r->render_pass, .framebuffer = r->framebuffer,
             .renderArea = {{0, 0}, {r->width, r->height}}, .clearValueCount = 1, .pClearValues = &color};
         vkCmdBeginRenderPass(r->command, &begin, VK_SUBPASS_CONTENTS_INLINE);
+        VkRect2D scissor={{0,0},{r->width,r->height}};
+        if (clip) scissor=(VkRect2D){{(int32_t)clip->x,(int32_t)clip->y},{clip->width,clip->height}};
+        vkCmdSetScissor(r->command,0,1,&scissor);
         for (size_t i = 0; i < visible; ++i) {
             prepared_draw *draw = &draws[i];
             struct { float width, height; uint32_t alpha_op, reserved; } push = {(float)r->width, (float)r->height, draw->alpha_op, 0};
