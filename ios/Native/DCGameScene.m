@@ -42,6 +42,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
     dc_game_player _player;
     BOOL _playerSaveDirty;
+    BOOL _interactionActive;uint32_t _interactionStartTick;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
@@ -222,6 +223,14 @@ static uint32_t gameColor(const dc_material_value *value) {
 - (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
+    BOOL newTouch=touching&&!_inputInitialized;
+    if(newTouch&&!_interactionActive){
+        if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
+        _interactionActive=YES;_interactionStartTick=tick;
+    } else if(_interactionActive&&(uint32_t)(tick-_interactionStartTick)>800){
+        if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction animation restore failed";
+        _interactionActive=NO;
+    }
     if(touching) {
         if(_inputInitialized) {
             float dx=fmaxf(-.15f,fminf(.15f,x-_lastInputX));
