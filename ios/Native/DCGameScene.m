@@ -143,8 +143,7 @@ static uint32_t gameColor(const dc_material_value *value) {
         size_t vertexCount=0;status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK)return @"Game mesh clip query failed";if(!vertexCount)continue;
         NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);if(status!=DC_OK)return @"Game mesh projection failed";
         [storage addObject:vertices];
-        uint8_t blend=material.components[3] < .999f ? 3 : 0;
-        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=blend,.depth_mode=DC_VK_DEPTH_WRITE};
+        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE};
         *triangles+=(uint32_t)(vertexCount/3);
     }
     return nil;
