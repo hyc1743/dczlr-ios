@@ -40,8 +40,8 @@ from native_core import (  # noqa: E402
 
 SEQUENCE = (0, 1, 3, 4, 5, 6, 7, 8)
 CAMERAS = {
-    0: "home_sh.cam", 1: "home_2f.cam", 3: "home_3f.cam", 4: "home_4f.cam",
-    5: "home_5p.cam", 6: "home_5p.cam", 7: "home_5p.cam", 8: "home_5p.cam",
+    0: "home_sh.cam", 1: "roji_4p.cam", 3: "hote_3p.cam", 4: "roji_4p.cam",
+    5: "roji_5p.cam", 6: "roji_4p.cam", 7: "roji_4p.cam", 8: "hote_5p.cam",
 }
 
 
@@ -56,6 +56,8 @@ def entry(path, name):
 
 def main():
     lib = library()
+    with PPArchive(ROOT / "Data/RPP_03.pp") as camera_archive:
+        camera_names = [camera_archive.entry(i).name_bytes.decode("ascii") for i in range(camera_archive.count)]
     map_rows = []
     for selector in SEQUENCE:
         data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
@@ -265,6 +267,74 @@ def main():
                 morphed_meshes += 1
                 morphed_vertices += written.value
         projection["face_morphed"] = {"frame": sample_frame, "meshes": morphed_meshes, "vertices": morphed_vertices, "triangles": morphed_vertices // 3}
+
+        anchor_names = {
+            0: "m_Nn_yuka_l_a", 1: "m_Nn_yuka_p_a", 3: "m_Nn_yuka_r_a",
+            4: "m_Nn_yuka_5_a", 5: "m_Nn_yuka_5_a", 6: "m_Nn_yuka_2b_a",
+            7: "m_Nn_yuka_2b_a", 8: "m_Nn_yuka_5_a",
+        }
+        all_scene_rows = []
+        for selector in SEQUENCE:
+            map_data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
+            map_handle = C.c_void_p()
+            if lib.dc_model_open_static(map_data, len(map_data), C.byref(map_handle)):
+                raise RuntimeError(f"map {selector} scene admission failed")
+            try:
+                with XXModel(map_data) as map_xx:
+                    anchor = None
+                    for node_index in range(map_xx.info().nodes):
+                        node = map_xx.at("node", node_index)
+                        name = bytes(value ^ 255 for value in map_xx.span(node.name)).split(b"\0", 1)[0].decode("ascii")
+                        if name == anchor_names[selector]:
+                            anchor = node_index
+                            break
+                    if anchor is None:
+                        raise RuntimeError(f"map {selector} actor anchor unavailable")
+                    actor_world = Matrix()
+                    if lib.dc_xx_node_matrix(map_xx.handle, anchor, C.byref(actor_world)) or lib.dc_model_tick(actor_handle, 0, selector, C.byref(actor_world)):
+                        raise RuntimeError(f"map {selector} actor tick failed")
+                    if lib.dc_model_global(actor_handle, head_node, C.byref(head)) or lib.dc_model_tick(face_handle, 0, selector, C.byref(head)):
+                        raise RuntimeError(f"map {selector} face tick failed")
+                    map_info = XXInfo()
+                    if lib.dc_model_get_info(map_handle, C.byref(map_info)):
+                        raise RuntimeError(f"map {selector} info failed")
+                    selected_camera = CAMERAS[selector]
+                    def candidate_counts(name):
+                        nonlocal camera
+                        candidate_data = entry(ROOT / "Data/RPP_03.pp", name)
+                        candidate_orbit = CameraOrbit()
+                        candidate_camera = CameraMatrices()
+                        if lib.dc_camera_read_preset(candidate_data, len(candidate_data), 0, C.byref(candidate_orbit)) or lib.dc_camera_build(C.byref(candidate_orbit), C.byref(lens), C.byref(candidate_camera)):
+                            return None
+                        camera = candidate_camera
+                        return projected(map_handle, map_info), projected(actor_handle, actor_info), projected(face_handle, face_info)
+                    current_counts = candidate_counts(selected_camera)
+                    if current_counts is None or not current_counts[0]["triangles"] or not current_counts[1]["triangles"] or not current_counts[2]["triangles"]:
+                        best_score = -1
+                        best_counts = None
+                        for candidate_name in camera_names:
+                            counts = candidate_counts(candidate_name)
+                            if counts is None or not counts[1]["triangles"] or not counts[2]["triangles"]:
+                                continue
+                            score = counts[0]["triangles"] * 1000 + counts[1]["triangles"] * 10 + counts[2]["triangles"]
+                            if score > best_score:
+                                best_score = score
+                                selected_camera = candidate_name
+                                best_counts = counts
+                        if best_counts is None:
+                            raise RuntimeError(f"map {selector} has no camera with actor and face projection")
+                        current_counts = best_counts
+                    all_scene_rows.append({
+                        "selector": selector,
+                        "anchor_node": anchor,
+                        "camera": selected_camera,
+                        "map": current_counts[0],
+                        "actor": current_counts[1],
+                        "face": current_counts[2],
+                    })
+            finally:
+                lib.dc_model_close(map_handle)
+        projection["all_maps"] = all_scene_rows
     lib.dc_model_close(face_handle)
     lib.dc_model_close(actor_handle)
 

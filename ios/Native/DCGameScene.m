@@ -57,6 +57,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginZ;
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
     uint32_t _cameraPreset;
+    BOOL _cameraAutoSelected;
     uint32_t _actorHeadNode;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
@@ -221,6 +222,42 @@ static void freeMorphCaches(dc_game_model *slot) {
     for(size_t i=0;i<_surfaceCount;++i){dc_walk_surface *s=&_surfaces[i];float den=(s->z[1]-s->z[2])*(s->x[0]-s->x[2])+(s->x[2]-s->x[1])*(s->z[0]-s->z[2]);if(fabsf(den)<1e-5f)continue;float a=((s->z[1]-s->z[2])*(x-s->x[2])+(s->x[2]-s->x[1])*(z-s->z[2]))/den;float b=((s->z[2]-s->z[0])*(x-s->x[2])+(s->x[0]-s->x[2])*(z-s->z[2]))/den;float c=1-a-b;if(a<-.01f||b<-.01f||c<-.01f)continue;float y=a*s->y[0]+b*s->y[1]+c*s->y[2],distance=fabsf(y-nearY);if(distance<bestDistance){bestDistance=distance;best=y;found=YES;}}
     if(found&&result)*result=best;return found;
 }
+- (uint32_t)projectedTrianglesForModel:(dc_model *)model camera:(const dc_camera_matrices *)camera viewport:(const dc_viewport *)viewport {
+    dc_xx_info info;if(dc_model_get_info(model,&info)!=DC_OK)return 0;
+    uint32_t triangles=0;
+    for(uint32_t meshIndex=0;meshIndex<info.submeshes;++meshIndex) {
+        dc_xx_submesh mesh;uint32_t visible=0;size_t written=0;
+        if(dc_model_mesh(model,meshIndex,&mesh)!=DC_OK||dc_model_mesh_visible(model,meshIndex,&visible)!=DC_OK||!visible)continue;
+        if(dc_model_project_clipped(model,meshIndex,&camera->view_projection,viewport,0xffffffff,NULL,0,&written)!=DC_OK)continue;
+        triangles+=(uint32_t)(written/3);
+    }
+    return triangles;
+}
+- (NSString *)autoSelectCameraAtTick:(uint32_t)tick {
+    if(_cameraAutoSelected)return nil;
+    dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_viewport viewport={0,0,1024,768,0,1};
+    dc_matrix mapWorld=_map.world,actorWorld=_actor.world;
+    if(dc_model_tick(_map.model,0,tick,&mapWorld)!=DC_OK||dc_model_tick(_actor.model,0,tick,&actorWorld)!=DC_OK)return @"Camera fallback model tick failed";
+    if(_actorHeadNode!=UINT32_MAX){dc_matrix head;if(dc_model_global(_actor.model,_actorHeadNode,&head)!=DC_OK||dc_model_tick(_face.model,0,tick,&head)!=DC_OK)return @"Camera fallback face tick failed";}
+    dc_camera_orbit current={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};dc_camera_matrices currentMatrices;
+    if(dc_camera_build(&current,&lens,&currentMatrices)!=DC_OK)return @"Camera fallback build failed";
+    uint32_t currentMap=[self projectedTrianglesForModel:_map.model camera:&currentMatrices viewport:&viewport];
+    uint32_t currentActor=[self projectedTrianglesForModel:_actor.model camera:&currentMatrices viewport:&viewport];
+    uint32_t currentFace=[self projectedTrianglesForModel:_face.model camera:&currentMatrices viewport:&viewport];
+    if(currentMap&&currentActor&&currentFace){_cameraAutoSelected=YES;return nil;}
+    NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:&reason];
+    if(!archive)return reason.localizedDescription ?: @"Camera archive could not be opened";
+    uint64_t bestScore=0;dc_camera_orbit best=current;BOOL found=NO;
+    for(uint32_t i=0;i<archive.entryCount;++i) {
+        NSString *name=[archive asciiNameAtIndex:i];if(![name.lowercaseString hasSuffix:@".cam"])continue;
+        NSData *data=[archive readEntryAtIndex:i limit:4096 error:nil];if(!data)continue;dc_camera_orbit candidate;dc_camera_matrices matrices;
+        if(dc_camera_read_preset(data.bytes,data.length,0,&candidate)!=DC_OK||dc_camera_build(&candidate,&lens,&matrices)!=DC_OK)continue;
+        uint32_t mapTriangles=[self projectedTrianglesForModel:_map.model camera:&matrices viewport:&viewport];uint32_t actorTriangles=[self projectedTrianglesForModel:_actor.model camera:&matrices viewport:&viewport];uint32_t faceTriangles=[self projectedTrianglesForModel:_face.model camera:&matrices viewport:&viewport];
+        if(!actorTriangles||!faceTriangles)continue;uint64_t score=(uint64_t)mapTriangles*1000u+(uint64_t)actorTriangles*10u+faceTriangles;if(!found||score>bestScore){found=YES;bestScore=score;best=candidate;}
+    }
+    if(found){_cameraBase=best.base;_cameraDistance=best.stored_distance;_cameraHeight=best.height;_cameraPitch=best.pitch;_cameraYaw=best.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];}
+    _cameraAutoSelected=YES;return found?nil:@"No camera preset projects the actor";
+}
 - (NSString *)advanceToNextMap {
     if(_mapAdvanced)return nil;
     uint32_t nextSelector=UINT32_MAX,finished=0;
@@ -246,7 +283,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
     _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
     _face.world=_actor.world;
-    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;_interactionState.active=0;_interactionState.completed=0;return nil;
+    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;_interactionState.active=0;_interactionState.completed=0;_cameraAutoSelected=NO;return nil;
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
@@ -286,6 +323,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         orbit=(dc_camera_orbit){.base=gameIdentity(),.stored_distance=-1.5f};
     _cameraBase=orbit.base;
     _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
+    _cameraAutoSelected=NO;
     _actor.world=_actorWorld;
     _face.world=_actorWorld;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
@@ -514,6 +552,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     } else { _inputInitialized=NO;[self savePlayerState]; }
     if(_interactionCompleted&&!_mapAdvanced){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
+    NSString *cameraSelectionError=[self autoSelectCameraAtTick:tick];if(cameraSelectionError)return cameraSelectionError;
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};
     float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
     float followZ=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[14]-_actorOriginZ));
