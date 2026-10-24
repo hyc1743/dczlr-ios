@@ -195,7 +195,10 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
             .texture=items[i].texture,.blend_mode=items[i].blend_mode,.point_filter=items[i].point_filter};
     }
     if (_card<2) {
-        dc_sprite_pose pose={.width=viewport.width,.height=viewport.height,.x=viewport.x,.y=viewport.y,.z=.5f,
+        /* Startup cards are the background layer once the renderer has a real
+         * depth attachment; transition/model geometry must remain visible in
+         * front of the card. */
+        dc_sprite_pose pose={.width=viewport.width,.height=viewport.height,.x=viewport.x,.y=viewport.y,.z=1.0f,
             .scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1};
         dc_sprite_vertex corners[4];
         status=dc_sprite_build_vertices(&pose,corners);
