@@ -25,7 +25,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     dc_model *_model;
     dc_xx *_xx;
     dc_xx_info _info;
-    uintptr_t _cards[2],_textures[16];
+    uintptr_t _cards[2],_textures[64];
     DCDecodedImage *_cardImages[2];
     dc_startup_state _startup;
     uint32_t _card,_lastTick;
@@ -83,7 +83,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     dc_status status=dc_model_open(_xxData.bytes,_xxData.length,_xaData.bytes,_xaData.length,&_model);
     if (status==DC_OK) status=dc_xx_open(_xxData.bytes,_xxData.length,&_xx);
     if (status==DC_OK) status=dc_model_get_info(_model,&_info);
-    if (status!=DC_OK || _info.textures>16 || _info.submeshes>16) {
+    if (status!=DC_OK || _info.textures>64 || _info.submeshes>1048576) {
         if(error)*error=[NSString stringWithFormat:@"Startup model profile rejected: %d",status];return nil;
     }
     DCArchive *cards=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
@@ -113,7 +113,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
 - (void)detachRenderer {
     if (_renderer) {
         for (uint32_t i=0;i<2;++i) if(_cards[i]) dc_vk_sprite_remove_texture(_renderer,_cards[i]);
-        for (uint32_t i=0;i<16;++i) if(_textures[i]) dc_vk_sprite_remove_texture(_renderer,_textures[i]);
+        for (uint32_t i=0;i<64;++i) if(_textures[i]) dc_vk_sprite_remove_texture(_renderer,_textures[i]);
     }
     memset(_cards,0,sizeof(_cards));memset(_textures,0,sizeof(_textures));
     _renderer=NULL;_tickInitialized=NO;

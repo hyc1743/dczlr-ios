@@ -171,7 +171,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if (!width || !height) return @"CAMetalLayer has empty drawable size";
     if (_renderer && (_width != width || _height != height)) [self destroyRenderer];
     if (!_renderer) {
-        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 32, .initial_filter = 2,
+        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 128, .initial_filter = 2,
             .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
             .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv),
             .metal_layer = (__bridge void *)layer};
