@@ -156,20 +156,26 @@ static uint32_t gameColor(const dc_material_value *value) {
 }
 - (NSString *)advanceToNextMap {
     if(_mapAdvanced)return nil;
+    uint32_t nextSelector=UINT32_MAX;
+    if(_mapSelector==0)nextSelector=1;else if(_mapSelector==1)nextSelector=3;else if(_mapSelector==3)nextSelector=4;else if(_mapSelector==4)nextSelector=5;else if(_mapSelector==5)nextSelector=6;else if(_mapSelector==6)nextSelector=7;else if(_mapSelector==7)nextSelector=8;
+    if(nextSelector==UINT32_MAX){_mapAdvanced=YES;return nil;}
     NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     if(!archive)return reason.localizedDescription ?: @"Map archive could not be opened";
-    NSData *nextData=[self entry:@"mm00_01.xx" archive:archive error:nil];
+    NSString *nextName=[NSString stringWithFormat:@"mm00_%02u.xx",nextSelector];
+    NSData *nextData=[self entry:nextName archive:archive error:nil];
     if(!nextData)return @"Next map resource is unavailable";
     [self detachModel:&_map];_map.xxData=nextData;_map.xaData=nil;_map.model=NULL;_map.xx=NULL;_map.info=(dc_xx_info){0};_map.textureCount=0;_map.textures=NULL;_map.world=gameIdentity();
     NSString *error=nil;if(![self openModel:&_map staticOnly:YES error:&error])return error ?: @"Next map could not be loaded";
-    _map.world=gameIdentity();_mapSelector=1;
-    for(uint32_t i=1;i<_map.info.nodes;++i){dc_xx_node node;if(dc_xx_node_at(_map.xx,i,&node)!=DC_OK)continue;const uint8_t *raw=(const uint8_t *)_map.xxData.bytes+node.name.offset;size_t n=0;while(n<node.name.length&&raw[n]!=255)++n;char decoded[40];if(n>=sizeof(decoded))continue;for(size_t j=0;j<n;++j)decoded[j]=(char)(raw[j]^255);decoded[n]=0;if(!strcmp(decoded,"m_Nn_yuka_p_a")){dc_xx_node_matrix(_map.xx,i,&_actorWorld);_actor.world=_actorWorld;break;}}
+    _map.world=gameIdentity();_mapSelector=nextSelector;
+    const char *anchors[]={(nextSelector==1?"m_Nn_yuka_p_a":nextSelector==3?"m_Nn_yuka_3_a":nextSelector==4?"m_Nn_yuka_4_a":nextSelector==5?"m_Nn_yuka_5_a":"m_Nn_yuka_l_a"),"m_Nn_yuka_p_a","m_Nn_yuka_l_a"};
+    for(unsigned candidate=0;candidate<3;++candidate)for(uint32_t i=1;i<_map.info.nodes;++i){dc_xx_node node;if(dc_xx_node_at(_map.xx,i,&node)!=DC_OK)continue;const uint8_t *raw=(const uint8_t *)_map.xxData.bytes+node.name.offset;size_t n=0;while(n<node.name.length&&raw[n]!=255)++n;char decoded[40];if(n>=sizeof(decoded))continue;for(size_t j=0;j<n;++j)decoded[j]=(char)(raw[j]^255);decoded[n]=0;if(!strcmp(decoded,anchors[candidate])){dc_xx_node_matrix(_map.xx,i,&_actorWorld);_actor.world=_actorWorld;candidate=3;break;}}
     [self computeWalkBounds];
-    NSData *cameraData=[self entry:@"home_2f.cam" archive:[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:nil] error:nil];
+    const char *cameraName=nextSelector==1?"home_2f.cam":nextSelector==3?"home_3f.cam":nextSelector==4?"home_4f.cam":nextSelector==5?"home_5p.cam":"home_5p.cam";
+    NSData *cameraData=[self entry:[NSString stringWithUTF8String:cameraName] archive:[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:nil] error:nil];
     if(cameraData){dc_camera_orbit nextCamera;if(dc_camera_read_preset(cameraData.bytes,cameraData.length,0,&nextCamera)==DC_OK){_cameraBase=nextCamera.base;_cameraDistance=nextCamera.stored_distance;_cameraHeight=nextCamera.height;_cameraPitch=nextCamera.pitch;_cameraYaw=nextCamera.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];}}
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));
-    _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;_mapAdvanced=YES;return nil;
+    _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;_mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;return nil;
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
