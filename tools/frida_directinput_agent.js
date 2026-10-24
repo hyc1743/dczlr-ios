@@ -10,6 +10,7 @@
 const presses = __PRESSES__;
 const forceMenu = __FORCE_MENU__;
 const forceGameMenu = __FORCE_GAME_MENU__;
+const forceGameRelease = __FORCE_GAME_RELEASE__;
 const forceChapter = __FORCE_CHAPTER__;
 const forceActions = __FORCE_ACTIONS__;
 const forceDispatch = __FORCE_DISPATCH__;
@@ -30,6 +31,7 @@ let menuGeometrySent = false;
 let gameplayMenuGeometrySent = false;
 let forceMenuRemaining = forceMenu ? (forceMenu.frames || 5) : 0;
 let forceGameMenuRemaining = forceGameMenu ? (forceGameMenu.frames || 5) : 0;
+let forceGameReleaseRemaining = forceGameRelease ? (forceGameRelease.frames || 3) : 0;
 let introStateSnapshot = '';
 let dispatcherSnapshot = '';
 let forceChapterApplied = false;
@@ -357,6 +359,14 @@ function hookGameFunctions() {
         emit('ForceGameplayMenu', {x: forceGameMenu.x | 0, y: forceGameMenu.y | 0,
                                     input: forceGameMenu.input === undefined ? 3 : forceGameMenu.input & 0xff,
                                     remaining: forceGameMenuRemaining});
+      } else if (forceGameRelease && forceGameReleaseRemaining > 0 && elapsed() >= forceGameRelease.at) {
+        args[1] = ptr(forceGameRelease.x | 0);
+        args[2] = ptr(forceGameRelease.y | 0);
+        args[4] = ptr((forceGameRelease.input === undefined ? 1 : forceGameRelease.input) & 0xff);
+        forceGameReleaseRemaining -= 1;
+        emit('ForceGameplayRelease', {x: forceGameRelease.x | 0, y: forceGameRelease.y | 0,
+                                       input: forceGameRelease.input === undefined ? 1 : forceGameRelease.input & 0xff,
+                                       remaining: forceGameReleaseRemaining});
       }
       this.x = safeArgU32(args[1]);
       this.y = safeArgU32(args[2]);
