@@ -169,6 +169,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          gh --version
+          find out/release -maxdepth 6 -type f -print
           tag="ipa-${GITHUB_SHA:0:7}"
           ipa="$(find out/release -name PortLab-unsigned.ipa -type f -print -quit)"
           report="$(find out/release -name build-report.json -type f -print -quit)"
