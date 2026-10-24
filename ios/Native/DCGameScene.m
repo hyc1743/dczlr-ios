@@ -1,6 +1,7 @@
 #import "DCGameScene.h"
 #import "DCArchive.h"
 #include "dc_camera.h"
+#include "dc_gameplay.h"
 #include "dc_model.h"
 #include <math.h>
 #include <float.h>
@@ -37,6 +38,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
+    dc_game_player _player;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
 }
@@ -108,6 +110,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(!isfinite(_walkMinX)||!isfinite(_walkMaxX)||_walkMinX>=_walkMaxX){_walkMinX=-100;_walkMaxX=100;}
     if(!isfinite(_walkMinZ)||!isfinite(_walkMaxZ)||_walkMinZ>=_walkMaxZ){_walkMinZ=-100;_walkMaxZ=100;}
     float margin=1.0f;_walkMinX+=margin;_walkMaxX-=margin;_walkMinZ+=margin;_walkMaxZ-=margin;
+    _player=(dc_game_player){.x=_actor.world.values[12],.z=_actor.world.values[14],.min_x=_walkMinX,.max_x=_walkMaxX,.min_z=_walkMinZ,.max_z=_walkMaxZ,.speed=8};
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
@@ -138,6 +141,8 @@ static uint32_t gameColor(const dc_material_value *value) {
     _cameraBase=orbit.base;
     _actor.world=_actorWorld;
     [self computeWalkBounds];
+    _player.x=_actor.world.values[12];_player.z=_actor.world.values[14];
+    _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
     _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
@@ -182,8 +187,9 @@ static uint32_t gameColor(const dc_material_value *value) {
         if(_inputInitialized) {
             float dx=fmaxf(-.15f,fminf(.15f,x-_lastInputX));
             float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
-            _actor.world.values[12]=fmaxf(_walkMinX,fminf(_walkMaxX,_actor.world.values[12]+dx*80.0f));
-            _actor.world.values[14]=fmaxf(_walkMinZ,fminf(_walkMaxZ,_actor.world.values[14]-dz*80.0f));
+            dc_game_player next;
+            dc_game_input input={.axis_x=dx/.15f,.axis_z=-dz/.15f,.touching=1};
+            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK){_player=next;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;}
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else _inputInitialized=NO;
