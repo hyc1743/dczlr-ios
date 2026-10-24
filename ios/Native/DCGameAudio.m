@@ -74,7 +74,11 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
     return nil;
 }
 - (BOOL)playGameplayEffectNamed:(NSString *)name {
-    AVAudioPlayer *player=_gameplayEffects[name];if(!player)return NO;player.currentTime=0;return [player play];
+    AVAudioPlayer *player=_gameplayEffects[name];if(!player)return NO;
+    NSError *reason=nil;AVAudioSession *session=AVAudioSession.sharedInstance;
+    if(![session setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&reason] ||
+       ![session setActive:YES error:&reason]) return NO;
+    player.currentTime=0;return [player play];
 }
 - (BOOL)playGameplaySlot:(NSUInteger)slot {
     NSArray<NSString *> *names=DCGameplaySlotNames();
@@ -94,6 +98,9 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
     }
     player.delegate=self;
     _voiceChainNext=[name caseInsensitiveCompare:@"ast001_01.wav"]==NSOrderedSame ? @"ast002_01.wav" : nil;
+    NSError *reason=nil;AVAudioSession *session=AVAudioSession.sharedInstance;
+    if(![session setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&reason] ||
+       ![session setActive:YES error:&reason]) return NO;
     player.currentTime=0;
     return [player play];
 }
