@@ -36,6 +36,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     dc_game_model _map,_actor;
     dc_matrix _cameraBase,_actorWorld;
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginZ;
+    float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
     uint32_t _cameraPreset;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
@@ -164,6 +165,8 @@ static uint32_t gameColor(const dc_material_value *value) {
     _map.world=gameIdentity();_mapSelector=1;
     for(uint32_t i=1;i<_map.info.nodes;++i){dc_xx_node node;if(dc_xx_node_at(_map.xx,i,&node)!=DC_OK)continue;const uint8_t *raw=(const uint8_t *)_map.xxData.bytes+node.name.offset;size_t n=0;while(n<node.name.length&&raw[n]!=255)++n;char decoded[40];if(n>=sizeof(decoded))continue;for(size_t j=0;j<n;++j)decoded[j]=(char)(raw[j]^255);decoded[n]=0;if(!strcmp(decoded,"m_Nn_yuka_p_a")){dc_xx_node_matrix(_map.xx,i,&_actorWorld);_actor.world=_actorWorld;break;}}
     [self computeWalkBounds];
+    NSData *cameraData=[self entry:@"home_2f.cam" archive:[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:nil] error:nil];
+    if(cameraData){dc_camera_orbit nextCamera;if(dc_camera_read_preset(cameraData.bytes,cameraData.length,0,&nextCamera)==DC_OK){_cameraBase=nextCamera.base;_cameraDistance=nextCamera.stored_distance;_cameraHeight=nextCamera.height;_cameraPitch=nextCamera.pitch;_cameraYaw=nextCamera.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];}}
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;_mapAdvanced=YES;return nil;
@@ -195,6 +198,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(!camData || dc_camera_read_preset(camData.bytes,camData.length,0,&orbit)!=DC_OK)
         orbit=(dc_camera_orbit){.base=gameIdentity(),.stored_distance=-1.5f};
     _cameraBase=orbit.base;
+    _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
     _actor.world=_actorWorld;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
     _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
@@ -264,7 +268,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     } else { _inputInitialized=NO;[self savePlayerState]; }
     if(_interactionCompleted&&!_mapAdvanced){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
-    dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=-1.5f,.height=0,.pitch=0,.yaw=0};
+    dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};
     float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
     float followZ=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[14]-_actorOriginZ));
     orbit.base.values[12]=_cameraOriginX+followX*.65f;
