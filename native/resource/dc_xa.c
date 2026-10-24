@@ -1,5 +1,6 @@
 #include "dc_xa.h"
 #include <float.h>
+#include <stdlib.h>
 #include <string.h>
 
 _Static_assert(sizeof(float) == 4 && FLT_RADIX == 2 && FLT_MANT_DIG == 24 &&
@@ -253,6 +254,30 @@ dc_status dc_xa_morph_vector_set_at(const void *bytes,size_t length,uint32_t ind
     uint32_t set_count;if(!integer(&c,&set_count)||set_count!=nv)return DC_FORMAT;
     for(uint32_t i=0;i<=index;++i){dc_xa_morph_vector_set v={0};if(!integer(&c,&v.count))return DC_FORMAT;v.vectors_offset=c.position;if(!array(&c,v.count,24))return DC_FORMAT;uint32_t n;if(!integer(&c,&n))return DC_FORMAT;v.data_offset=c.position;v.data_length=n;if(!skip(&c,n))return DC_FORMAT;if(i==index){*out=v;return DC_OK;}}
     return DC_NOT_FOUND;
+}
+
+dc_status dc_xa_load_morph_vector_sets(const void *bytes,size_t length,
+        dc_xa_morph_vector_set *out,size_t capacity) {
+    if(!bytes || !out)return DC_ARGUMENT;
+    dc_xa_info info;if(dc_xa_probe(bytes,length,&info)!=DC_OK)return DC_FORMAT;
+    if(capacity<info.morph_vector_sets)return DC_RANGE;
+    size_t outputBytes=(size_t)info.morph_vector_sets*sizeof(*out);
+    if(overlaps(bytes,length,out,outputBytes))return DC_ARGUMENT;
+    dc_xa_morph_vector_set *temporary=calloc(info.morph_vector_sets?info.morph_vector_sets:1,sizeof(*temporary));
+    if(!temporary)return DC_MEMORY;
+    cursor c={(const uint8_t *)bytes,length,0};uint32_t present=0,sectionCount=0,recordCount=0;
+    if(!flag(&c,&present))goto malformed;
+    if(present){if(!records(&c,&sectionCount,8))goto malformed;for(uint32_t i=0;i<sectionCount;++i){if(!block(&c)||!integer(&c,&recordCount)||!array(&c,recordCount,72))goto malformed;}}
+    if(!flag(&c,&present))goto malformed;
+    if(present){if(!records(&c,&sectionCount,25))goto malformed;for(uint32_t i=0;i<sectionCount;++i){if(!skip(&c,4)||!block(&c)||!skip(&c,8)||!integer(&c,&recordCount)||!array(&c,recordCount,5)||!skip(&c,5))goto malformed;}}
+    if(!flag(&c,&present)||!present)goto malformed;
+    if(!records(&c,&sectionCount,9))goto malformed;
+    for(uint32_t i=0;i<sectionCount;++i){if(!skip(&c,1)||!integer(&c,&recordCount)||!array(&c,recordCount,4)||!block(&c))goto malformed;}
+    uint32_t vectorCount=0;if(!records(&c,&vectorCount,8)||vectorCount!=info.morph_vector_sets)goto malformed;
+    for(uint32_t i=0;i<vectorCount;++i){dc_xa_morph_vector_set view={0};uint32_t nameLength=0;if(!integer(&c,&view.count))goto malformed;view.vectors_offset=c.position;if(!array(&c,view.count,24)||!integer(&c,&nameLength))goto malformed;view.data_offset=c.position;view.data_length=nameLength;if(!skip(&c,nameLength))goto malformed;temporary[i]=view;}
+    memcpy(out,temporary,outputBytes);free(temporary);return DC_OK;
+malformed:
+    free(temporary);return DC_FORMAT;
 }
 
 dc_status dc_xa_morph_track_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_track *out){

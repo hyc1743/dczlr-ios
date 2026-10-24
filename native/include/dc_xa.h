@@ -71,6 +71,8 @@ DC_API dc_status dc_xa_load_pose_keys(const void *bytes, size_t length,
  * binding, vertex deformation or interpolation is implied by these views. */
 DC_API dc_status dc_xa_morph_index_set_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_index_set *out);
 DC_API dc_status dc_xa_morph_vector_set_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_vector_set *out);
+DC_API dc_status dc_xa_load_morph_vector_sets(const void *bytes,size_t length,
+    dc_xa_morph_vector_set *out,size_t capacity);
 DC_API dc_status dc_xa_morph_track_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_track *out);
 DC_API dc_status dc_xa_morph_key_at(const void *bytes,size_t length,uint32_t track,uint32_t key,dc_xa_morph_key *out);
 DC_API dc_status dc_xa_load_morph_indices(const void *bytes,size_t length,uint32_t index,uint32_t *out,size_t capacity);

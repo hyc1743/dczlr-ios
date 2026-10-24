@@ -66,6 +66,13 @@ class NativeXATests(unittest.TestCase):
         self.assertEqual(self.lib.dc_xa_load_morph_indices(data,len(data),0,indices,1),4)
         self.assertEqual(self.lib.dc_xa_load_morph_vectors(data,len(data),0,vectors,1),4)
 
+    def test_morph_vector_table_loads_views_atomically(self):
+        data, _ = fixture()
+        table=(XAMorphVectorSet*1)()
+        self.assertEqual(self.lib.dc_xa_load_morph_vector_sets(data,len(data),table,1),0)
+        self.assertEqual((table[0].count,table[0].data_length),(2,8))
+        self.assertEqual(self.lib.dc_xa_load_morph_vector_sets(data,len(data),table,0),4)
+
     def test_all_slots_float_bits_and_output_canaries(self):
         data, _ = fixture()
         clips, timing = self.buffers(513)

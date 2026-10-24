@@ -513,6 +513,8 @@ def library():
     lib.dc_xa_morph_index_set_at.restype=C.c_int
     lib.dc_xa_morph_vector_set_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(XAMorphVectorSet)]
     lib.dc_xa_morph_vector_set_at.restype=C.c_int
+    lib.dc_xa_load_morph_vector_sets.argtypes=[C.c_void_p,C.c_size_t,C.POINTER(XAMorphVectorSet),C.c_size_t]
+    lib.dc_xa_load_morph_vector_sets.restype=C.c_int
     lib.dc_xa_morph_track_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(XAMorphTrack)]
     lib.dc_xa_morph_track_at.restype=C.c_int
     lib.dc_xa_morph_key_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.c_uint32,C.POINTER(XAMorphKey)]
