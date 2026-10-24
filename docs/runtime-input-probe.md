@@ -59,10 +59,17 @@ compatibility input for the local playable-loop exercise; menu activation and
 near-target admission are kept as separate state gates.
 
 On a normal launch, completing an interaction leaves the current map active
-while the observed voice chain plays. A second row-1 menu activation admits the
-next map. The simulator exercise sets `PORTLAB_EXERCISE_REAL_GAMEPLAY=1` and
-keeps the bounded automatic map sequence so the full local resource route can
-be checked without manual input.
+while the observed voice chain plays. The trigger for the original map change
+is still unresolved; repeated row-1 activation alone did not load another map
+in the bounded Windows probe. The simulator exercise sets
+`PORTLAB_EXERCISE_REAL_GAMEPLAY=1` and keeps the bounded automatic map sequence
+only for host-side coverage of all eight local maps.
+
+A two-action forced probe confirms the boundary: a second hover/release pair at
+the same row returns menu result `1`, but does not open a new `RPP_11.pp` voice
+record or reload `RPP_10.pp`. The map-change caller and its state prerequisites
+therefore remain open; the probe is retained locally as
+`research/native-core/directinput-frida-gameplay-two-actions.json`.
 
 The simulator resource check is optional and can run in the public macOS workflow; it is not required for the Windows native validation path. When a built simulator app is available, local resource packs can be staged without putting them in the repository:
 

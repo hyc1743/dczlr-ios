@@ -9,8 +9,10 @@
 
 const presses = __PRESSES__;
 const forceMenu = __FORCE_MENU__;
-const forceGameMenu = __FORCE_GAME_MENU__;
-const forceGameRelease = __FORCE_GAME_RELEASE__;
+const forceGameMenuInput = __FORCE_GAME_MENU__;
+const forceGameReleaseInput = __FORCE_GAME_RELEASE__;
+const forceGameMenuQueue = Array.isArray(forceGameMenuInput) ? forceGameMenuInput.slice() : (forceGameMenuInput ? [forceGameMenuInput] : []);
+const forceGameReleaseQueue = Array.isArray(forceGameReleaseInput) ? forceGameReleaseInput.slice() : (forceGameReleaseInput ? [forceGameReleaseInput] : []);
 const forceChapter = __FORCE_CHAPTER__;
 const forceActions = __FORCE_ACTIONS__;
 const forceDispatch = __FORCE_DISPATCH__;
@@ -30,8 +32,10 @@ let inputArraySnapshot = '';
 let menuGeometrySent = false;
 let gameplayMenuGeometrySent = false;
 let forceMenuRemaining = forceMenu ? (forceMenu.frames || 5) : 0;
-let forceGameMenuRemaining = forceGameMenu ? (forceGameMenu.frames || 5) : 0;
-let forceGameReleaseRemaining = forceGameRelease ? (forceGameRelease.frames || 3) : 0;
+let forceGameMenu = null;
+let forceGameRelease = null;
+let forceGameMenuRemaining = 0;
+let forceGameReleaseRemaining = 0;
 let introStateSnapshot = '';
 let dispatcherSnapshot = '';
 let forceChapterApplied = false;
@@ -351,7 +355,17 @@ function hookGameFunctions() {
         emit('ForceTitleMenu', {x: forceMenu.x | 0, y: forceMenu.y | 0,
                                 input: forceMenu.input === undefined ? 3 : forceMenu.input & 0xff,
                                 remaining: forceMenuRemaining});
-      } else if (forceGameMenu && forceGameMenuRemaining > 0 && elapsed() >= forceGameMenu.at) {
+      } else {
+        if (!forceGameMenu && forceGameMenuQueue.length && elapsed() >= forceGameMenuQueue[0].at) {
+          forceGameMenu = forceGameMenuQueue.shift();
+          forceGameMenuRemaining = forceGameMenu.frames || 5;
+        }
+        if (!forceGameRelease && forceGameReleaseQueue.length && elapsed() >= forceGameReleaseQueue[0].at) {
+          forceGameRelease = forceGameReleaseQueue.shift();
+          forceGameReleaseRemaining = forceGameRelease.frames || 3;
+        }
+      }
+      if (forceGameMenu && forceGameMenuRemaining > 0 && elapsed() >= forceGameMenu.at) {
         args[1] = ptr(forceGameMenu.x | 0);
         args[2] = ptr(forceGameMenu.y | 0);
         args[4] = ptr((forceGameMenu.input === undefined ? 3 : forceGameMenu.input) & 0xff);
@@ -359,6 +373,7 @@ function hookGameFunctions() {
         emit('ForceGameplayMenu', {x: forceGameMenu.x | 0, y: forceGameMenu.y | 0,
                                     input: forceGameMenu.input === undefined ? 3 : forceGameMenu.input & 0xff,
                                     remaining: forceGameMenuRemaining});
+        if (!forceGameMenuRemaining) forceGameMenu = null;
       } else if (forceGameRelease && forceGameReleaseRemaining > 0 && elapsed() >= forceGameRelease.at) {
         args[1] = ptr(forceGameRelease.x | 0);
         args[2] = ptr(forceGameRelease.y | 0);
@@ -367,6 +382,7 @@ function hookGameFunctions() {
         emit('ForceGameplayRelease', {x: forceGameRelease.x | 0, y: forceGameRelease.y | 0,
                                        input: forceGameRelease.input === undefined ? 1 : forceGameRelease.input & 0xff,
                                        remaining: forceGameReleaseRemaining});
+        if (!forceGameReleaseRemaining) forceGameRelease = null;
       }
       this.x = safeArgU32(args[1]);
       this.y = safeArgU32(args[2]);

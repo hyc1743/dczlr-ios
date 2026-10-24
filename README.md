@@ -28,8 +28,9 @@ Existing save prefixes supply title unlock flags. The native chapter-3 path now
 loads the real map chain, actor, PLST neck attachment, face morphs, movement,
 collision, interaction timing, save/load and title resume routing. The first
 observed gameplay menu route now uses the original six-row hit table and chains
-the first two verified map-0 voice records. Normal gameplay waits for the next
-menu action before changing maps; the local playable-loop audit keeps a bounded
+the first two verified map-0 voice records. Normal gameplay keeps the observed
+map active while its voice/state route runs; the original map-change trigger is
+still under investigation. The local playable-loop audit keeps a bounded
 automatic route for host-side coverage of all eight real maps. Apple rendering
 execution and the remaining event/script/audio routing remain to be verified.
 

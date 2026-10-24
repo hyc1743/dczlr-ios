@@ -670,15 +670,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     _previousGameMenuTouch=touching;
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    BOOL advanceFromAction=_naturalGameplayRoute&&_interactionCompleted&&menuActivated&&nearInteraction;
-    if (advanceFromAction) {
-        NSString *mapError=[self advanceToNextMap];
-        if (mapError) return mapError;
-        menuActivated=NO;
-        nearOriginX=_actorOriginX-_actor.world.values[12];
-        nearOriginZ=_actorOriginZ-_actor.world.values[14];
-        nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    }
     if (menuActivated && nearInteraction && !_interactionCompleted && _mapSelector==0)
         _pendingVoiceName=@"ast001_01.wav";
     dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated),.near_target=nearInteraction};
