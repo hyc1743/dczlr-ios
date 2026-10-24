@@ -35,6 +35,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     dc_vk_sprite *_renderer;
     dc_game_model _map,_actor;
     dc_matrix _cameraBase,_actorWorld;
+    float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginZ;
     uint32_t _cameraPreset;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
@@ -160,6 +161,8 @@ static uint32_t gameColor(const dc_material_value *value) {
         orbit=(dc_camera_orbit){.base=gameIdentity(),.stored_distance=-1.5f};
     _cameraBase=orbit.base;
     _actor.world=_actorWorld;
+    _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
+    _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
     [self computeWalkBounds];
     _player.x=_actor.world.values[12];_player.z=_actor.world.values[14];
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
@@ -214,7 +217,12 @@ static uint32_t gameColor(const dc_material_value *value) {
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else _inputInitialized=NO;
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
-    dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=-1.5f,.height=0,.pitch=0,.yaw=0};dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
+    dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=-1.5f,.height=0,.pitch=0,.yaw=0};
+    float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
+    float followZ=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[14]-_actorOriginZ));
+    orbit.base.values[12]=_cameraOriginX+followX*.65f;
+    orbit.base.values[14]=_cameraOriginZ+followZ*.65f;
+    dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
     size_t capacity=_map.info.submeshes+_actor.info.submeshes;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
