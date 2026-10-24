@@ -28,14 +28,19 @@ typedef struct dc_vk_sprite_item {
 } dc_vk_sprite_item;
 /* Preprojected, non-indexed triangle-list vertices. RGB and alpha modulate
  * texture with diffuse; blend modes 0/3 standard, 1 additive, 2 modulation.
- * Explicit unlit one-texture profile; no depth/culling/skinning/effect claim.
+ * Explicit unlit one-texture profile; no culling/skinning/effect claim.
  * Positive rhw enables perspective-correct interpolation through the shader. */
 typedef struct dc_vk_geometry_item {
     const dc_sprite_vertex *vertices;
     size_t vertex_count;
     uintptr_t texture;
-    uint8_t blend_mode, hidden, point_filter, reserved;
+    uint8_t blend_mode, hidden, point_filter, depth_mode;
 } dc_vk_geometry_item;
+enum dc_vk_depth_mode {
+    DC_VK_DEPTH_DISABLED=0,
+    DC_VK_DEPTH_WRITE=1, /* LESS_OR_EQUAL test and write. */
+    DC_VK_DEPTH_READ_ONLY=2 /* LESS_OR_EQUAL test without writes. */
+};
 typedef struct dc_vk_clip_rect { uint32_t x,y,width,height; } dc_vk_clip_rect;
 
 typedef struct dc_vk_sprite_info {
@@ -46,7 +51,7 @@ typedef struct dc_vk_sprite_info {
 } dc_vk_sprite_info;
 
 /* Serial, blocking Vulkan backend with optional Apple surface presentation.
- * Scope: RGBA8, no depth test/culling, one repeated texture stage, one mip,
+ * Scope: RGBA8, D32 depth cleared to1 each frame, no culling, one repeated texture stage, one mip,
  * observed sprite blend modes. Unsupported effective state fails explicitly.
  * A visible textured draw requires a live texture handle. Alpha-op DISABLE is
  * accepted only for opaque texture + opaque diffuse; other transparency uses
@@ -65,6 +70,8 @@ DC_API dc_status dc_vk_sprite_remove_texture(dc_vk_sprite *renderer, uintptr_t h
  * without unpremultiplication.
  * rgba may be NULL with capacity zero to omit CPU readback. An Apple surface,
  * when configured, receives the Vulkan target through a GPU blit and swapchain.
+ * Sprite draws always disable depth testing/writes. Geometry explicitly selects
+ * disabled/read-write/read-only depth; zero-initialized geometry disables it.
  * Every frame establishes a fresh sprite state; min/mag starts at config's
  * explicit inherited value. Hidden value 1 skips an item without resolving it.
  * Semantic/admission errors do not submit a frame or modify output. */

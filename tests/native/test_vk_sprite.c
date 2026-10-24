@@ -236,11 +236,21 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
         far_quad[i]=(dc_sprite_vertex){.x=xy[q][0],.y=xy[q][1],.z=.8f,.rhw=1,.diffuse=0xffffffff,.u=0,.v=0};
         near_quad[i]=(dc_sprite_vertex){.x=xy[q][0]+1,.y=xy[q][1]+1,.z=.2f,.rhw=1,.diffuse=0xffffffff,.u=0,.v=0};
     }
-    dc_vk_geometry_item depth_items[2]={{.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3},
-        {.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3}};
+    dc_vk_geometry_item depth_items[2]={{.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE},
+        {.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE}};
     OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,0,255,0,255,0));
     dc_vk_geometry_item swapped=depth_items[0];depth_items[0]=depth_items[1];depth_items[1]=swapped;
     OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,0,255,0,255,0));
+    /* Read-only foreground must not occlude a later farther write. Default
+     * geometry ignores existing depth, as overlays require. */
+    depth_items[0].depth_mode=DC_VK_DEPTH_READ_ONLY;
+    OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,255,0,0,255,0));
+    depth_items[0].depth_mode=DC_VK_DEPTH_WRITE;depth_items[1].depth_mode=DC_VK_DEPTH_DISABLED;
+    OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,255,0,0,255,0));
+    memcpy(before,rgba,sizeof(rgba));OK(dc_vk_sprite_get_info(r,&info));frame_count=info.submitted_frames;
+    depth_items[1].depth_mode=3;
+    CHECK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba))==DC_FORMAT);
+    CHECK(!memcmp(before,rgba,sizeof(rgba)));OK(dc_vk_sprite_get_info(r,&info));CHECK(info.submitted_frames==frame_count);
     OK(dc_vk_sprite_remove_texture(r,red_texture));OK(dc_vk_sprite_remove_texture(r,green_texture));
     puts("PASS: depth-tested overlapping geometry is submission-order independent");
     dc_vk_sprite_destroy(r);

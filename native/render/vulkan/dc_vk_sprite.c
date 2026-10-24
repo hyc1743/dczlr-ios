@@ -70,7 +70,7 @@ struct dc_vk_sprite {
     VkDescriptorPool descriptor_pool;
     VkPipelineLayout pipeline_layout;
     VkShaderModule modules[2];
-    VkPipeline pipelines[6];
+    VkPipeline pipelines[12];
     VkSampler samplers[2];
     host_buffer readback, vertices;
     texture *textures;
@@ -177,6 +177,9 @@ static dc_status make_image(dc_vk_sprite *r, uint32_t width, uint32_t height, Vk
 
 static dc_status make_depth_image(dc_vk_sprite *r, uint32_t width, uint32_t height,
                                   VkImage *image, VkDeviceMemory *memory, VkImageView *view) {
+    VkFormatProperties properties;vkGetPhysicalDeviceFormatProperties(r->physical,VK_FORMAT_D32_SFLOAT,&properties);
+    if(!(properties.optimalTilingFeatures&VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT))
+        return fail(r,DC_IO,"D32 depth attachment format is unsupported");
     VkImageCreateInfo create={.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,.imageType=VK_IMAGE_TYPE_2D,
         .format=VK_FORMAT_D32_SFLOAT,.extent={width,height,1},.mipLevels=1,.arrayLayers=1,
         .samples=VK_SAMPLE_COUNT_1_BIT,.tiling=VK_IMAGE_TILING_OPTIMAL,
@@ -233,7 +236,7 @@ void dc_vk_sprite_destroy(dc_vk_sprite *r) {
         if (r->swapchain) vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
         if (r->textures)
             for (uint32_t i = 0; i < r->max_textures; ++i) drop_texture(r, &r->textures[i]);
-        for (uint32_t i = 0; i < 6; ++i)
+        for (uint32_t i = 0; i < 12; ++i)
             if (r->pipelines[i]) vkDestroyPipeline(r->device, r->pipelines[i], NULL);
         for (uint32_t i = 0; i < 2; ++i) {
             if (r->modules[i]) vkDestroyShaderModule(r->device, r->modules[i], NULL);
@@ -555,8 +558,10 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         .colorAttachmentCount = 1, .pColorAttachments = &reference,.pDepthStencilAttachment=&depth_reference};
     VkSubpassDependency dependencies[2] = {
         {.srcSubpass = VK_SUBPASS_EXTERNAL, .dstSubpass = 0,
-         .srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT, .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-         .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT, .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT},
+         .srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+         .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+         .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
         {.srcSubpass = 0, .dstSubpass = VK_SUBPASS_EXTERNAL,
          .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, .dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
          .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT}};
@@ -628,8 +633,10 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
     const VkBlendFactor sources[] = {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ZERO};
     const VkBlendFactor destinations[] = {VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_COLOR};
-    for (uint32_t i = 0; i < 6; ++i) {
+    for (uint32_t i = 0; i < 12; ++i) {
         uint32_t blend_index = i % 3;
+        depth.depthTestEnable = i>=6;
+        depth.depthWriteEnable = i>=6 && i<9;
         assembly.topology = i < 3 ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         assembly.primitiveRestartEnable = i < 3;
         VkPipelineColorBlendAttachmentState blend = {.blendEnable = VK_TRUE,
@@ -886,7 +893,7 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (!item->vertices || !item->vertex_count || item->vertex_count % 3 || item->vertex_count > 1048576 - total) {
             status = DC_RANGE; break;
         }
-        if (item->blend_mode > 3 || item->point_filter > 1) { status = DC_FORMAT; break; }
+        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_READ_ONLY) { status = DC_FORMAT; break; }
         texture *image = find_texture(r, item->texture);
         if (!image) { status = DC_ARGUMENT; break; }
         for (size_t j = 0; j < item->vertex_count; ++j) {
@@ -897,7 +904,7 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (status != DC_OK) break;
         uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
         draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
-            .image = image, .pipeline = 3 + blend, .filter = item->point_filter ? 0 : 1, .alpha_op = 4};
+            .image = image, .pipeline = 3 + blend + 3*item->depth_mode, .filter = item->point_filter ? 0 : 1, .alpha_op = 4};
         total += item->vertex_count;
     }
     if (status == DC_OK) status = render_prepared(r, draws, visible, clear, rgba,clip);
