@@ -36,7 +36,8 @@ selector 0 and the other audited static maps continue through the explicit
 XX-only path. The event dispatcher changes target vertex channels in the
 original runtime; that channel update is still outside the native model
 controller, so the audit proves map pose motion and admission but not original
-effect-channel equivalence.
+effect-channel equivalence. The current local audit records controller motion
+from frame 10.0 to frame 32.857 after a 400 ms tick.
 
 `dc_scene_update` implements the default, modifier-1 and modifier-2 branches of
 `0x00415620`. The default is local times parent-global using row vectors.
