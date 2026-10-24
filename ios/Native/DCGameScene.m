@@ -17,6 +17,7 @@ typedef struct dc_game_model {
     uint32_t textureCount;
     dc_matrix world;
 } dc_game_model;
+typedef struct dc_walk_surface { float x[3],y[3],z[3]; } dc_walk_surface;
 
 static dc_matrix gameIdentity(void) { return (dc_matrix){{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1}}; }
 static uint32_t gameColor(const dc_material_value *value) {
@@ -39,6 +40,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
     dc_game_player _player;
+    dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
 }
@@ -93,6 +95,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(dc_model_tick(_map.model,0,0,&identity)!=DC_OK) {
         _walkMinX=-100;_walkMaxX=100;_walkMinZ=-100;_walkMaxZ=100;return;
     }
+    free(_surfaces);_surfaces=NULL;_surfaceCount=0;_surfaceCapacity=0;
     _walkMinX=FLT_MAX;_walkMaxX=-FLT_MAX;_walkMinZ=FLT_MAX;_walkMaxZ=-FLT_MAX;
     for(uint32_t i=0;i<_map.info.submeshes;++i) {
         dc_xx_submesh mesh;uint32_t visible=0;
@@ -100,17 +103,34 @@ static uint32_t gameColor(const dc_material_value *value) {
         dc_matrix global;if(dc_model_global(_map.model,mesh.node,&global)!=DC_OK)continue;
         dc_mesh_vertex *vertices=calloc(mesh.vertex_count?mesh.vertex_count:1,sizeof(*vertices));
         if(!vertices || dc_model_load_vertices(_map.model,i,vertices,mesh.vertex_count)!=DC_OK){free(vertices);continue;}
+        uint16_t *indices=calloc(mesh.index_count?mesh.index_count:1,sizeof(*indices));
+        if(!indices || dc_xx_load_mesh_indices(_map.xx,i,indices,mesh.index_count)!=DC_OK){free(indices);free(vertices);continue;}
         for(uint32_t j=0;j<mesh.vertex_count;++j) {
             float x=vertices[j].position[0]*global.values[0]+vertices[j].position[1]*global.values[4]+vertices[j].position[2]*global.values[8]+global.values[12];
             float z=vertices[j].position[0]*global.values[2]+vertices[j].position[1]*global.values[6]+vertices[j].position[2]*global.values[10]+global.values[14];
             _walkMinX=fminf(_walkMinX,x);_walkMaxX=fmaxf(_walkMaxX,x);_walkMinZ=fminf(_walkMinZ,z);_walkMaxZ=fmaxf(_walkMaxZ,z);
         }
+        for(uint32_t j=0;j+2<mesh.index_count;j+=3) {
+            uint16_t ia=indices[j],ib=indices[j+1],ic=indices[j+2];if(ia>=mesh.vertex_count||ib>=mesh.vertex_count||ic>=mesh.vertex_count)continue;
+            float p[3][3];uint16_t ids[3]={ia,ib,ic};
+            for(unsigned k=0;k<3;++k){dc_mesh_vertex *v=&vertices[ids[k]];p[k][0]=v->position[0]*global.values[0]+v->position[1]*global.values[4]+v->position[2]*global.values[8]+global.values[12];p[k][1]=v->position[0]*global.values[1]+v->position[1]*global.values[5]+v->position[2]*global.values[9]+global.values[13];p[k][2]=v->position[0]*global.values[2]+v->position[1]*global.values[6]+v->position[2]*global.values[10]+global.values[14];}
+            float ux=p[1][0]-p[0][0],uy=p[1][1]-p[0][1],uz=p[1][2]-p[0][2],vx=p[2][0]-p[0][0],vy=p[2][1]-p[0][1],vz=p[2][2]-p[0][2];
+            float normalY=uz*vx-ux*vz;if(fabsf(normalY)<.2f)continue;
+            if(_surfaceCount==_surfaceCapacity){size_t next=_surfaceCapacity?_surfaceCapacity*2:1024;dc_walk_surface *grown=realloc(_surfaces,next*sizeof(*grown));if(!grown){free(indices);free(vertices);return;}_surfaces=grown;_surfaceCapacity=next;}
+            dc_walk_surface *surface=&_surfaces[_surfaceCount++];for(unsigned k=0;k<3;++k){surface->x[k]=p[k][0];surface->y[k]=p[k][1];surface->z[k]=p[k][2];}
+        }
+        free(indices);
         free(vertices);
     }
     if(!isfinite(_walkMinX)||!isfinite(_walkMaxX)||_walkMinX>=_walkMaxX){_walkMinX=-100;_walkMaxX=100;}
     if(!isfinite(_walkMinZ)||!isfinite(_walkMaxZ)||_walkMinZ>=_walkMaxZ){_walkMinZ=-100;_walkMaxZ=100;}
     float margin=1.0f;_walkMinX+=margin;_walkMaxX-=margin;_walkMinZ+=margin;_walkMaxZ-=margin;
     _player=(dc_game_player){.x=_actor.world.values[12],.z=_actor.world.values[14],.min_x=_walkMinX,.max_x=_walkMaxX,.min_z=_walkMinZ,.max_z=_walkMaxZ,.speed=8};
+}
+- (BOOL)surfaceYAtX:(float)x z:(float)z nearY:(float)nearY result:(float *)result {
+    BOOL found=NO;float best=0,bestDistance=FLT_MAX;
+    for(size_t i=0;i<_surfaceCount;++i){dc_walk_surface *s=&_surfaces[i];float den=(s->z[1]-s->z[2])*(s->x[0]-s->x[2])+(s->x[2]-s->x[1])*(s->z[0]-s->z[2]);if(fabsf(den)<1e-5f)continue;float a=((s->z[1]-s->z[2])*(x-s->x[2])+(s->x[2]-s->x[1])*(z-s->z[2]))/den;float b=((s->z[2]-s->z[0])*(x-s->x[2])+(s->x[0]-s->x[2])*(z-s->z[2]))/den;float c=1-a-b;if(a<-.01f||b<-.01f||c<-.01f)continue;float y=a*s->y[0]+b*s->y[1]+c*s->y[2],distance=fabsf(y-nearY);if(distance<bestDistance){bestDistance=distance;best=y;found=YES;}}
+    if(found&&result)*result=best;return found;
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
@@ -152,7 +172,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     slot->model=NULL;slot->xx=NULL;
 }
 - (void)detachRenderer { _renderer=NULL; }
-- (void)dealloc { [self detachModel:&_map];[self detachModel:&_actor]; }
+- (void)dealloc { free(_surfaces);[self detachModel:&_map];[self detachModel:&_actor]; }
 
 - (uint32_t)textureFor:(dc_game_model *)slot mesh:(const dc_xx_submesh *)mesh {
     dc_xx_material material;if(dc_xx_material_at(slot->xx,mesh->material,&material)!=DC_OK)return UINT32_MAX;
@@ -189,7 +209,7 @@ static uint32_t gameColor(const dc_material_value *value) {
             float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
             dc_game_player next;
             dc_game_input input={.axis_x=dx/.15f,.axis_z=-dz/.15f,.touching=1};
-            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK){_player=next;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;}
+            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK){_player=next;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;float floorY;if([self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY])_actor.world.values[13]=floorY;}
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else _inputInitialized=NO;
