@@ -14,10 +14,19 @@ typedef struct dc_game_model {
     dc_xx *xx;
     dc_xx_info info;
     dc_xa_info xaInfo;
+    struct dc_morph_track_cache *morphTracks;
+    uint32_t morphTrackCount;
     uintptr_t *textures;
     uint32_t textureCount;
     dc_matrix world;
 } dc_game_model;
+typedef struct dc_morph_key_cache { uint32_t frame; size_t vectorsOffset; uint32_t count; } dc_morph_key_cache;
+typedef struct dc_morph_track_cache {
+    uint32_t meshIndex, indexCount;
+    uint32_t *indices;
+    uint32_t keyCount;
+    dc_morph_key_cache *keys;
+} dc_morph_track_cache;
 typedef struct dc_walk_surface { float x[3],y[3],z[3]; } dc_walk_surface;
 
 static dc_matrix gameIdentity(void) { return (dc_matrix){{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1}}; }
@@ -29,6 +38,14 @@ static uint32_t gameColor(const dc_material_value *value) {
         out|=c<<(i==3?24:16-i*8);
     }
     return out;
+}
+static void freeMorphCaches(dc_game_model *slot) {
+    if(!slot || !slot->morphTracks)return;
+    for(uint32_t i=0;i<slot->morphTrackCount;++i) {
+        free(slot->morphTracks[i].indices);
+        free(slot->morphTracks[i].keys);
+    }
+    free(slot->morphTracks);slot->morphTracks=NULL;slot->morphTrackCount=0;
 }
 
 @implementation DCGameScene {
@@ -243,6 +260,8 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData)return nil;
     if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error] ||
        ![self openModel:&_face staticOnly:YES error:error])return nil;
+    NSString *morphError=nil;
+    if(![self buildMorphCaches:&_face error:&morphError]) { if(error)*error=morphError ?: @"Game morph cache initialization failed";return nil; }
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
@@ -277,6 +296,7 @@ static uint32_t gameColor(const dc_material_value *value) {
 }
 - (void)detachModel:(dc_game_model *)slot {
     if(_renderer)for(uint32_t i=0;i<slot->textureCount;++i)if(slot->textures[i])dc_vk_sprite_remove_texture(_renderer,slot->textures[i]);
+    freeMorphCaches(slot);
     free(slot->textures);slot->textures=NULL;slot->textureCount=0;
     if(slot->model)dc_model_close(slot->model);if(slot->xx)dc_xx_close(slot->xx);
     slot->model=NULL;slot->xx=NULL;
@@ -337,52 +357,72 @@ static uint32_t gameColor(const dc_material_value *value) {
     return [self decodedName:(const uint8_t *)slot->xaData.bytes+key.value_offset length:key.value_length];
 }
 
+- (uint32_t)morphMeshForVectorName:(NSString *)vectorName model:(dc_game_model *)slot {
+    NSRange marker=[vectorName rangeOfString:@"_n" options:NSBackwardsSearch];
+    if(marker.location==NSNotFound || marker.location==0)return UINT32_MAX;
+    NSString *nodeName=[vectorName substringToIndex:marker.location];
+    for(uint32_t mesh=0;mesh<slot->info.submeshes;++mesh) {
+        dc_xx_submesh meshView;if(dc_model_mesh(slot->model,mesh,&meshView)!=DC_OK)continue;
+        dc_xx_node node;if(dc_xx_node_at(slot->xx,meshView.node,&node)!=DC_OK)continue;
+        NSString *meshNode=[self decodedName:(const uint8_t *)slot->xxData.bytes+node.name.offset length:node.name.length];
+        if([meshNode isEqualToString:nodeName])return mesh;
+    }
+    return UINT32_MAX;
+}
+
+- (BOOL)buildMorphCaches:(dc_game_model *)slot error:(NSString **)error {
+    freeMorphCaches(slot);
+    if(!slot->xaData || !slot->xaInfo.morph_tracks)return YES;
+    slot->morphTrackCount=slot->xaInfo.morph_tracks;
+    slot->morphTracks=calloc(slot->morphTrackCount,sizeof(*slot->morphTracks));
+    if(!slot->morphTracks){slot->morphTrackCount=0;if(error)*error=@"Game morph cache allocation failed";return NO;}
+    for(uint32_t track=0;track<slot->morphTrackCount;++track) {
+        dc_xa_morph_track trackView;
+        if(dc_xa_morph_track_at(slot->xaData.bytes,slot->xaData.length,track,&trackView)!=DC_OK) { if(error)*error=@"Game morph track cache metadata failed";freeMorphCaches(slot);return NO; }
+        NSString *target=[self decodedName:(const uint8_t *)slot->xaData.bytes+trackView.target_offset length:trackView.target_length];
+        uint32_t indexSet=[self morphIndexSetNamed:target model:slot];
+        if(indexSet==UINT32_MAX) { if(error)*error=@"Game morph cache target is unavailable";freeMorphCaches(slot);return NO; }
+        dc_xa_morph_index_set indexView;
+        if(dc_xa_morph_index_set_at(slot->xaData.bytes,slot->xaData.length,indexSet,&indexView)!=DC_OK) { if(error)*error=@"Game morph cache index metadata failed";freeMorphCaches(slot);return NO; }
+        dc_morph_track_cache *cache=&slot->morphTracks[track];cache->meshIndex=UINT32_MAX;cache->indexCount=indexView.count;
+        cache->indices=calloc(indexView.count?indexView.count:1,sizeof(*cache->indices));
+        if(!cache->indices || dc_xa_load_morph_indices(slot->xaData.bytes,slot->xaData.length,indexSet,cache->indices,indexView.count)!=DC_OK) { if(error)*error=@"Game morph cache indices failed";freeMorphCaches(slot);return NO; }
+        cache->keyCount=trackView.key_count;cache->keys=calloc(cache->keyCount?cache->keyCount:1,sizeof(*cache->keys));
+        if(!cache->keys){if(error)*error=@"Game morph cache key allocation failed";freeMorphCaches(slot);return NO;}
+        for(uint32_t keyIndex=0;keyIndex<cache->keyCount;++keyIndex) {
+            dc_xa_morph_key key;if(dc_xa_morph_key_at(slot->xaData.bytes,slot->xaData.length,track,keyIndex,&key)!=DC_OK){if(error)*error=@"Game morph cache key metadata failed";freeMorphCaches(slot);return NO;}
+            uint32_t frame=0;memcpy(&frame,key.raw,sizeof(frame));NSString *vectorName=[self decodedName:(const uint8_t *)slot->xaData.bytes+key.value_offset length:key.value_length];
+            uint32_t vectorIndex=[self morphVectorNamed:vectorName model:slot];dc_xa_morph_vector_set vectorView;
+            if(vectorIndex==UINT32_MAX || dc_xa_morph_vector_set_at(slot->xaData.bytes,slot->xaData.length,vectorIndex,&vectorView)!=DC_OK){if(error)*error=@"Game morph cache vector metadata failed";freeMorphCaches(slot);return NO;}
+            cache->keys[keyIndex]=(dc_morph_key_cache){.frame=frame,.vectorsOffset=vectorView.vectors_offset,.count=vectorView.count};
+            if(keyIndex==0)cache->meshIndex=[self morphMeshForVectorName:vectorName model:slot];
+        }
+        if(cache->meshIndex==UINT32_MAX || cache->meshIndex>=slot->info.submeshes){if(error)*error=@"Game morph cache mesh binding failed";freeMorphCaches(slot);return NO;}
+    }
+    return YES;
+}
+
 - (BOOL)applyMorphsToModel:(dc_game_model *)slot frame:(float)frame
     buffers:(dc_mesh_vertex **)buffers counts:(const uint32_t *)counts error:(NSString **)error {
-    if(!slot->xaData || !slot->xaInfo.morph_tracks)return YES;
-    for(uint32_t track=0;track<slot->xaInfo.morph_tracks;++track) {
-        dc_xa_morph_track trackView;
-        if(dc_xa_morph_track_at(slot->xaData.bytes,slot->xaData.length,track,&trackView)!=DC_OK) {
-            if(error)*error=@"Game morph track metadata failed";return NO;
+    if(!slot->xaData || !slot->morphTrackCount)return YES;
+    for(uint32_t track=0;track<slot->morphTrackCount;++track) {
+        dc_morph_track_cache *cache=&slot->morphTracks[track];
+        if(!cache->keyCount || cache->meshIndex>=slot->info.submeshes){if(error)*error=@"Game morph cache is incomplete";return NO;}
+        uint32_t selected=0;
+        for(uint32_t key=1;key<cache->keyCount;++key) {
+            if((float)cache->keys[key].frame<=frame)selected=key;else break;
         }
-        NSString *target=[self decodedName:(const uint8_t *)slot->xaData.bytes+trackView.target_offset length:trackView.target_length];
-        NSString *vectorName=[self morphVectorNameForTrack:track model:slot frame:frame];
-        if(!target || !vectorName) { if(error)*error=@"Game morph key target is unavailable";return NO; }
-        uint32_t vectorIndex=[self morphVectorNamed:vectorName model:slot];
-        if(vectorIndex==UINT32_MAX) { if(error)*error=@"Game morph vector target is unavailable";return NO; }
-        NSRange marker=[vectorName rangeOfString:@"_n" options:NSBackwardsSearch];
-        if(marker.location==NSNotFound || marker.location==0) { if(error)*error=@"Game morph vector name is malformed";return NO; }
-        NSString *nodeName=[vectorName substringToIndex:marker.location];
-        uint32_t meshIndex=UINT32_MAX;
-        for(uint32_t mesh=0;mesh<slot->info.submeshes;++mesh) {
-            dc_xx_submesh meshView;if(dc_model_mesh(slot->model,mesh,&meshView)!=DC_OK)continue;
-            dc_xx_node node;if(dc_xx_node_at(slot->xx,meshView.node,&node)!=DC_OK)continue;
-            NSString *meshNode=[self decodedName:(const uint8_t *)slot->xxData.bytes+node.name.offset length:node.name.length];
-            if([meshNode isEqualToString:nodeName]) { meshIndex=mesh;break; }
-        }
-        uint32_t indexSet=[self morphIndexSetNamed:target model:slot];
-        if(meshIndex==UINT32_MAX || indexSet==UINT32_MAX) { if(error)*error=@"Game morph mesh binding is unavailable";return NO; }
-        dc_xa_morph_vector_set vectorView;dc_xa_morph_index_set indexView;
-        if(dc_xa_morph_vector_set_at(slot->xaData.bytes,slot->xaData.length,vectorIndex,&vectorView)!=DC_OK ||
-           dc_xa_morph_index_set_at(slot->xaData.bytes,slot->xaData.length,indexSet,&indexView)!=DC_OK) {
-            if(error)*error=@"Game morph set metadata failed";return NO;
-        }
-        if(!buffers[meshIndex] || counts[meshIndex]!=vectorView.count) { if(error)*error=@"Game morph vertex count mismatch";return NO; }
-        uint32_t *indices=calloc(indexView.count?indexView.count:1,sizeof(*indices));
-        if(!indices || dc_xa_load_morph_indices(slot->xaData.bytes,slot->xaData.length,indexSet,indices,indexView.count)!=DC_OK) {
-            free(indices);if(error)*error=@"Game morph index data failed";return NO;
-        }
-        const uint8_t *source=(const uint8_t *)slot->xaData.bytes+vectorView.vectors_offset;
-        size_t positionBytes=(size_t)vectorView.count*3*sizeof(float);
-        for(uint32_t i=0;i<indexView.count;++i) {
-            uint32_t packed=indices[i];uint32_t ids[2]={packed>>16,packed&0xffffu};
+        dc_morph_key_cache *vector=&cache->keys[selected];uint32_t meshIndex=cache->meshIndex;
+        if(!buffers[meshIndex] || counts[meshIndex]!=vector->count){if(error)*error=@"Game morph vertex count mismatch";return NO;}
+        const uint8_t *source=(const uint8_t *)slot->xaData.bytes+vector->vectorsOffset;size_t positionBytes=(size_t)vector->count*3*sizeof(float);
+        for(uint32_t i=0;i<cache->indexCount;++i) {
+            uint32_t packed=cache->indices[i];uint32_t ids[2]={packed>>16,packed&0xffffu};
             for(uint32_t side=0;side<2;++side) {
-                uint32_t vertex=ids[side];if(vertex>=vectorView.count) { free(indices);if(error)*error=@"Game morph vertex index is out of range";return NO; }
+                uint32_t vertex=ids[side];if(vertex>=vector->count){if(error)*error=@"Game morph vertex index is out of range";return NO;}
                 memcpy(buffers[meshIndex][vertex].position,source+(size_t)vertex*3*sizeof(float),3*sizeof(float));
                 memcpy(buffers[meshIndex][vertex].normal,source+positionBytes+(size_t)vertex*3*sizeof(float),3*sizeof(float));
             }
         }
-        free(indices);
     }
     return YES;
 }
