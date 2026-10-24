@@ -58,6 +58,12 @@ codes through `dc_menu_step`. Its existing near-target touch path remains as a
 compatibility input for the local playable-loop exercise; menu activation and
 near-target admission are kept as separate state gates.
 
+On a normal launch, completing an interaction leaves the current map active
+while the observed voice chain plays. A second row-1 menu activation admits the
+next map. The simulator exercise sets `PORTLAB_EXERCISE_REAL_GAMEPLAY=1` and
+keeps the bounded automatic map sequence so the full local resource route can
+be checked without manual input.
+
 The simulator resource check is optional and can run in the public macOS workflow; it is not required for the Windows native validation path. When a built simulator app is available, local resource packs can be staged without putting them in the repository:
 
 ```text

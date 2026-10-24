@@ -82,6 +82,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     BOOL _mapAdvanced;uint32_t _mapSelector;
     BOOL _gameFinished;
     NSString *_pendingVoiceName;
+    BOOL _naturalGameplayRoute;
     uint32_t _actorSkinMeshCount;
     BOOL _actorSkinAdvanced;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
@@ -379,6 +380,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _cameraFallbacks=[NSMutableDictionary dictionary];
     _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};
     _gameMenuInitialized=YES;
+    _naturalGameplayRoute=![[[NSProcessInfo processInfo] environment][@"PORTLAB_EXERCISE_REAL_GAMEPLAY"] isEqualToString:@"1"];
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
@@ -668,7 +670,17 @@ static void freeMorphCaches(dc_game_model *slot) {
     _previousGameMenuTouch=touching;
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    if (menuActivated && nearInteraction && _mapSelector==0) _pendingVoiceName=@"ast001_01.wav";
+    BOOL advanceFromAction=_naturalGameplayRoute&&_interactionCompleted&&menuActivated&&nearInteraction;
+    if (advanceFromAction) {
+        NSString *mapError=[self advanceToNextMap];
+        if (mapError) return mapError;
+        menuActivated=NO;
+        nearOriginX=_actorOriginX-_actor.world.values[12];
+        nearOriginZ=_actorOriginZ-_actor.world.values[14];
+        nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
+    }
+    if (menuActivated && nearInteraction && !_interactionCompleted && _mapSelector==0)
+        _pendingVoiceName=@"ast001_01.wav";
     dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated),.near_target=nearInteraction};
     dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
     if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
@@ -689,7 +701,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else { _inputInitialized=NO;[self savePlayerState]; }
-    if(_interactionCompleted&&!_mapAdvanced){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
+    if(!_naturalGameplayRoute&&_interactionCompleted&&!_mapAdvanced){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     NSString *cameraSelectionError=[self autoSelectCameraAtTick:tick];if(cameraSelectionError)return cameraSelectionError;
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};
