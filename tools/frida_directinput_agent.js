@@ -28,6 +28,8 @@ let forceMenuRemaining = forceMenu ? (forceMenu.frames || 5) : 0;
 let introStateSnapshot = '';
 let dispatcherSnapshot = '';
 let forceChapterApplied = false;
+let audioDispatcherSnapshot = '';
+const gameplayCallbackCounts = {};
 
 function elapsed() {
   return Math.round((Date.now() - startedAt) / 1000 * 1000) / 1000;
@@ -455,6 +457,40 @@ function hookGameFunctions() {
     installOnce(fn, 'FUN_' + address.toString(16), {
       onEnter: function () { emit('IntroHelperEnter', {address: '0x' + address.toString(16)}); },
       onLeave: function () { emit('IntroHelperLeave', {address: '0x' + address.toString(16)}); }
+    });
+  });
+  const audioDispatcherFn = relative(0x00532240);
+  installOnce(audioDispatcherFn, 'FUN_00532240', {
+    onEnter: function (args) {
+      const values = [];
+      for (let index = 0; index < 3; ++index) {
+        const item = {index: index, pointer: pointerKey(args[index])};
+        if (validPointer(args[index])) {
+          try {
+            item.slot106c = args[index].add(0x106c).readU32();
+            item.slot1070 = args[index].add(0x1070).readU32();
+          } catch (_) {}
+        }
+        values.push(item);
+      }
+      const fingerprint = JSON.stringify(values);
+      if (fingerprint !== audioDispatcherSnapshot) {
+        audioDispatcherSnapshot = fingerprint;
+        emit('AudioDispatcher', {address: '0x00532240', values: values});
+      }
+    }
+  });
+  [0x00513320, 0x00513690, 0x005179e0, 0x00517a00, 0x00517a20].forEach(function (address) {
+    const fn = relative(address);
+    gameplayCallbackCounts[address] = 0;
+    installOnce(fn, 'GameplayCallback_' + address.toString(16), {
+      onEnter: function () {
+        gameplayCallbackCounts[address] += 1;
+        const count = gameplayCallbackCounts[address];
+        if (count <= 3 || elapsed() >= 49) {
+          emit('GameplayCallback', {address: '0x' + address.toString(16), count: count});
+        }
+      }
     });
   });
   gameHooksInstalled = true;

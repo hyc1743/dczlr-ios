@@ -28,6 +28,11 @@ each slot or audible device output. The reproducible probe is
 `research/native-core/directinput-frida-force-chapter3b.json` and
 `research/native-core/audio-runtime-force-chapter3b-correlation.json`.
 
+In a follow-up run, the chapter-3 callback received DirectInput scan code
+`0x3b` at about 55 seconds and reopened `RPP_01.pp/bgm005.wav`, followed by
+`RPP_14.pp/se100.wav` and `se101.wav`. That is a verified callback branch and
+slot read, while the `se016/se322/se332` interaction triggers remain unresolved.
+
 ```powershell
 python tools/audit_audio_slots.py --data Data --output research/native-core/audio-slot-audit.json
 ```
