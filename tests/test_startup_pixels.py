@@ -5,16 +5,22 @@ import unittest
 import zlib
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
-from startup_pixels import decode,verify,verify_intro
+from startup_pixels import decode,verify,verify_intro,verify_skin
 
 
-def png(color):
+def png(color,width=8,height=8):
     def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
-    width=8;height=8;row=bytes((*color,255))*width
+    row=bytes((*color,255))*width
     return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress((b'\0'+row)*height))+chunk(b'IEND',b'')
 
 
 class StartupPixelTests(unittest.TestCase):
+    def test_skin_color_gate_does_not_accept_a_card_or_black_frame(self):
+        # The color gate only proves generated surface presence, not pose or
+        # bone identity; the native change/presentation marker is separate.
+        for data in (png((20,110,180)),png((0,0,0))):
+            with self.assertRaises(ValueError):verify_skin(data)
+        self.assertGreater(verify_skin(png((255,80,40),64,64))['red_surface_pixels'],64)
     def test_intro_requires_background_and_body_region_pixels(self):
         def sample(body):
             def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)

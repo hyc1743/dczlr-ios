@@ -4,8 +4,8 @@ from xx_cases import diagnostic_fixture,name,u32
 from pose_cases import key
 
 
-def fixture(mode=0,blend=0):
-    xx=diagnostic_fixture()
+def fixture(mode=0,blend=0,skinned=False):
+    xx=diagnostic_fixture(skinned=skinned)
     values=[1.0]*17
     materials=name(b'diagnostic\0')+u32(2)
     for i in range(2):

@@ -17,12 +17,14 @@ from native_core import library, Matrix
 from scene_cases import cases, matrix
 
 NODES, WORLD, CAMERA=0x20020000,OBJECT+0x1000,0x78f650
+REFERENCE_NODE_LIMIT=512
+REFERENCE_NODE_BYTES=(REFERENCE_NODE_LIMIT*0x210+4095)&~4095
 
 
 class OriginalScene(OriginalAnimation):
     def __init__(self,exe,dll):
         super().__init__(exe,{0x415620:818,0x4211e0:14,0x406fc0:21})
-        self.uc.mem_map(NODES,0x10000,UC_PROT_READ|UC_PROT_WRITE)
+        self.uc.mem_map(NODES,REFERENCE_NODE_BYTES,UC_PROT_READ|UC_PROT_WRITE)
         self.uc.mem_protect(CAMERA&~4095,4096,UC_PROT_READ|UC_PROT_WRITE)
         self.uc.mem_write(CAMERA,bytes(matrix()))
         self.uc.mem_protect(CAMERA&~4095,4096,UC_PROT_READ)
@@ -66,7 +68,13 @@ class OriginalScene(OriginalAnimation):
 
     def run_tree(self,nodes,world,initial=None):
         self.count=len(nodes)
-        if not self.count or self.count*0x210>0x10000:raise ValueError('Synthetic tree too large')
+        if not self.count or self.count>REFERENCE_NODE_LIMIT:raise ValueError('Synthetic tree too large')
+        depths=[]
+        for i,node in enumerate(nodes):
+            if node.parent!=0xffffffff and node.parent>=i:raise ValueError('Parent order outside reference profile')
+            depth=0 if node.parent==0xffffffff else depths[node.parent]+1
+            if depth>64:raise ValueError('Tree exceeds bounded reference stack depth')
+            depths.append(depth)
         self.uc.mem_write(OBJECT,b'\0'*0x10000)
         self.uc.mem_write(NODES,b'\0'*(self.count*0x210))
         self.uc.mem_write(WORLD,bytes(world))
@@ -83,7 +91,7 @@ class OriginalScene(OriginalAnimation):
         for root in roots:
             self.uc.mem_write(STACK,struct.pack('<5I',STOP,OBJECT,OBJECT,NODES+root*0x210,WORLD))
             self.uc.reg_write(UC_X86_REG_ESP,STACK);self.uc.reg_write(UC_X86_REG_EBP,0)
-            self.uc.emu_start(0x415620,STOP,count=50000)
+            self.uc.emu_start(0x415620,STOP,count=500000)
             if self.uc.reg_read(UC_X86_REG_EIP)!=STOP or self.uc.reg_read(UC_X86_REG_ESP)!=STACK+4:
                 raise RuntimeError('Original hierarchy did not return within bounded instructions')
         return [bytes(self.uc.mem_read(NODES+i*0x210+0x54,64)) for i in range(self.count)]

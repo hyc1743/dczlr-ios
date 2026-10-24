@@ -35,7 +35,7 @@ def ema(color):
 
 
 def resources():
-    xx=diagnostic_fixture()
+    xx=diagnostic_fixture(skinned=True)
     keys=[]
     for frame,alpha in ((0,0),(8,0),(10,0),(20,0),(30,0),(60,1),(70,1),(80,1),(90,1),(120,0)):
         values=[1.0]*17;values[3]=alpha
@@ -47,7 +47,7 @@ def resources():
         struct.pack_into('<f',clips,at+64,.4 if chain else .8)
         struct.pack_into('<2f',clips,at+72,first,last)
         clips[at+80]=loop;clips[at+82]=chain;struct.pack_into('<I',clips,at+83,next_clip)
-    pose=name(b'synthetic-node\0')+u32(2)+u32(0)+bytes(key(0))+bytes(key(360))
+    pose=name(b'synthetic-node\0')+u32(2)+u32(0)+bytes(key(0))+bytes(key(360,1.8))
     xa+=clips+u32(1)+pose
     cards=[(b'illusion.ema',ema((20,110,180))),(b'warning.ema',ema((180,80,20)))]
     cards += [(n,ema((20+i*12,60+i*7,30+i*6))) for i,n in enumerate(TITLE_NAMES)]

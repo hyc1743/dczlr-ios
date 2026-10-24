@@ -39,6 +39,20 @@ typedef struct dc_xx_texture {
     size_t descriptor_offset;
 } dc_xx_texture;
 
+typedef struct dc_xx_skin {
+    dc_xx_span shared_vertices;
+    uint32_t node,shared_count,first_bone,bones,vertex_format;
+} dc_xx_skin;
+typedef struct dc_xx_bone {
+    dc_xx_span name;
+    size_t matrix_offset;
+    uint32_t node,index;
+} dc_xx_bone;
+typedef struct dc_xx_weights {
+    float weights[3];
+    uint8_t indices[4];
+} dc_xx_weights;
+
 /* Admitted observed 3.17/3.19 profiles (bits 0x404ae148/0x404c28f6), 21-byte header,
  * recursive node/mesh layout, material table and embedded-image blocks. The
  * structured prefix must frame within input. Bytes after the embedded images
@@ -57,6 +71,22 @@ DC_API dc_status dc_xx_node_at(const dc_xx *model, uint32_t index, dc_xx_node *o
 DC_API dc_status dc_xx_submesh_at(const dc_xx *model, uint32_t index, dc_xx_submesh *out);
 DC_API dc_status dc_xx_material_at(const dc_xx *model, uint32_t index, dc_xx_material *out);
 DC_API dc_status dc_xx_texture_at(const dc_xx *model, uint32_t index, dc_xx_texture *out);
+/* Per-node shared vertex table/FVF and bone ranges. Bone indices retain the
+ * serialized values; no dense-index or palette-order inference is applied.
+ * Original 0x40a6d0 copies the 64-byte matrix verbatim after the name/index. */
+DC_API dc_status dc_xx_skin_at(const dc_xx *model,uint32_t node,dc_xx_skin *out);
+DC_API dc_status dc_xx_bone_at(const dc_xx *model,uint32_t index,dc_xx_bone *out);
+DC_API dc_status dc_xx_bone_matrix(const dc_xx *model,uint32_t index,dc_matrix *out);
+/* Original 0x409830/0x4131f0 binding: last exact named root descendant.
+ * Missing names produce UINT32_MAX, matching an original null global pointer.
+ * No identity-transform fallback is inferred. Invalid names/capacity preserve
+ * all outputs. An empty bone range accepts a null zero-capacity output. */
+DC_API dc_status dc_xx_bind_bones(const dc_xx *model,uint32_t node,uint32_t *targets,size_t capacity);
+/* Original 0x408f60 FVF 0x111c/0x141c source: three raw finite weights at
+ * offsets 16/20/24 and four byte indices at 28..31 of a 52-byte record.
+ * Weight normalization, implied fourth weight and palette lookup are separate
+ * runtime operations; index 255 remains raw rather than being clamped. */
+DC_API dc_status dc_xx_load_mesh_weights(const dc_xx *model,uint32_t mesh,dc_xx_weights *out,size_t capacity);
 /* Decode the first UV stream and unskinned position/normal from 52-byte XX
  * records, matching 0x408f60's FVF 0x112 source offsets. Indices retain file
  * order and must form a valid in-range triangle list. Capacity and complete

@@ -76,7 +76,10 @@ jobs:
           xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" \
             -miphoneos-version-min=17.0 -std=c11 -O2 -Wall -Wextra -Werror \
             -Inative/include -c native/game/dc_text.c -o out/native-iphoneos/dc_text.o
-          xcrun --sdk iphoneos libtool -static out/native-iphoneos/dc_pp.o out/native-iphoneos/dc_image.o out/native-iphoneos/dc_xa.o out/native-iphoneos/dc_xx.o out/native-iphoneos/dc_sprite.o out/native-iphoneos/dc_sprite_vertices.o out/native-iphoneos/dc_startup.o out/native-iphoneos/dc_animation.o out/native-iphoneos/dc_material.o out/native-iphoneos/dc_pose.o out/native-iphoneos/dc_scene.o out/native-iphoneos/dc_model.o out/native-iphoneos/dc_mesh.o out/native-iphoneos/dc_menu.o out/native-iphoneos/dc_save.o out/native-iphoneos/dc_script.o out/native-iphoneos/dc_text.o \
+          xcrun --sdk iphoneos clang -arch arm64 -isysroot "$sdk" \
+            -miphoneos-version-min=17.0 -std=c11 -O2 -Wall -Wextra -Werror \
+            -Inative/include -c native/game/dc_skin.c -o out/native-iphoneos/dc_skin.o
+          xcrun --sdk iphoneos libtool -static out/native-iphoneos/dc_pp.o out/native-iphoneos/dc_image.o out/native-iphoneos/dc_xa.o out/native-iphoneos/dc_xx.o out/native-iphoneos/dc_sprite.o out/native-iphoneos/dc_sprite_vertices.o out/native-iphoneos/dc_startup.o out/native-iphoneos/dc_animation.o out/native-iphoneos/dc_material.o out/native-iphoneos/dc_pose.o out/native-iphoneos/dc_scene.o out/native-iphoneos/dc_model.o out/native-iphoneos/dc_mesh.o out/native-iphoneos/dc_menu.o out/native-iphoneos/dc_save.o out/native-iphoneos/dc_script.o out/native-iphoneos/dc_text.o out/native-iphoneos/dc_skin.o \
             -o out/native-iphoneos/libportlab_native.a
           file out/native-iphoneos/dc_pp.o
           python3 - <<'PY'
@@ -89,7 +92,7 @@ jobs:
               'iphoneos': 'compiled ARM64 archive; device execution unverified',
               'cpu_emulator_in_product': False, 'game_playability': 'not verified',
               'native_source_sha256': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
-                  for p in ['native/resource/dc_pp.c', 'native/resource/dc_image.c', 'native/resource/dc_xa.c', 'native/resource/dc_xx.c', 'native/render/dc_sprite.c', 'native/render/dc_sprite_vertices.c', 'native/game/dc_startup.c', 'native/game/dc_animation.c', 'native/game/dc_material.c', 'native/game/dc_pose.c', 'native/game/dc_scene.c', 'native/game/dc_model.c', 'native/render/dc_mesh.c', 'native/game/dc_menu.c', 'native/game/dc_save.c', 'native/resource/dc_script.c', 'native/game/dc_text.c']}}
+                  for p in ['native/resource/dc_pp.c', 'native/resource/dc_image.c', 'native/resource/dc_xa.c', 'native/resource/dc_xx.c', 'native/render/dc_sprite.c', 'native/render/dc_sprite_vertices.c', 'native/game/dc_startup.c', 'native/game/dc_animation.c', 'native/game/dc_material.c', 'native/game/dc_pose.c', 'native/game/dc_scene.c', 'native/game/dc_model.c', 'native/render/dc_mesh.c', 'native/game/dc_menu.c', 'native/game/dc_save.c', 'native/resource/dc_script.c', 'native/game/dc_text.c', 'native/game/dc_skin.c']}}
           Path('out/native-iphoneos/build-report.json').write_text(json.dumps(result,indent=2)+'\n')
           PY
       - name: Exercise the actual Apple file adapter on ARM64 macOS

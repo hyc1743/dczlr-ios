@@ -20,7 +20,7 @@ def presented_scenes(log):
     return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(checker|startup|warning|title|intro)(?= |$)", log)
 
 
-def startup_evidence(log,require_audio=False):
+def startup_evidence(log,require_audio=False,require_skin=False):
     from datetime import datetime
     events=re.findall(r'(?m)^(\S+) PORTLAB_SCENE_PRESENTED=(startup|warning|title)(?= |$)',log)
     if [scene for _,scene in events]!=['startup','warning','title']:
@@ -31,14 +31,18 @@ def startup_evidence(log,require_audio=False):
         raise ValueError('Transition geometry presentation was not reported')
     if require_audio and not re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log):
         raise ValueError('Title audio playback clock advancement was not reported')
+    if require_skin and not re.search(r'(?m)^\S+ PORTLAB_NATIVE_SKIN_ADVANCED(?= |$)',log):
+        raise ValueError('World-space skinned geometry change/presentation was not reported')
     times=[datetime.fromisoformat(t.replace('Z','+00:00')) for t,_ in events]
     first=(times[1]-times[0]).total_seconds();second=(times[2]-times[1]).total_seconds()
     if first<2 or second<30:
         raise ValueError('Normal two-card hold times were not observed')
-    return {'startup_flow':'both stable cards, transition geometry and title presented in order',
+    result={'startup_flow':'both stable cards, transition geometry and title presented in order',
             'first_to_second_seconds':first,'second_to_title_seconds':second,
             'title_audio':'playback clock advanced; audible output unverified' if require_audio else 'not required by this profile',
             'original_resources':'not exercised; generated fixtures only','game_playability':'not verified'}
+    if require_skin:result['native_skin']='changed world-space skinned mesh and successful presentation reported'
+    return result
 
 
 def new_game_evidence(log):
@@ -190,6 +194,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
                         captured.add(scene)
             scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
             audio_ok=not startup_fixture or bool(re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log))
+            if startup_fixture:audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_NATIVE_SKIN_ADVANCED(?= |$)',log))
             if exercise_new_game:
                 audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log))
                 audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_RECORD=1:0(?= |$)',log))
@@ -240,7 +245,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
     if startup_fixture:
-        report['startup_fixture']=startup_evidence(log,require_audio=True)
+        report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')
         import shutil
         from startup_pixels import verify
@@ -248,6 +253,9 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             name=f'startup-card-{index}.png'
             shutil.copyfile(container/'Documents'/name,output/name)
         report['startup_pixels']=verify((output/'startup-card-0.png').read_bytes(),(output/'startup-card-1.png').read_bytes())
+        from startup_pixels import verify_skin
+        shutil.copyfile(container/'Documents/skinned-transition.png',output/'skinned-transition.png')
+        report['skin_pixels']=verify_skin((output/'skinned-transition.png').read_bytes())
     if exercise_new_game:
         report['new_game']=new_game_evidence(log)
         import shutil

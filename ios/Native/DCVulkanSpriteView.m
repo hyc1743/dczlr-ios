@@ -480,8 +480,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
     return nil;
 }
 - (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching
-            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL, BOOL, NSString *))completion {
-    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO, NO, @""); return; }
+            completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL, BOOL, NSString *, BOOL))completion {
+    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO, NO, @"", NO); return; }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     CGSize drawableSize = layer.drawableSize;
     uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
@@ -496,7 +496,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
             BOOL poseAdvanced = self->_diagnosticPoseAdvanced;
             BOOL musicAdvanced = self->_introScene ? self->_introScene.audioAdvanced : self->_gameAudio.musicAdvanced;
             NSString *introState=self->_introScene.presentationState ?: @"";
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced, introState); });
+            BOOL skinAdvanced=self->_startupScene.skinAdvanced;
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced); });
         }
     });
 }

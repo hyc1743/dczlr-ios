@@ -258,6 +258,26 @@ class XXTexture(C.Structure):
     _fields_ = [("name", XXSpan), ("image", XXSpan), ("descriptor_offset", C.c_size_t)]
 
 
+class XXSkin(C.Structure):
+    _fields_ = [('shared_vertices',XXSpan)]+[(n,C.c_uint32) for n in ('node','shared_count','first_bone','bones','vertex_format')]
+
+
+class XXBone(C.Structure):
+    _fields_ = [('name',XXSpan),('matrix_offset',C.c_size_t),('node',C.c_uint32),('index',C.c_uint32)]
+
+
+class XXWeights(C.Structure):
+    _fields_ = [('weights',C.c_float*3),('indices',C.c_uint8*4)]
+
+
+class SkinBone(C.Structure):
+    _fields_=[('index',C.c_uint32),('target',C.c_uint32),('offset',Matrix)]
+
+
+class SkinPalette(C.Structure):
+    _fields_=[('world',Matrix*256)]
+
+
 class SpritePose(C.Structure):
     _fields_ = [(name, C.c_float) for name in (
         "width", "height", "x", "y", "z", "origin_x", "origin_y", "scale_x", "scale_y",
@@ -304,10 +324,10 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c",
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -391,6 +411,16 @@ def library():
     lib.dc_mesh_project.restype = C.c_int
     lib.dc_model_open.argtypes = [C.c_void_p,C.c_size_t,C.c_void_p,C.c_size_t,C.POINTER(C.c_void_p)]
     lib.dc_model_open.restype = C.c_int
+    lib.dc_model_open_static.argtypes = [C.c_void_p,C.c_size_t,C.POINTER(C.c_void_p)]
+    lib.dc_model_open_static.restype = C.c_int
+    lib.dc_model_vertex_space.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(C.c_uint32)]
+    lib.dc_model_vertex_space.restype=C.c_int
+    lib.dc_model_load_vertices.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t]
+    lib.dc_model_load_vertices.restype=C.c_int
+    lib.dc_model_mesh_visible.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(C.c_uint32)]
+    lib.dc_model_mesh_visible.restype=C.c_int
+    lib.dc_model_get_animation.argtypes=[C.c_void_p,C.POINTER(AnimationState)]
+    lib.dc_model_get_animation.restype=C.c_int
     lib.dc_model_close.argtypes = [C.c_void_p]
     lib.dc_model_close.restype = None
     lib.dc_model_request.argtypes = [C.c_void_p,C.c_uint32,C.c_uint32]
@@ -451,10 +481,22 @@ def library():
     lib.dc_xx_close.restype = None
     lib.dc_xx_get_info.argtypes = [C.c_void_p, C.POINTER(XXInfo)]
     lib.dc_xx_get_info.restype = C.c_int
-    for method, structure in (("node", XXNode), ("submesh", XXSubmesh), ("material", XXMaterial), ("texture", XXTexture)):
+    for method, structure in (("node", XXNode), ("submesh", XXSubmesh), ("material", XXMaterial), ("texture", XXTexture),('skin',XXSkin),('bone',XXBone)):
         function = getattr(lib, "dc_xx_" + method + "_at")
         function.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(structure)]
         function.restype = C.c_int
+    lib.dc_xx_bone_matrix.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(Matrix)]
+    lib.dc_xx_bone_matrix.restype=C.c_int
+    lib.dc_xx_bind_bones.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(C.c_uint32),C.c_size_t]
+    lib.dc_xx_bind_bones.restype=C.c_int
+    lib.dc_xx_load_mesh_weights.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(XXWeights),C.c_size_t]
+    lib.dc_xx_load_mesh_weights.restype=C.c_int
+    lib.dc_skin_palette_init.argtypes=[C.POINTER(SkinPalette)]
+    lib.dc_skin_palette_init.restype=C.c_int
+    lib.dc_skin_palette_update.argtypes=[C.POINTER(SkinPalette),C.POINTER(SkinBone),C.c_size_t,C.POINTER(Matrix),C.c_size_t]
+    lib.dc_skin_palette_update.restype=C.c_int
+    lib.dc_skin_apply.argtypes=[C.POINTER(SkinPalette),C.POINTER(MeshVertex),C.POINTER(XXWeights),C.c_size_t,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t]
+    lib.dc_skin_apply.restype=C.c_int
     lib.dc_xx_find_material_encoded.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
     lib.dc_xx_find_material_encoded.restype = C.c_int
     lib.dc_xx_find_node_encoded.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
@@ -497,7 +539,7 @@ class XXModel:
         return out
 
     def at(self, kind, index):
-        structure = {"node": XXNode, "submesh": XXSubmesh, "material": XXMaterial, "texture": XXTexture}[kind]
+        structure = {"node": XXNode, "submesh": XXSubmesh, "material": XXMaterial, "texture": XXTexture,'skin':XXSkin,'bone':XXBone}[kind]
         out = structure()
         if getattr(self.lib, "dc_xx_" + kind + "_at")(self.handle, index, C.byref(out)):
             raise ValueError("Native XX index failed: " + kind)

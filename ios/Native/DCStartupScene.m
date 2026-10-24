@@ -30,10 +30,13 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     uint32_t _card,_lastTick;
     BOOL _finished,_tickInitialized,_wasTouching,_cardReady;
     BOOL _captureEnabled,_capturedCards[2];
+    BOOL _skinAdvanced,_capturedSkin;
+    NSData *_skinSample;
 }
 - (BOOL)finished { return _finished; }
 - (uint32_t)card { return _card; }
 - (BOOL)cardReady { return _cardReady; }
+- (BOOL)skinAdvanced { return _skinAdvanced; }
 - (NSData *)entry:(NSString *)name archive:(DCArchive *)archive limit:(NSUInteger)limit error:(NSString **)error {
     for (uint32_t i=0;i<archive.entryCount;++i) {
         if ([[archive asciiNameAtIndex:i] caseInsensitiveCompare:name]==NSOrderedSame) {
@@ -207,12 +210,26 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     status=dc_matrix_multiply(&view,&projection,&vp);
     if (status!=DC_OK) return @"Startup camera matrix failed";
     __attribute__((objc_precise_lifetime)) NSMutableArray<NSMutableData *> *storage=[NSMutableArray array];
+    NSData *skinSample=nil;
     for (uint32_t i=0;i<_info.submeshes;++i) {
+        uint32_t visible;
+        status=dc_model_mesh_visible(_model,i,&visible);
+        if(status!=DC_OK)return @"Startup mesh visibility failed";
+        if(!visible)continue;
         dc_xx_submesh mesh;dc_material_value material;
         status=dc_model_mesh(_model,i,&mesh);
         if (status==DC_OK) status=dc_model_material(_model,mesh.material,&material);
         if (status!=DC_OK) return @"Startup mesh material failed";
         if (material.components[3]==0) continue;
+        if(_captureEnabled && !skinSample && material.components[3]>.5f) {
+            uint32_t space=0;
+            if(dc_model_vertex_space(_model,i,&space)!=DC_OK)return @"Transition mesh space query failed";
+            if(space==DC_MODEL_SPACE_WORLD) {
+                NSMutableData *sample=[NSMutableData dataWithLength:mesh.vertex_count*sizeof(dc_mesh_vertex)];
+                if(dc_model_load_vertices(_model,i,sample.mutableBytes,mesh.vertex_count)!=DC_OK)return @"Transition skin sample failed";
+                skinSample=sample;
+            }
+        }
         dc_xx_material binding;status=dc_xx_material_at(_xx,mesh.material,&binding);
         if (status!=DC_OK) return @"Startup texture binding failed";
         uint32_t image=UINT32_MAX;
@@ -237,11 +254,15 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     if (status!=DC_OK) return @"Startup animation query failed";
     BOOL stableCard=_card<2 && !_startup.waiting && clip==1 && ready;
     BOOL capture=_captureEnabled && stableCard && !_capturedCards[_card];
-    NSMutableData *pixels=readback ?: (capture ? [NSMutableData dataWithLength:(size_t)width*height*4] : nil);
+    BOOL skinMoved=skinSample && _skinSample && ![skinSample isEqualToData:_skinSample];
+    BOOL captureSkin=_captureEnabled && !_capturedSkin && skinMoved;
+    NSMutableData *pixels=readback ?: ((capture || captureSkin) ? [NSMutableData dataWithLength:(size_t)width*height*4] : nil);
     status=dc_vk_geometry_render(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length);
     if (status!=DC_OK) return [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
+    if(skinMoved)_skinAdvanced=YES;
+    if(skinSample)_skinSample=skinSample;
     _cardReady=stableCard;
-    if(capture) {
+    if(capture || captureSkin) {
         CGColorSpaceRef color=CGColorSpaceCreateDeviceRGB();
         CGDataProviderRef provider=CGDataProviderCreateWithCFData((__bridge CFDataRef)pixels);
         CGImageRef image=CGImageCreate(width,height,8,32,width*4,color,
@@ -249,14 +270,15 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
         CGDataProviderRelease(provider);CGColorSpaceRelease(color);
         if(!image)return @"Startup frame capture failed";
         NSURL *documents=[NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
-        NSURL *url=[documents URLByAppendingPathComponent:[NSString stringWithFormat:@"startup-card-%u.png",_card]];
+        NSString *name=captureSkin ? @"skinned-transition.png" : [NSString stringWithFormat:@"startup-card-%u.png",_card];
+        NSURL *url=[documents URLByAppendingPathComponent:name];
         CGImageDestinationRef output=CGImageDestinationCreateWithURL((__bridge CFURLRef)url,CFSTR("public.png"),1,NULL);
         if(!output) {CGImageRelease(image);return @"Startup frame capture destination failed";}
         CGImageDestinationAddImage(output,image,NULL);
         BOOL saved=CGImageDestinationFinalize(output);
         CFRelease(output);CGImageRelease(image);
         if(!saved)return @"Startup frame capture write failed";
-        _capturedCards[_card]=YES;
+        if(captureSkin)_capturedSkin=YES;else _capturedCards[_card]=YES;
     }
     return nil;
 }

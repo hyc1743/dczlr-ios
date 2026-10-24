@@ -7,11 +7,25 @@ matching the final original loader setup. Pose names bind to the last matching
 root descendant; material names bind to the first matching material. Missing
 targets are inert. Tracks retain file order and individual model baselines.
 
-The current explicit profile has mode-0 node tracks, material tracks and
-unskinned meshes. Crossfades, mode-1 poses, billboard transforms, skin bones,
-events and morphs are rejected. Failed updates preserve the model's clips,
-controller, node matrices and material values. This runtime is an integration
+The current explicit profile has mode-0 node tracks, material tracks,
+unskinned meshes and indexed four-matrix skinning. Crossfades, mode-1 poses,
+billboard transforms, events and morphs are still rejected. Failed updates
+preserve the model's clips, controller, node matrices, material values,
+palettes and deformed vertex buffers. This runtime is an integration
 step toward the original game; it does not certify all resources or game flow.
+
+`dc_model_open_static` admits XX-only maps without inventing a clip or XA.
+The original archive/XA adapter `0x0045c090` leaves models unchanged when lookup
+fails; the map loader `0x0051e3b0` ignores that result and requests clip 1 only
+for map selector 1. The first nonscript map, selector 0, has no corresponding
+XA in its archive. Static ticks apply the world/hierarchy and any skin palette;
+query reports an explicit no-animation sentinel and requests return not-found.
+
+The private map-0 audit loads 98 nodes, 91 meshes, 53 materials and 37 textures.
+All 91 meshes project under a synthetic bounded camera. Across two world
+matrices, 196 node-global comparisons match the isolated original hierarchy
+driver with reference D3DX math exactly. This is not the original game camera,
+GPU appearance or scene execution. See `skinning.md` for the weighted path.
 
 `dc_scene_update` implements the default, modifier-1 and modifier-2 branches of
 `0x00415620`. The default is local times parent-global using row vectors.
@@ -26,8 +40,8 @@ This excludes draw-list submission, GPU rendering and billboards.
 
 XX mesh extraction uses source offsets established by `0x00408f60`: position
 at 4/8/12, normal at 32/36/40 and the first UV stream at 44/48 in each 52-byte
-record. IDs, weights and bone indices remain uninterpreted by this unskinned
-path. Triangle indices retain their serialized order. Bounds, finite selected
+record. The weighted path also reads three explicit weights and four byte
+indices from offsets 16–31. Triangle indices retain their serialized order. Bounds, finite selected
 components and capacities are validated before output writes.
 
 `dc_mesh_project` transforms indexed triangles by a caller-supplied row-vector

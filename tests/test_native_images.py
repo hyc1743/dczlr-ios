@@ -25,7 +25,36 @@ def bmp(width, height, pixels):
             struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, len(pixels), 0, 0, 0, 0) + pixels)
 
 
+def indexed_bmp(width,height,pixels,palette,used=None):
+    table=b''.join(bytes((color[2],color[1],color[0],color[3])) for color in palette)
+    offset=54+len(table)
+    return struct.pack('<2sIHHI',b'BM',offset+len(pixels),0,0,offset)+struct.pack('<IiiHHIIiiII',
+        40,width,height,1,8,0,0,0,0,len(palette) if used is None else used,0)+table+pixels
+
+
 class NativeImageTests(unittest.TestCase):
+    def test_indexed_bmp_palette_row_orientation_and_padding(self):
+        palette=[(255,0,0,19),(0,255,0,0),(0,0,255,255)]
+        top=bytes((0,1,2,250,2,1,0,251));bottom=top[4:]+top[:4]
+        expected=RED+GREEN+BLUE+BLUE+GREEN+RED
+        for height,pixels in ((-2,top),(2,bottom)):
+            data=indexed_bmp(3,height,pixels,palette)
+            self.assert_pixels(data,1,expected,(3,2))
+            embedded=b'\0\0'+data[2:]
+            self.assert_pixels(embedded,4,expected,(3,2))
+            self.assert_pixels(struct.pack('<II',3,2)+b'.bmp\0'+embedded,3,expected,(3,2))
+        default=[(i,i,i,0) for i in range(256)]
+        self.assert_pixels(indexed_bmp(1,1,bytes((255,99,99,99)),default,used=0),1,WHITE,(1,1))
+
+    def test_indexed_palette_and_late_index_fail_before_writing(self):
+        palette=[(255,0,0,0),(0,255,0,0)]
+        valid=indexed_bmp(2,-2,bytes((0,1,250,250,1,0,251,251)),palette)
+        for used in (0,3,257):
+            changed=bytearray(valid);struct.pack_into('<I',changed,46,used)
+            self.assert_rejected(bytes(changed),1)
+        bad=bytearray(valid);bad[-3]=2
+        self.assert_rejected(bytes(bad),1)
+        for length in range(len(valid)):self.assert_rejected(valid[:length],1)
     def assert_pixels(self, data, format, expected, size):
         info, pixels = decode_image(data, format)
         self.assertEqual((info.width, info.height), size)

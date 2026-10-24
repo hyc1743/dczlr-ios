@@ -5,9 +5,10 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
-from native_core import library,Matrix,MaterialValue,Viewport,SpriteVertex
+from native_core import library,Matrix,MaterialValue,Viewport,SpriteVertex,MeshVertex,XXModel,AnimationState
 from model_cases import fixture
 from scene_cases import matrix
+from xx_cases import diagnostic_fixture,fixture as xx_fixture
 
 
 class NativeModelTests(unittest.TestCase):
@@ -19,6 +20,80 @@ class NativeModelTests(unittest.TestCase):
         self.assertEqual(self.lib.dc_model_open(xx,len(xx),xa,len(xa),C.byref(handle)),0)
         self.addCleanup(self.lib.dc_model_close,handle)
         return handle,xx,xa
+
+    def test_skinned_and_rigid_node_transform_match_without_double_world(self):
+        rigid,xx1,xa1=self.open();skinned,xx2,xa2=self.open(skinned=True)
+        world=matrix(.3,1.2,(.1,-.2,.25));view=Viewport(0,0,100,100,0,1);vp=matrix(translation=(0,0,.5))
+        a=(SpriteVertex*6)();b=(SpriteVertex*6)();space=C.c_uint32();old=None
+        for delta,now in ((0,0),(100,100),(200,300)):
+            for model in (rigid,skinned):self.assertEqual(self.lib.dc_model_tick(model,delta,now,C.byref(world)),0)
+            self.assertEqual(self.lib.dc_model_project(rigid,0,C.byref(vp),C.byref(view),0xffffffff,a,6),0)
+            self.assertEqual(self.lib.dc_model_project(skinned,0,C.byref(vp),C.byref(view),0xffffffff,b,6),0)
+            for left,right in zip(a,b):
+                for name in ('x','y','z','rhw','u','v'):self.assertAlmostEqual(getattr(left,name),getattr(right,name),places=5)
+            self.assertEqual(self.lib.dc_model_vertex_space(rigid,0,C.byref(space)),0);self.assertEqual(space.value,0)
+            self.assertEqual(self.lib.dc_model_vertex_space(skinned,0,C.byref(space)),0);self.assertEqual(space.value,1)
+            vertices=(MeshVertex*4)();self.assertEqual(self.lib.dc_model_load_vertices(skinned,0,vertices,4),0)
+            if old is not None:self.assertNotEqual(bytes(vertices),old)
+            old=bytes(vertices)
+
+    def test_failed_skin_tick_preserves_deformed_vertices_and_controller(self):
+        model,xx,xa=self.open(skinned=True);world=matrix();self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+        before=(MeshVertex*4)();after=(MeshVertex*4)()
+        self.assertEqual(self.lib.dc_model_load_vertices(model,0,before,4),0)
+        singular=matrix();singular.values[0]=0
+        self.assertEqual(self.lib.dc_model_tick(model,100,100,C.byref(singular)),4)
+        self.assertEqual(self.lib.dc_model_load_vertices(model,0,after,4),0);self.assertEqual(bytes(before),bytes(after))
+        self.assertEqual(self.lib.dc_model_tick(model,100,100,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_load_vertices(model,0,after,4),0);self.assertNotEqual(bytes(before),bytes(after))
+
+    def test_hidden_ancestor_visibility_and_static_skinned_baseline(self):
+        xx=diagnostic_fixture(skinned=True);data=bytearray(xx)
+        with XXModel(xx) as source:offset=source.at('node',0).matrix_offset+116
+        data[offset]=1;source_bytes=bytes(data);model=C.c_void_p()
+        self.assertEqual(self.lib.dc_model_open_static(source_bytes,len(source_bytes),C.byref(model)),0)
+        self.addCleanup(self.lib.dc_model_close,model);world=matrix();self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+        visible=C.c_uint32(123);self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,0)
+        self.assertEqual(self.lib.dc_model_mesh_visible(model,1,C.byref(visible)),4);self.assertEqual(visible.value,0)
+
+    def test_static_model_uses_baseline_and_world_without_inventing_animation(self):
+        xx=diagnostic_fixture();m=C.c_void_p()
+        self.assertEqual(self.lib.dc_model_open_static(xx,len(xx),C.byref(m)),0)
+        self.addCleanup(self.lib.dc_model_close,m)
+        world=matrix(translation=(.2,.3,0));before=Matrix();after=Matrix();material=MaterialValue()
+        self.assertEqual(self.lib.dc_model_tick(m,0,0,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_global(m,1,C.byref(before)),0)
+        self.assertEqual(list(before.values),list(world.values))
+        self.assertEqual(self.lib.dc_model_material(m,0,C.byref(material)),0)
+        self.assertEqual(material.components[3],.625)
+        current,ready=C.c_uint32(),C.c_uint32()
+        self.assertEqual(self.lib.dc_model_query(m,C.byref(current),C.byref(ready)),0)
+        self.assertEqual((current.value,ready.value),(0xffffffff,1))
+        state=AnimationState();C.memset(C.byref(state),0xa5,C.sizeof(state));snapshot=bytes(state)
+        self.assertEqual(self.lib.dc_model_get_animation(m,C.byref(state)),6);self.assertEqual(bytes(state),snapshot)
+        self.assertEqual(self.lib.dc_model_request(m,1,50),6)
+        self.assertEqual(self.lib.dc_model_request(m,512,50),1)
+        self.assertEqual(self.lib.dc_model_tick(m,0xffffffff,0xffffffff,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_global(m,1,C.byref(after)),0)
+        self.assertEqual(bytes(before),bytes(after))
+        vp=matrix(translation=(0,0,.5));view=Viewport(0,0,100,100,0,1);out=(SpriteVertex*6)()
+        self.assertEqual(self.lib.dc_model_project(m,0,C.byref(vp),C.byref(view),0xffffffff,out,6),0)
+        self.assertAlmostEqual(out[0].x,35,places=5);self.assertAlmostEqual(out[0].y,10,places=5)
+
+    def test_static_failures_remain_atomic_and_animated_entry_stays_strict(self):
+        for xx in (diagnostic_fixture()[:-1],xx_fixture(bones=1)):
+            m=C.c_void_p(123)
+            self.assertIn(self.lib.dc_model_open_static(xx,len(xx),C.byref(m)),(3,4));self.assertFalse(m)
+        xx=diagnostic_fixture();m=C.c_void_p(123)
+        self.assertEqual(self.lib.dc_model_open(xx,len(xx),None,0,C.byref(m)),1);self.assertFalse(m)
+        source=C.create_string_buffer(xx);before=source.raw
+        self.assertEqual(self.lib.dc_model_open_static(source,len(xx),C.cast(source,C.POINTER(C.c_void_p))),1)
+        self.assertEqual(source.raw,before)
+        m=C.c_void_p();self.assertEqual(self.lib.dc_model_open_static(xx,len(xx),C.byref(m)),0)
+        self.addCleanup(self.lib.dc_model_close,m);world=matrix();self.assertEqual(self.lib.dc_model_tick(m,0,0,C.byref(world)),0)
+        original=Matrix();self.assertEqual(self.lib.dc_model_global(m,1,C.byref(original)),0)
+        world.values[0]=float('nan');self.assertEqual(self.lib.dc_model_tick(m,1,1,C.byref(world)),4)
+        after=Matrix();self.assertEqual(self.lib.dc_model_global(m,1,C.byref(after)),0);self.assertEqual(bytes(after),bytes(original))
 
     def test_resource_to_controller_pose_material_hierarchy_and_mesh_projection(self):
         m,xx,xa=self.open();world=matrix();a,b=Matrix(),Matrix();material=MaterialValue()

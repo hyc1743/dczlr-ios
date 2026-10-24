@@ -122,7 +122,7 @@ jobs:
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'not_embedded',
               'native_resource_module': 'PP, BMP/TGA/EMA, XA clip/material/node keys and XX readers linked; device execution unverified',
-              'graphics_backend': 'native startup/title, normal text layout/fade and script chapter adapter through Vulkan/MoltenVK; nonscript gameplay, broader input/backlog and font fidelity unfinished',
+              'graphics_backend': 'native indexed skinning, startup/title/text and script adapter through Vulkan/MoltenVK; nonscript gameplay, effects, broader input/backlog and font fidelity unfinished',
               'game_playability': 'not_claimed',
               'resource_manifest': 'embedded',
               'resource_parts': 'external local user files; not bundled or published by this workflow',

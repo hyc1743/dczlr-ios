@@ -17,7 +17,8 @@ from oracle_animation import OriginalAnimation, OBJECT, QUERY_OUT, STACK, STOP, 
 from native_core import library, PoseKey, PoseSelection, Matrix
 from pose_cases import key, selection_cases, transform_cases
 
-CALLER, TRACK, NODE, KEYS = 0x30001000, OBJECT+0x1000, OBJECT+0x2000, OBJECT+0x3000
+CALLER, TRACK, NODE, KEYS = 0x30001000, OBJECT+0x1000, OBJECT+0x2000, 0x20060000
+KEY_BYTES_LIMIT=0x400000
 MATH = {0x60abf8: ('D3DXQuaternionSlerp',16,[16,16],True),
         0x60abf2: ('D3DXMatrixRotationQuaternion',64,[16],False),
         0x60abe0: ('D3DXMatrixMultiply',64,[64,64],False),
@@ -29,6 +30,7 @@ class OriginalPose(OriginalAnimation):
     def __init__(self, exe, d3dx=None):
         super().__init__(exe,{0x412ff0:143,0x413080:115,0x61e344:117,0x406c60:85,0x412c40:935,0x4211e0:14})
         self.uc.mem_map(CALLER,4096,UC_PROT_READ|UC_PROT_WRITE)
+        self.uc.mem_map(KEYS,KEY_BYTES_LIMIT,UC_PROT_READ|UC_PROT_WRITE)
         self.callers=set()
         for slot,entry in enumerate((0x412ff0,0x413080,0x412c40)):
             address=CALLER+slot*128
@@ -54,6 +56,7 @@ class OriginalPose(OriginalAnimation):
 
     def read(self,address,size):
         if not ((OBJECT<=address and address+size<=OBJECT+0x10000) or
+                (KEYS<=address and address+size<=KEYS+KEY_BYTES_LIMIT) or
                 (0x10000000<=address and address+size<=0x10010000)):
             raise RuntimeError('Math source outside synthetic spans')
         return bytes(self.uc.mem_read(address,size))
@@ -89,7 +92,7 @@ class OriginalPose(OriginalAnimation):
         uc.reg_write(UC_X86_REG_EIP,target)
 
     def prepare(self,keys,frame,control):
-        if len(keys)<2 or len(keys)*52>0xc000: raise ValueError('Key count outside harness')
+        if len(keys)<2 or len(keys)*52>KEY_BYTES_LIMIT: raise ValueError('Key count outside harness')
         self.uc.mem_write(OBJECT,b'\0'*0x10000)
         raw=b''.join(bytes(k) for k in keys)
         self.uc.mem_write(KEYS,raw)

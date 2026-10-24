@@ -77,3 +77,14 @@ def verify_intro(data):
     return {'method':'native GPU readback after record0 fade; generated background and text-region pixel presence',
         'width':width,'height':height,'matched_background_samples':matched,'bright_body_pixels':white,
         'font_or_character_identity':'requires screenshot inspection; no OCR or original-font equivalence claim'}
+
+
+def verify_skin(data):
+    width,height,channels,pixels=decode(data);red=0
+    for y in range(int(height*.35),int(height*.65)):
+        for x in range(int(width*.2),int(width*.8)):
+            at=(y*width+x)*channels;r,g,b=pixels[at:at+3]
+            red+=r>g+35 and r>b+25
+    if red<max(64,int(width*height*.0001)):raise ValueError('Generated textured skin surface is absent from exact GPU capture')
+    return {'method':'exact GPU readback after changed world-space skin sample; generated textured-surface color presence',
+        'width':width,'height':height,'red_surface_pixels':red,'original_skin_or_image_equivalence':'not established'}

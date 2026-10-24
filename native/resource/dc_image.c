@@ -10,6 +10,8 @@ typedef struct image_layout {
     unsigned top_origin;
     unsigned right_origin;
     unsigned rle;
+    const uint8_t *palette;
+    uint32_t palette_count;
 } image_layout;
 
 static uint16_t le16(const uint8_t *p) {
@@ -35,7 +37,7 @@ static dc_status parse_bmp(const uint8_t *data, size_t length, image_layout *lay
     if (length < 54 ||
         (memcmp(data, "BM", 2) && !(ema && data[0] == 0 && data[1] == 0)) ||
         le32(data + 14) != 40 ||
-        le16(data + 26) != 1 || le16(data + 28) != 24 || le32(data + 30) != 0)
+        le16(data + 26) != 1 || (le16(data + 28) != 8 && le16(data + 28) != 24) || le32(data + 30) != 0)
         return DC_FORMAT;
     uint32_t width = le32(data + 18), raw_height = le32(data + 22);
     if (width > INT32_MAX || raw_height == 0x80000000u) return DC_FORMAT;
@@ -44,7 +46,8 @@ static dc_status parse_bmp(const uint8_t *data, size_t length, image_layout *lay
     dc_status status = dimensions(layout, width, height);
     if (status != DC_OK) return status;
     /* dimensions() has already proved that 4*width fits in size_t. */
-    layout->stride = ((size_t)width * 3u + 3u) & ~(size_t)3u;
+    layout->pixel_bytes = le16(data + 28) / 8u;
+    layout->stride = ((size_t)width * layout->pixel_bytes + 3u) & ~(size_t)3u;
     size_t offset = le32(data + 10), file_size = le32(data + 2);
     if (offset < 54 || file_size > length || offset > file_size ||
         height > (file_size - offset) / layout->stride) return DC_FORMAT;
@@ -52,7 +55,17 @@ static dc_status parse_bmp(const uint8_t *data, size_t length, image_layout *lay
     if (image_size && (image_size < layout->stride * height ||
                        image_size > file_size - offset)) return DC_FORMAT;
     layout->pixels = data + offset;
-    layout->pixel_bytes = 3;
+    if (layout->pixel_bytes == 1) {
+        uint32_t used = le32(data + 46);
+        layout->palette_count = used ? used : 256;
+        if (layout->palette_count > 256 || layout->palette_count > (offset - 54) / 4) return DC_FORMAT;
+        layout->palette = data + 54;
+        /* A late invalid index must fail before any RGBA destination write.
+         * Row padding is not an index. RGBQUAD's reserved byte is not alpha. */
+        for (size_t y = 0; y < height; ++y)
+            for (size_t x = 0; x < width; ++x)
+                if (layout->pixels[y * layout->stride + x] >= layout->palette_count) return DC_FORMAT;
+    }
     return DC_OK;
 }
 
@@ -127,8 +140,9 @@ static void write_pixel(const image_layout *layout, uint8_t *rgba, size_t index,
     if (layout->right_origin) x = layout->info.width - 1u - x;
     if (!layout->top_origin) y = layout->info.height - 1u - y;
     uint8_t *out = rgba + (y * layout->info.width + x) * 4u;
+    if (layout->palette) pixel = layout->palette + (size_t)*pixel * 4u;
     out[0] = pixel[2]; out[1] = pixel[1]; out[2] = pixel[0];
-    out[3] = layout->pixel_bytes == 4 ? pixel[3] : 255;
+    out[3] = !layout->palette && layout->pixel_bytes == 4 ? pixel[3] : 255;
 }
 
 dc_status dc_image_decode(const void *data, size_t length, dc_image_format format,

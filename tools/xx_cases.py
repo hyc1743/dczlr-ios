@@ -13,17 +13,23 @@ def matrix():
     return struct.pack("<16f", *(1.0 if i % 5 == 0 else 0.0 for i in range(16)))
 
 
-def node(children=(), uv_sets=None, bones=1, vertices=None, indices=None):
-    data = name(b"synthetic-node\0") + u32(len(children)) + matrix() + bytes(16)
+def node(children=(), uv_sets=None, bones=1, vertices=None, indices=None,
+         bone_records=None,shared_vertices=b'',vertex_format=0,label=b'synthetic-node\0',uv_payloads=None):
+    data = name(label) + u32(len(children)) + matrix() + bytes(16)
     data += u32(int(uv_sets is not None)) + bytes(40)
     if uv_sets is not None:
         vertices = bytes(3*52) if vertices is None else vertices
         indices = struct.pack('<3H',0,1,2) if indices is None else indices
         count=len(vertices)//52
         data += bytes((uv_sets,)) + bytes(16) + u32(0) + u32(len(indices)//2) + indices
-        data += u32(count) + vertices + bytes(count * 8 * uv_sets)
-        data += struct.pack("<H", 0) + bytes(8) + u32(bones)
-        for i in range(bones):data += name(b"synthetic-bone\0") + u32(i) + matrix()
+        data += u32(count) + vertices
+        for i in range(uv_sets):
+            payload=uv_payloads[i] if uv_payloads is not None else bytes(count*8)
+            assert len(payload)==count*8;data+=payload
+        assert len(shared_vertices)%52==0
+        records=bone_records if bone_records is not None else [(b'synthetic-bone\0',i,matrix()) for i in range(bones)]
+        data += struct.pack("<H",len(shared_vertices)//52)+u32(vertex_format)+bytes(4)+shared_vertices+u32(len(records))
+        for bone_name,index,transform in records:data+=name(bone_name)+u32(index)+transform
     return data + b"".join(children)
 
 
@@ -45,8 +51,10 @@ def tga():
     return struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, 1, 1, 32, 0x28) + bytes((30, 20, 10, 40))
 
 
-def fixture(uv_sets=0, material_names=(b"material\0", b"second\0"), depth=1, images=None,bones=1,vertices=None,indices=None):
-    tree = node(uv_sets=uv_sets,bones=bones,vertices=vertices,indices=indices)
+def fixture(uv_sets=0, material_names=(b"material\0", b"second\0"), depth=1, images=None,bones=1,vertices=None,indices=None,
+            bone_records=None,shared_vertices=b'',vertex_format=0,uv_payloads=None):
+    tree = node(uv_sets=uv_sets,bones=bones,vertices=vertices,indices=indices,bone_records=bone_records,
+        shared_vertices=shared_vertices,vertex_format=vertex_format,uv_payloads=uv_payloads)
     for _ in range(depth): tree = node((tree,))
     data = u32(0x404c28f6) + bytes(17) + tree + bytes(4) + u32(len(material_names))
     data += b"".join(material(label) for label in material_names)
@@ -57,15 +65,16 @@ def fixture(uv_sets=0, material_names=(b"material\0", b"second\0"), depth=1, ima
     return data
 
 
-def diagnostic_fixture():
+def diagnostic_fixture(skinned=False):
     # Top-down 2x2 BGR checker in an XX-embedded, zero-signature BMP.
     pixels = bytes((40, 80, 255, 100, 220, 40, 0, 0, 255, 100, 40, 100, 230, 250, 0, 0))
     image = b"\0\0" + struct.pack("<IHHI", 70, 0, 0, 54)
     image += struct.pack("<IiiHHIIiiII", 40, 2, -2, 1, 24, 0, 16, 0, 0, 0, 0) + pixels
     vertices=b''
     for i,(x,y,u,v) in enumerate(((-.5,.5,0,0),(.5,.5,1,0),(-.5,-.5,0,1),(.5,-.5,1,1))):
-        vertices+=struct.pack('<I3f3f4B3f2f',i,x,y,0,0,0,0,255,255,255,255,0,0,1,u,v)
-    return fixture(material_names=(b"diagnostic\0",), images=((b"checker.bmp\0", image),),bones=0,
+        vertices+=struct.pack('<I3f3f4B3f2f',i,x,y,0,1 if skinned else 0,0,0,0 if skinned else 255,255,255,255,0,0,1,u,v)
+    records=[(b'synthetic-node\0',0,matrix())] if skinned else None
+    return fixture(material_names=(b"diagnostic\0",), images=((b"checker.bmp\0", image),),bones=0,bone_records=records,vertex_format=0x111c if skinned else 0,
                    vertices=vertices,indices=struct.pack('<6H',0,1,2,2,1,3))
 
 

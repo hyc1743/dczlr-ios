@@ -11,6 +11,8 @@ struct dc_xx {
     dc_xx_submesh *meshes;
     dc_xx_material *materials;
     dc_xx_texture *textures;
+    dc_xx_skin *skins;
+    dc_xx_bone *bones;
 };
 typedef struct reader {
     const uint8_t *data;
@@ -53,6 +55,7 @@ static dc_status node(reader *r, uint32_t parent, uint32_t depth) {
     if (depth > DC_XX_DEPTH_LIMIT || r->counts.nodes >= DC_XX_NODE_LIMIT) return DC_RANGE;
     uint32_t index = r->counts.nodes++;
     dc_xx_node n = {0};
+    dc_xx_skin skin = {.node=index,.first_bone=r->counts.bones};
     n.parent = parent;
     CHECK(name(r, &n.name) && integer(r, &n.children));
     if (n.children > DC_XX_NODE_LIMIT) return DC_RANGE;
@@ -79,16 +82,24 @@ static dc_status node(reader *r, uint32_t parent, uint32_t depth) {
         CHECK(r->length - r->at >= 2);
         uint32_t shared = (uint32_t)r->data[r->at] | (uint32_t)r->data[r->at + 1] << 8;
         r->at += 2;
-        CHECK(skip(r, 8) && array(r, shared, 52, NULL));
+        skin.shared_count=shared;
+        CHECK(r->length-r->at>=8);
+        skin.vertex_format=word(r->data+r->at);
+        CHECK(skip(r, 8) && array(r, shared, 52, &skin.shared_vertices));
         uint32_t bones;
         CHECK(integer(r, &bones));
         if (bones > DC_XX_NODE_LIMIT - r->counts.bones) return DC_RANGE;
-        r->counts.bones += bones;
+        skin.bones=bones;
         for (uint32_t i = 0; i < bones; ++i) {
-            dc_xx_span unused;
-            CHECK(name(r, &unused) && skip(r, 68));
+            dc_xx_bone bone={.node=index};
+            CHECK(name(r,&bone.name) && integer(r,&bone.index));
+            bone.matrix_offset=r->at;
+            CHECK(skip(r,64));
+            if (r->model) r->model->bones[r->counts.bones]=bone;
+            ++r->counts.bones;
         }
     }
+    if (r->model) r->model->skins[index]=skin;
     for (uint32_t i = 0; i < n.children; ++i) {
         dc_status status = node(r, index, depth + 1);
         if (status != DC_OK) return status;
@@ -144,6 +155,7 @@ dc_status dc_xx_probe(const void *bytes, size_t length, dc_xx_info *out) {
 void dc_xx_close(dc_xx *model) {
     if (!model) return;
     free(model->nodes); free(model->meshes); free(model->materials); free(model->textures);
+    free(model->skins);free(model->bones);
     free(model);
 }
 dc_status dc_xx_open(const void *bytes, size_t length, dc_xx **out) {
@@ -159,7 +171,9 @@ dc_status dc_xx_open(const void *bytes, size_t length, dc_xx **out) {
     m->meshes = calloc(info.submeshes ? info.submeshes : 1, sizeof(*m->meshes));
     m->materials = calloc(info.materials ? info.materials : 1, sizeof(*m->materials));
     m->textures = calloc(info.textures ? info.textures : 1, sizeof(*m->textures));
-    if (!m->nodes || !m->meshes || !m->materials || !m->textures) { dc_xx_close(m); return DC_MEMORY; }
+    m->skins=calloc(info.nodes,sizeof(*m->skins));
+    m->bones=calloc(info.bones ? info.bones : 1,sizeof(*m->bones));
+    if (!m->nodes || !m->meshes || !m->materials || !m->textures || !m->skins || !m->bones) { dc_xx_close(m); return DC_MEMORY; }
     reader r = {.data = bytes, .length = length, .model = m};
     status = parse(&r);
     if (status != DC_OK) { dc_xx_close(m); return status; }
@@ -183,6 +197,53 @@ GETTER(node, dc_xx_node, nodes, nodes)
 GETTER(submesh, dc_xx_submesh, meshes, submeshes)
 GETTER(material, dc_xx_material, materials, materials)
 GETTER(texture, dc_xx_texture, textures, textures)
+GETTER(skin, dc_xx_skin, skins, nodes)
+GETTER(bone, dc_xx_bone, bones, bones)
+
+dc_status dc_xx_bone_matrix(const dc_xx *model,uint32_t index,dc_matrix *out) {
+    if (!model || !out || overlap(model->data,model->length,out,sizeof(*out))) return DC_ARGUMENT;
+    if (index>=model->info.bones) return DC_RANGE;
+    dc_matrix matrix;
+    const uint8_t *p=model->data+model->bones[index].matrix_offset;
+    for (uint32_t i=0;i<16;++i) {
+        uint32_t bits=word(p+4*i);memcpy(&matrix.values[i],&bits,4);
+        if (!isfinite(matrix.values[i])) return DC_RANGE;
+    }
+    *out=matrix;return DC_OK;
+}
+
+dc_status dc_xx_bind_bones(const dc_xx *model,uint32_t node_index,uint32_t *targets,size_t capacity) {
+    if (!model) return DC_ARGUMENT;
+    if (node_index>=model->info.nodes) return DC_RANGE;
+    const dc_xx_skin *skin=&model->skins[node_index];
+    if (capacity<skin->bones) return DC_RANGE;
+    if ((skin->bones && !targets) || overlap(model->data,model->length,targets,skin->bones*sizeof(*targets))) return DC_ARGUMENT;
+    for (uint32_t pass=0;pass<2;++pass) for (uint32_t i=0;i<skin->bones;++i) {
+        const dc_xx_bone *bone=&model->bones[skin->first_bone+i];uint32_t selected=UINT32_MAX;
+        dc_status status=dc_xx_find_node_encoded(model,model->data+bone->name.offset,bone->name.length,&selected);
+        if (status!=DC_OK && status!=DC_NOT_FOUND) return status;
+        if (pass) targets[i]=selected;
+    }
+    return DC_OK;
+}
+
+dc_status dc_xx_load_mesh_weights(const dc_xx *model,uint32_t mesh,dc_xx_weights *out,size_t capacity) {
+    if (!model || !out) return DC_ARGUMENT;
+    if (mesh>=model->info.submeshes) return DC_RANGE;
+    const dc_xx_submesh *m=&model->meshes[mesh];
+    if (capacity<m->vertex_count || m->vertex_count>1048576) return DC_RANGE;
+    if (overlap(model->data,model->length,out,m->vertex_count*sizeof(*out))) return DC_ARGUMENT;
+    for (uint32_t pass=0;pass<2;++pass) for (uint32_t i=0;i<m->vertex_count;++i) {
+        const uint8_t *p=model->data+m->vertices.offset+i*52;dc_xx_weights result;
+        for (uint32_t j=0;j<3;++j) {
+            uint32_t bits=word(p+16+j*4);memcpy(&result.weights[j],&bits,4);
+            if (!isfinite(result.weights[j])) return DC_RANGE;
+        }
+        memcpy(result.indices,p+28,4);
+        if (pass) out[i]=result;
+    }
+    return DC_OK;
+}
 
 dc_status dc_xx_load_mesh_vertices(const dc_xx *model,uint32_t index,dc_mesh_vertex *out,size_t capacity) {
     if (!model || !out) return DC_ARGUMENT;

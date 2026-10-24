@@ -20,7 +20,9 @@ typedef struct dc_image_info {
     size_t rgba_bytes;
 } dc_image_info;
 
-/* Observed profiles: BITMAPINFOHEADER uncompressed 24-bit BMP; unmapped,
+/* Observed profiles: BITMAPINFOHEADER uncompressed 8-bit indexed or 24-bit BMP;
+ * indexed RGBQUAD palettes use biClrUsed, or 256 entries when it is zero.
+ * Indices are validated and palette reserved bytes do not supply alpha. Unmapped,
  * noninterleaved 24/32-bit truecolor TGA (raw or RLE); EMA's two LE uint32
  * dimensions, five-byte ".bmp\0"/".tga\0" tag and matching embedded image.
  * EMA BMP permits a zeroed two-byte signature, restored by the original loader.

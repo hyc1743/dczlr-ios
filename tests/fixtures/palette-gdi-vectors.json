@@ -1,0 +1,8 @@
+{
+  "cases": 120,
+  "output_sha256": "8221d332b25e7939a288409fdb16007e20e0542dbd989edbc91fdd71a2b43754",
+  "reference": "Windows GDI CreateDIBSection/GetDIBits; alpha normalized opaque",
+  "coverage": "self-authored 8-bit palettes, reserved bytes, colors-used/default256, both row origins and padding",
+  "game_resources_used": false,
+  "original_game_or_gpu_executed": false
+}

@@ -1,0 +1,15 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "cases": 30,
+  "output_sha256": "c998028790b995a145f24c0b21f925793dde7f4a2d0a647da899b10c79d43ac3",
+  "original_function_sha256": {
+    "0x40a6d0": "535f7bcb313eae6aa1e28d392506482f7c3e350179790a33153d848faf779589",
+    "0x40d770": "661f31925f9437f43d8f49bca6347547ab5fc5672df525815647c303615fa29b",
+    "0x409830": "7c465ea488be2c7c8c1a408c349de3e648ba806586ab0d8ac2dcd6706c55d64f",
+    "0x4131f0": "c33472a9127016a38eee8b45d379f47e13b76a471c77b01b9ab043006e0fe921",
+    "0x413270": "813da8a2b4917430d5c2e7f3c2ecaf2634a8b29b0ed8a7292c5bb4f40b78a121"
+  },
+  "coverage": "name/index/matrix loader and global-matrix-pointer binding on self-authored duplicate/root/missing targets; bounded heap/memcpy/strcmp",
+  "original_game_resources_used": false,
+  "game_playability": "not verified"
+}

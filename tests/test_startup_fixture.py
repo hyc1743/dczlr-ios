@@ -35,6 +35,7 @@ class StartupFixtureTests(unittest.TestCase):
         files=resources();lib=library()
         with PPArchive(files['RPP_17.pp']) as archive:xx,xa=archive.read(0),archive.read(1)
         handle=C.c_void_p();self.assertEqual(lib.dc_model_open(xx,len(xx),xa,len(xa),C.byref(handle)),0)
+        space=C.c_uint32();self.assertEqual(lib.dc_model_vertex_space(handle,0,C.byref(space)),0);self.assertEqual(space.value,1)
         self.addCleanup(lib.dc_model_close,handle)
         state,plan=StartupState(),StartupPlan();trace=[];now=0
         def apply():
@@ -86,6 +87,10 @@ class StartupFixtureTests(unittest.TestCase):
         audio='2026-10-24T00:00:36Z PORTLAB_TITLE_AUDIO_ADVANCED submitted'
         self.assertEqual(startup_evidence('\n'.join(lines+[audio]),require_audio=True)['title_audio'],
                          'playback clock advanced; audible output unverified')
+        with self.assertRaises(ValueError):startup_evidence('\n'.join(lines+[audio]),require_skin=True)
+        skin='2026-10-24T00:00:01Z PORTLAB_NATIVE_SKIN_ADVANCED submitted'
+        self.assertIn('native_skin',startup_evidence('\n'.join(lines+[audio,skin]),require_skin=True))
+        with self.assertRaises(ValueError):startup_evidence('\n'.join(lines+[audio,skin.replace('ADVANCED','ADVANCED_pending')]),require_skin=True)
         for changed in (lines[:3]+lines[4:],lines[1:],lines[:2]+lines[3:],
                         lines[:4]+[lines[4].replace('00:00:35','00:00:05')]):
             with self.assertRaises(ValueError):startup_evidence('\n'.join(changed))
