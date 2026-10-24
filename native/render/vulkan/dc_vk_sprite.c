@@ -923,7 +923,7 @@ static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t v
         status = begin_commands(r);
     }
     if (status == DC_OK) {
-        VkClearValue clear_values[2] = {{0},{0}};
+        VkClearValue clear_values[2] = {0};
         for (uint32_t i = 0; i < 4; ++i) clear_values[0].color.float32[i] = clear[i] / 255.0f;
         clear_values[1].depthStencil.depth = 1.0f;
         VkRenderPassBeginInfo begin = {.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
