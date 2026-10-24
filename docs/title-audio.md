@@ -34,4 +34,6 @@ The title pointer adapter now uses the verified `dc_menu_step` for hover and
 selection sound. Its five menu actions still need the original callback/state
 dispatch and subsequent scenes. Save-prefix unlock decisions now supply its
 edit/extra availability; full save-game restore is separate. It does not
-claim that a click starts playable gameplay yet.
+claim original full callback equivalence; the native title load route now enters
+the local saved gameplay scene and the local playable-loop audit covers its
+resource and state transitions.
