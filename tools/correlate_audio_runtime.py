@@ -35,18 +35,35 @@ def correlate(probe, data_directory):
         if matches:
             observations.append({"archive": archive_name, "read_bytes": event["bytes"],
                                  "time": event.get("time"), "matches": matches})
+    runtime_matches = [
+        {"archive": observation["archive"], "name": match["name"],
+         "bytes": observation["read_bytes"], "time": observation.get("time")}
+        for observation in observations
+        for match in observation["matches"]
+    ]
+    title_names = {"bgm000.wav", "se100.wav"}
+    effect_names = {"se016.wav", "se322.wav", "se332.wav"}
+    observed_rpp14 = sorted({match["name"] for observation in observations
+                             if observation["archive"] == "RPP_14.pp"
+                             for match in observation["matches"]})
+    observed_paths = {str(event.get("path", "")).rsplit("\\", 1)[-1].lower()
+                      for event in doc.get("events", []) if event.get("kind") == "open"}
+    gameplay_scene_loaded = any(name in observed_paths for name in
+                                ("rpp_08.pp", "rpp_09.pp", "rpp_10.pp"))
     return {
         "schema": 1,
         "method": "runtime ReadFile byte count matched against local PP entry sizes",
         "probe": str(probe),
         "observations": observations,
+        "runtime_matches": runtime_matches,
         "verified_title_audio": sorted({(o["archive"], m["name"])
-                                         for o in observations for m in o["matches"]}),
-        "gameplay_audio_observed": any(
-            o["archive"] == "RPP_14.pp" and any(m["name"] in {"se016.wav", "se322.wav", "se332.wav"}
-                                                for m in o["matches"])
-            for o in observations
-        ),
+                                         for o in observations for m in o["matches"]
+                                         if m["name"] in title_names}),
+        "gameplay_audio_observed": bool(effect_names.intersection(observed_rpp14)),
+        "gameplay_scene_loaded": gameplay_scene_loaded,
+        "gameplay_effect_resources_loaded": sorted(effect_names.intersection(observed_rpp14)),
+        "observed_rpp14_names": observed_rpp14,
+        "runtime_effect_trigger_mapping": "not_proven; chapter-3 load preloads the RPP14 table",
         "process_interaction": doc.get("process_interaction", "unknown"),
         "device_audio": "not_tested",
     }

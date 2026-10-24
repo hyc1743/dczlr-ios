@@ -15,6 +15,19 @@ index are not yet recovered, so the iOS scene does not trigger these effects by
 guessing. The audit output makes that boundary explicit while preserving the
 local inventory needed for the next routing pass.
 
+A bounded local Frida run now reaches the first non-script callback through the
+original title dispatcher. With the title START selection and chapter-3
+dispatcher forced in process memory for this experiment, the target opened
+`RPP_10.pp`, `RPP_08.pp`, `RPP_09.pp`, `RPP_04.pp`, `RPP_15.pp`, `RPP_03.pp`
+and `RPP_14.pp` at about 50.1 seconds. The runtime read-size correlation
+matched `se016.wav`, `se322.wav`, `se332.wav` and the other preloaded RPP14
+entries to local WAV records. This proves the chapter-3 resource load and the
+effect-resource availability; it does not prove which later interaction calls
+each slot or audible device output. The reproducible probe is
+`tools/frida_directinput_probe.py`, and the ignored local reports are
+`research/native-core/directinput-frida-force-chapter3b.json` and
+`research/native-core/audio-runtime-force-chapter3b-correlation.json`.
+
 ```powershell
 python tools/audit_audio_slots.py --data Data --output research/native-core/audio-slot-audit.json
 ```
