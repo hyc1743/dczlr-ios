@@ -106,6 +106,28 @@ def main():
     for effect_name in ("se016.wav", "se322.wav", "se332.wav"):
         effect_data = entry(ROOT / "Data/RPP_14.pp", effect_name)
         gameplay_effects[effect_name] = {"bytes": len(effect_data), "sha256": hashlib.sha256(effect_data).hexdigest()}
+    scene_dependencies = {}
+    for archive_name, resource_names in {
+        "RPP_04.pp": ("ak00_00.eyes", "am00_01.neck"),
+        "RPP_17.pp": ("auto_cam.xx", "auto_cam.xa"),
+    }.items():
+        scene_dependencies[archive_name] = {}
+        for resource_name in resource_names:
+            resource_data = entry(ROOT / "Data" / archive_name, resource_name)
+            scene_dependencies[archive_name][resource_name] = {
+                "bytes": len(resource_data),
+                "sha256": hashlib.sha256(resource_data).hexdigest(),
+            }
+    scene_dependencies["RPP_07.pp"] = {}
+    for selector in SEQUENCE:
+        with PPArchive(ROOT / "Data/RPP_07.pp") as archive:
+            prefix = f"pp{selector:02d}_".encode("ascii")
+            candidates = [archive.entry(i).name_bytes.decode("ascii") for i in range(archive.count) if archive.entry(i).name_bytes.lower().startswith(prefix.lower())]
+        if not candidates:
+            raise RuntimeError(f"missing auxiliary XL resource for map {selector}")
+        resource_name = sorted(candidates)[0]
+        resource_data = entry(ROOT / "Data/RPP_07.pp", resource_name)
+        scene_dependencies["RPP_07.pp"][resource_name] = {"selector": selector, "bytes": len(resource_data), "sha256": hashlib.sha256(resource_data).hexdigest()}
     face_handle = C.c_void_p()
     if lib.dc_model_open_static(face, len(face), C.byref(face_handle)):
         lib.dc_model_close(actor_handle)
@@ -398,6 +420,7 @@ def main():
             "vector_views": len(vectors),
         },
         "gameplay_effects": gameplay_effects,
+        "scene_dependencies": scene_dependencies,
         "projection": projection,
         "interaction_rows": interaction_rows,
         "verified": True,
