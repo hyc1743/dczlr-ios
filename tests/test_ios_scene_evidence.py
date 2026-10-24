@@ -1,10 +1,13 @@
 from pathlib import Path
+import hashlib
+import json
+import tempfile
 import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts
 
 
 class SceneEvidenceTests(unittest.TestCase):
@@ -128,6 +131,18 @@ class SceneEvidenceTests(unittest.TestCase):
         self.assertEqual(report["complete_game"], "terminal chapter 3 scene presented")
         self.assertEqual(scene_evidence(complete, "gameComplete")["complete_game"],
                          "terminal chapter 3 scene presented")
+
+    def test_real_resource_parts_are_verified_before_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/"parts";container=root/"container";output=root/"output"
+            source.mkdir();output.mkdir()
+            payload=b"part-fixture"
+            part=source/"DczlrData.part001.dczdata";part.write_bytes(payload)
+            manifest={"parts":[{"name":part.name,"size":len(payload),"sha256":hashlib.sha256(payload).hexdigest()}],"total_bytes":len(payload)}
+            (source/"DczlrData.manifest.json").write_text(json.dumps(manifest),encoding="utf-8")
+            result=stage_resource_parts(source,container,output)
+            self.assertEqual(result[0]["sha256"],manifest["parts"][0]["sha256"])
+            self.assertEqual((container/"ResourcePacks"/part.name).read_bytes(),payload)
 
 
 if __name__ == "__main__":
