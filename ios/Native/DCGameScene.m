@@ -44,6 +44,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     BOOL _playerSaveDirty;
     BOOL _interactionActive;uint32_t _interactionStartTick;
     uint32_t _interactionCount;BOOL _interactionCompleted;
+    BOOL _mapAdvanced;uint32_t _mapSelector;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
@@ -152,6 +153,19 @@ static uint32_t gameColor(const dc_material_value *value) {
     for(size_t i=0;i<_surfaceCount;++i){dc_walk_surface *s=&_surfaces[i];float den=(s->z[1]-s->z[2])*(s->x[0]-s->x[2])+(s->x[2]-s->x[1])*(s->z[0]-s->z[2]);if(fabsf(den)<1e-5f)continue;float a=((s->z[1]-s->z[2])*(x-s->x[2])+(s->x[2]-s->x[1])*(z-s->z[2]))/den;float b=((s->z[2]-s->z[0])*(x-s->x[2])+(s->x[0]-s->x[2])*(z-s->z[2]))/den;float c=1-a-b;if(a<-.01f||b<-.01f||c<-.01f)continue;float y=a*s->y[0]+b*s->y[1]+c*s->y[2],distance=fabsf(y-nearY);if(distance<bestDistance){bestDistance=distance;best=y;found=YES;}}
     if(found&&result)*result=best;return found;
 }
+- (NSString *)advanceToNextMap {
+    if(_mapAdvanced)return nil;
+    NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
+    if(!archive)return reason.localizedDescription ?: @"Map archive could not be opened";
+    NSData *nextData=[self entry:@"mm00_01.xx" archive:archive error:nil];
+    if(!nextData)return @"Next map resource is unavailable";
+    [self detachModel:&_map];_map.xxData=nextData;_map.xaData=nil;_map.model=NULL;_map.xx=NULL;_map.info=(dc_xx_info){0};_map.textureCount=0;_map.textures=NULL;_map.world=gameIdentity();
+    NSString *error=nil;if(![self openModel:&_map staticOnly:YES error:&error])return error ?: @"Next map could not be loaded";
+    _map.world=gameIdentity();_mapSelector=1;[self computeWalkBounds];
+    _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
+    _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));
+    _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;_mapAdvanced=YES;return nil;
+}
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
@@ -246,6 +260,7 @@ static uint32_t gameColor(const dc_material_value *value) {
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else { _inputInitialized=NO;[self savePlayerState]; }
+    if(_interactionCompleted&&!_mapAdvanced){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=-1.5f,.height=0,.pitch=0,.yaw=0};
     float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
