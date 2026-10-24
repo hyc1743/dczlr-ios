@@ -26,7 +26,17 @@ jobs:
         run: |
           python -m py_compile tools/pack_resources.py tools/validate_effect_manifest.py tools/validate_release_contract.py
           python tools/validate_release_contract.py .
-          python -m unittest discover -s tests -v
+          for test_file in \
+            test_release_contract.py \
+            test_pack_resources.py \
+            test_shader_conversion.py \
+            test_shader_bindings.py \
+            test_dx9_tokens.py \
+            test_dx9_effect.py \
+            test_wine_boot_evidence.py \
+            test_ios_scene_evidence.py; do
+            python -m unittest discover -s tests -p "$test_file" -q
+          done
           python - <<'PY'
           import json
           from pathlib import Path
