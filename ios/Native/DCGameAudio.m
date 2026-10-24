@@ -4,6 +4,8 @@
 
 @implementation DCGameAudio {
     AVAudioPlayer *_music,*_selection;
+    NSMutableDictionary<NSString *,AVAudioPlayer *> *_gameplayEffects;
+    NSString *_directory;
     BOOL _advanced;
 }
 - (NSData *)sound:(NSString *)name inArchive:(NSString *)file directory:(NSString *)directory error:(NSString **)error {
@@ -22,6 +24,7 @@
 }
 - (instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error {
     if (!(self=[super init])) return nil;
+    _directory=[directory copy];
     NSData *music=[self sound:@"bgm000.wav" inArchive:@"RPP_01.pp" directory:directory error:error];
     NSData *selection=[self sound:@"se100.wav" inArchive:@"RPP_14.pp" directory:directory error:error];
     if(!music || !selection)return nil;
@@ -33,6 +36,22 @@
     _music.numberOfLoops=-1;
     if(![_music prepareToPlay] || ![_selection prepareToPlay]) {if(error)*error=@"Audio decoder preparation failed";return nil;}
     return self;
+}
+- (NSString *)prepareGameplayAudio {
+    if(_gameplayEffects)return nil;
+    NSMutableDictionary<NSString *,AVAudioPlayer *> *prepared=[NSMutableDictionary dictionaryWithCapacity:3];
+    for(NSString *name in @[@"se016.wav",@"se322.wav",@"se332.wav"]) {
+        NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_14.pp" directory:_directory error:&error];
+        if(!data)return error ?: [NSString stringWithFormat:@"Gameplay audio resource unavailable: %@",name];
+        NSError *reason=nil;AVAudioPlayer *player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
+        if(!player || ![player prepareToPlay])return reason.localizedDescription ?: [NSString stringWithFormat:@"Gameplay audio decoder failed: %@",name];
+        prepared[name]=player;
+    }
+    _gameplayEffects=prepared;
+    return nil;
+}
+- (BOOL)playGameplayEffectNamed:(NSString *)name {
+    AVAudioPlayer *player=_gameplayEffects[name];if(!player)return NO;player.currentTime=0;return [player play];
 }
 - (NSString *)startTitleMusic {
     if (_music.isPlaying) return nil;
@@ -53,6 +72,6 @@
 }
 - (BOOL)selectionBusy { return _selection.isPlaying; }
 - (void)stopTitleMusic { [_music stop]; }
-- (void)pause { [_music pause];[_selection stop]; }
-- (void)dealloc { [_music stop];[_selection stop]; }
+- (void)pause { [_music pause];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop]; }
+- (void)dealloc { [_music stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop]; }
 @end

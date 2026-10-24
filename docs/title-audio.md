@@ -18,6 +18,11 @@ keeps the audio object across renderer resize. Loading or playback errors fail
 explicitly. The original full volume/mixer/fade behavior, voice sequencing and
 in-game audio driver remain unimplemented.
 
+When the native chapter-3 scene is entered, `DCGameAudio` also validates and
+prepares the three effect resources named by the original scene callback:
+`RPP_14.pp/se016.wav`, `se322.wav` and `se332.wav`. They remain available to
+the later event router; no guessed event-to-sound mapping is claimed yet.
+
 `PORTLAB_TITLE_AUDIO_ADVANCED` requires the title to have presented and the
 playing background track's clock to advance beyond 0.1 seconds. The simulator
 startup gate supplies generated PCM tones through generated PP archives and

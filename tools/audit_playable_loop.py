@@ -102,6 +102,10 @@ def main():
 
     face = entry(ROOT / "Data/RPP_09.pp", "ak00_00.xx")
     morph = entry(ROOT / "Data/RPP_09.pp", "an00_01.xa")
+    gameplay_effects = {}
+    for effect_name in ("se016.wav", "se322.wav", "se332.wav"):
+        effect_data = entry(ROOT / "Data/RPP_14.pp", effect_name)
+        gameplay_effects[effect_name] = {"bytes": len(effect_data), "sha256": hashlib.sha256(effect_data).hexdigest()}
     face_handle = C.c_void_p()
     if lib.dc_model_open_static(face, len(face), C.byref(face_handle)):
         lib.dc_model_close(actor_handle)
@@ -393,6 +397,7 @@ def main():
             "morph_tracks": morph_info.morph_tracks,
             "vector_views": len(vectors),
         },
+        "gameplay_effects": gameplay_effects,
         "projection": projection,
         "interaction_rows": interaction_rows,
         "verified": True,

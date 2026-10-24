@@ -143,6 +143,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
 }
 - (NSString *)startGameSceneFromDirectory:(NSString *)directory {
     if(_gameScene)return nil;
+    if(_gameAudio){NSString *audioError=[_gameAudio prepareGameplayAudio];if(audioError)return audioError;}
     NSString *gameError=nil;
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
     if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
