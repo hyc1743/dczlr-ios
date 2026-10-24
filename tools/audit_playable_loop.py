@@ -67,6 +67,13 @@ def main():
     map_rows = []
     for selector in SEQUENCE:
         data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
+        map_light_name = f"mp00_{selector:02d}.xl"
+        map_light_data = entry(ROOT / "Data/RPP_10.pp", map_light_name)
+        map_light_info, map_light = XLInfo(), XLLight()
+        if (lib.dc_xl_probe(map_light_data, len(map_light_data), C.byref(map_light_info)) or
+                not map_light_info.lights or
+                lib.dc_xl_light_at(map_light_data, len(map_light_data), 0, C.byref(map_light))):
+            raise RuntimeError(f"map {selector} variant XL admission failed")
         camera_data = entry(ROOT / "Data/RPP_03.pp", CAMERAS[selector])
         animation_name = f"mn00_{selector:02d}.xa"
         try:
@@ -147,6 +154,11 @@ def main():
                 "selector": selector,
                 "resource": f"mm00_{selector:02d}.xx",
                 "sha256": hashlib.sha256(data).hexdigest(),
+                "map_light": map_light_name,
+                "map_light_sha256": hashlib.sha256(map_light_data).hexdigest(),
+                "map_light_count": map_light_info.lights,
+                "map_light_kind": map_light.kind,
+                "map_light_enabled": map_light.enabled,
                 "nodes": native_info.nodes,
                 "submeshes": native_info.submeshes,
                 "textures": native_info.textures,

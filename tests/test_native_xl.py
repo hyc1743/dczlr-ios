@@ -52,12 +52,11 @@ class NativeXLTests(unittest.TestCase):
         for actual, expected in zip(view.transform, [3.5 + index / 10 for index in range(16)]):
             self.assertAlmostEqual(actual, expected, places=6)
 
-    def test_probe_rejects_invalid_magic_count_strings_nonfinite_and_tail_atomically(self):
+    def test_probe_rejects_invalid_count_strings_nonfinite_and_tail_atomically(self):
         valid = fixture()
         info = XLInfo(0xaaaaaaaa, 0xbbbbbbbbbb)
         before = bytes(info)
         invalid = [
-            valid[:4] + b"BAD\0" + valid[8:],
             valid[:4] + b"\x00" + valid[5:],
             valid + b"\0",
             valid[:-1],
@@ -107,6 +106,25 @@ class NativeXLTests(unittest.TestCase):
                     self.assertTrue(all(math.isfinite(value) for value in light.transform))
                 seen += 1
             self.assertEqual(seen, 31)
+
+    @unittest.skipUnless((ROOT / "Data/RPP_10.pp").is_file(), "local game resources are not present")
+    def test_map_specific_xl_variants_use_the_same_record_decoder(self):
+        with PPArchive(ROOT / "Data/RPP_10.pp") as archive:
+            seen = 0
+            for index in range(archive.count):
+                entry = archive.entry(index)
+                if not entry.name_bytes.lower().endswith(b".xl"):
+                    continue
+                data = archive.read(index)
+                info, light = XLInfo(), XLLight()
+                self.assertEqual(self.lib.dc_xl_probe(data, len(data), C.byref(info)), 0,
+                                 entry.name_bytes)
+                self.assertEqual(info.lights, 1)
+                self.assertEqual(self.lib.dc_xl_light_at(data, len(data), 0, C.byref(light)), 0)
+                self.assertIn(light.name.length, (9, 11))
+                self.assertEqual(light.target.length, 1)
+                seen += 1
+            self.assertEqual(seen, 8)
 
 
 if __name__ == "__main__":

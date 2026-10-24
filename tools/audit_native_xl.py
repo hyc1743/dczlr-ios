@@ -75,7 +75,8 @@ def audit(directory):
         "entries_examined": len(rows),
         "verified_entries": verified,
         "outside_native_profile": len(rows) - verified,
-        "expected_entries": 31,
+        "expected_rpp07_entries": 31,
+        "expected_local_entries": 73,
         "game_playability": "not_verified",
         "original_gpu_lighting": "not_executed",
     }

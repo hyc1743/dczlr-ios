@@ -38,9 +38,11 @@ typedef struct dc_xl_light {
     float transform[16];
 } dc_xl_light;
 
-/* Strict local profile: magic "LLL\\0", one-byte light count, then exactly
- * 197 bytes per record. Unknown tag bytes are preserved in the view while
- * the numeric payload is exposed for the renderer. */
+/* Strict local profile: a four-byte prefix, one-byte light count, then
+ * length-prefixed records with a five-byte tag header and 41 floats. RPP_07
+ * uses the "LLL\\0" prefix and four records; RPP_10 map variants use opaque
+ * four-byte prefixes and one record. Unknown tag bytes are preserved in the
+ * view while the numeric payload is exposed for the renderer. */
 DC_API dc_status dc_xl_probe(const void *source, size_t length, dc_xl_info *out);
 DC_API dc_status dc_xl_light_at(const void *source, size_t length, uint32_t index,
                                 dc_xl_light *out);
