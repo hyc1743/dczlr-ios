@@ -43,6 +43,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     dc_game_player _player;
     BOOL _playerSaveDirty;
     BOOL _interactionActive;uint32_t _interactionStartTick;
+    uint32_t _interactionCount;BOOL _interactionCompleted;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
@@ -50,6 +51,8 @@ static uint32_t gameColor(const dc_material_value *value) {
 - (BOOL)loaded { return _loaded; }
 - (uint32_t)visibleMapTriangles { return _visibleMapTriangles; }
 - (uint32_t)visibleActorTriangles { return _visibleActorTriangles; }
+- (uint32_t)interactionCount { return _interactionCount; }
+- (BOOL)interactionCompleted { return _interactionCompleted; }
 
 - (NSData *)entry:(NSString *)name archive:(DCArchive *)archive error:(NSString **)error {
     for(uint32_t i=0;i<archive.entryCount;++i)
@@ -224,12 +227,14 @@ static uint32_t gameColor(const dc_material_value *value) {
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
     BOOL newTouch=touching&&!_inputInitialized;
-    if(newTouch&&!_interactionActive){
+    float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
+    BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
+    if(newTouch&&!_interactionActive&&nearInteraction){
         if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
         _interactionActive=YES;_interactionStartTick=tick;
     } else if(_interactionActive&&(uint32_t)(tick-_interactionStartTick)>800){
         if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction animation restore failed";
-        _interactionActive=NO;
+        _interactionActive=NO;_interactionCount++;_interactionCompleted=YES;
     }
     if(touching) {
         if(_inputInitialized) {
