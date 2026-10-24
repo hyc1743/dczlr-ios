@@ -244,7 +244,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
             }
             NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
             if(gameFailure)return gameFailure;
-            _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;return nil;
+            _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;++_presentedFrames;return nil;
         }
         NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
             touching:touching width:_width height:_height];

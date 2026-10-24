@@ -119,6 +119,8 @@ final class SpritePresenter: NSObject {
                         self.model.record("New-game intro record presented; later gameplay remains unfinished", event: "PORTLAB_SCENE_PRESENTED=intro")
                     case .gameplay:
                         self.model.record("Chapter 3 map and actor scene presented from local game resources", event: "PORTLAB_SCENE_PRESENTED=gameplay")
+                    case .gameComplete:
+                        self.model.record("Playable map sequence completed", event: "PORTLAB_GAME_COMPLETED")
                     @unknown default:
                         self.model.record("Vulkan 返回未知场景编号：\(scene.rawValue)")
                     }

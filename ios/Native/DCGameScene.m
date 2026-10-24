@@ -46,6 +46,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     BOOL _interactionActive;uint32_t _interactionStartTick;
     uint32_t _interactionCount;BOOL _interactionCompleted;
     BOOL _mapAdvanced;uint32_t _mapSelector;
+    BOOL _gameFinished;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
@@ -55,6 +56,7 @@ static uint32_t gameColor(const dc_material_value *value) {
 - (uint32_t)visibleActorTriangles { return _visibleActorTriangles; }
 - (uint32_t)interactionCount { return _interactionCount; }
 - (BOOL)interactionCompleted { return _interactionCompleted; }
+- (BOOL)gameFinished { return _gameFinished; }
 
 - (NSData *)entry:(NSString *)name archive:(DCArchive *)archive error:(NSString **)error {
     for(uint32_t i=0;i<archive.entryCount;++i)
@@ -158,7 +160,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(_mapAdvanced)return nil;
     uint32_t nextSelector=UINT32_MAX;
     if(_mapSelector==0)nextSelector=1;else if(_mapSelector==1)nextSelector=3;else if(_mapSelector==3)nextSelector=4;else if(_mapSelector==4)nextSelector=5;else if(_mapSelector==5)nextSelector=6;else if(_mapSelector==6)nextSelector=7;else if(_mapSelector==7)nextSelector=8;
-    if(nextSelector==UINT32_MAX){_mapAdvanced=YES;return nil;}
+    if(nextSelector==UINT32_MAX){_mapAdvanced=YES;_gameFinished=YES;_interactionCompleted=YES;_playerSaveDirty=YES;return nil;}
     NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     if(!archive)return reason.localizedDescription ?: @"Map archive could not be opened";
     NSString *nextName=[NSString stringWithFormat:@"mm00_%02u.xx",nextSelector];

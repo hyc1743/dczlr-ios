@@ -8,7 +8,8 @@ typedef NS_ENUM(NSInteger, DCVulkanSpriteScene) {
     DCVulkanSpriteSceneStartupWarning = 3,
     DCVulkanSpriteSceneStartupTransition = 4,
     DCVulkanSpriteSceneIntro = 5,
-    DCVulkanSpriteSceneGameplay = 6
+    DCVulkanSpriteSceneGameplay = 6,
+    DCVulkanSpriteSceneGameComplete = 7
 };
 /* Native sprite integration scene. This view does not run the game. */
 @interface DCVulkanSpriteView : UIView
