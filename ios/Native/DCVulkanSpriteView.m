@@ -273,6 +273,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 NSString *gameError=[self startGameSceneFromDirectory:directory];
                 if(gameError)return gameError;
                 BOOL gameTouch=touching;
+                if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
                 if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
                 NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
                 if(gameFailure)return gameFailure;
@@ -425,6 +426,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     } else {
         if(_gameScene) {
             BOOL gameTouch=touching;
+            if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
             if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
             NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
             if(gameFailure)return gameFailure;

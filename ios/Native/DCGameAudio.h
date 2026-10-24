@@ -6,6 +6,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface DCGameAudio : NSObject
 @property(nonatomic,readonly) BOOL musicAdvanced;
 @property(nonatomic,readonly) BOOL selectionBusy;
+- (BOOL)gameplayVoiceBusy;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;
 - (nullable NSString *)startTitleMusic;
 - (nullable NSString *)prepareGameplayAudio;

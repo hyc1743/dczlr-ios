@@ -127,6 +127,10 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
     return [_selection play];
 }
 - (BOOL)selectionBusy { return _selection.isPlaying; }
+- (BOOL)gameplayVoiceBusy {
+    for (AVAudioPlayer *player in _gameplayVoices.allValues) if (player.isPlaying) return YES;
+    return NO;
+}
 - (void)stopTitleMusic { [_music stop]; }
 - (void)pause { _voiceChainNext=nil;[_music pause];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
 - (void)dealloc { [_music stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
