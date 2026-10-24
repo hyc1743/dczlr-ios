@@ -40,6 +40,7 @@ compared their numeric matrices with the isolated original driver/reference
 math. Its report contains only counts, hashes and error bounds and stays
 outside the public repository. No original preset values or media are shipped
 in fixtures. This evidence does not establish the full scene initializer's
-selected camera, GPU output or game playability. The current projected mesh
-path still needs clipping across nonpositive W and near-plane intersections
-before these cameras can render a complete scene.
+selected camera, GPU output or game playability. The separate
+`dc_mesh_clip_project` interface now handles nonpositive-W and near-plane
+intersections; depth, original material/lighting state and complete scene
+initialization remain unfinished.

@@ -1,5 +1,7 @@
 #include "dc_vk_sprite.h"
 #include "dc_sprite_spv.h"
+#include "dc_camera.h"
+#include "dc_mesh.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -203,6 +205,22 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     CHECK(dc_vk_geometry_render_region(r,&geometry,1,clear,rgba,sizeof(rgba),&clip)==DC_RANGE);
     CHECK(!memcmp(before,rgba,sizeof(rgba)));OK(dc_vk_sprite_get_info(r,&info));CHECK(info.submitted_frames==frame_count);
     puts("PASS: explicit geometry scissor, full-frame reset and atomic invalid-region rejection");
+    /* One input vertex is on the eye plane (W=0). Clip its visible portion
+     * against the near plane before the existing XYZRHW GPU path. */
+    dc_camera_orbit orbit={.base={{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1}}};
+    dc_camera_lens lens={1.5707963267948966f,1,10,8,8};dc_camera_matrices camera;
+    OK(dc_camera_build(&orbit,&lens,&camera));
+    dc_mesh_vertex mesh_vertices[3]={{{-1.5f,-1.5f,-2},{0},{.25f,.25f}},
+        {{1.5f,-1.5f,-2},{0},{.25f,.25f}},{{0,1.5f,0},{0},{.25f,.25f}}};
+    const uint16_t indices[3]={0,1,2};dc_viewport viewport={0,0,8,8,0,1};
+    dc_sprite_vertex clipped[21];size_t written=0;
+    OK(dc_mesh_clip_project(mesh_vertices,3,indices,3,&camera.view_projection,&viewport,
+        0xffffffff,clipped,21,&written));CHECK(written==6);
+    geometry=(dc_vk_geometry_item){.vertices=clipped,.vertex_count=written,.texture=texture,.blend_mode=3,.point_filter=1};
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,5,255,0,0,255,0));CHECK(pixel(rgba,4,2,20,40,60,100,0));
+    CHECK(pixel(rgba,0,5,20,40,60,100,0));
+    puts("PASS: eye-plane/near-plane clipped mesh and camera through actual Vulkan raster");
     dc_vk_sprite_destroy(r);
     return 0;
 failed:

@@ -49,6 +49,11 @@ DC_API dc_status dc_model_load_vertices(const dc_model *model,uint32_t mesh,dc_m
 DC_API dc_status dc_model_mesh_visible(const dc_model *model,uint32_t mesh,uint32_t *out);
 DC_API dc_status dc_model_project(const dc_model *model,uint32_t mesh,const dc_matrix *view_projection,
     const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity);
+/* Same world/local vertex-space selection with six-plane clipping and a
+ * variable triangle count. NULL output/capacity0 queries the required count.
+ * Hidden/effect/sort admission remains the caller's responsibility. */
+DC_API dc_status dc_model_project_clipped(const dc_model *model,uint32_t mesh,const dc_matrix *view_projection,
+    const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity,size_t *written);
 #ifdef __cplusplus
 }
 #endif

@@ -306,3 +306,23 @@ dc_status dc_model_project(const dc_model *m,uint32_t mesh,const dc_matrix *vp,c
     }
     return dc_mesh_project(data->deformed ? data->deformed : data->vertices,data->info.vertex_count,data->indices,data->info.index_count,&mvp,viewport,diffuse,out,capacity);
 }
+
+dc_status dc_model_project_clipped(const dc_model *m,uint32_t mesh,const dc_matrix *vp,const dc_viewport *viewport,
+        uint32_t diffuse,dc_sprite_vertex *out,size_t capacity,size_t *written) {
+    if (!m || !vp || !output_allowed(m,written,sizeof(*written))) return DC_ARGUMENT;
+    if (mesh>=m->info.submeshes) return DC_RANGE;
+    if (capacity>1048576) return DC_RANGE;
+    if (out && !output_allowed(m,out,capacity*sizeof(*out))) return DC_ARGUMENT;
+    const mesh_data *data=&m->meshes[mesh];dc_matrix mvp;
+    dc_status status;
+    if (data->deformed) mvp=*vp;
+    else {
+        status=dc_matrix_multiply(&m->globals[data->info.node],vp,&mvp);
+        if(status!=DC_OK)return status;
+    }
+    /* vp is copied/composed above, so reject its output alias explicitly. */
+    if ((out && overlap(vp,sizeof(*vp),out,capacity*sizeof(*out))) ||
+        overlap(vp,sizeof(*vp),written,sizeof(*written))) return DC_ARGUMENT;
+    return dc_mesh_clip_project(data->deformed ? data->deformed : data->vertices,data->info.vertex_count,
+        data->indices,data->info.index_count,&mvp,viewport,diffuse,out,capacity,written);
+}

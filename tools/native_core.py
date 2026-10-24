@@ -335,7 +335,7 @@ def compiler_command():
 def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c",
-               ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
+               ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_mesh_clip.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
                ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c", ROOT / "native/game/dc_camera.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
@@ -446,6 +446,8 @@ def library():
         function.argtypes=[C.c_void_p]+([] if name=="get_info" else [C.c_uint32])+[C.POINTER(record)]
         function.restype=C.c_int
     lib.dc_model_project.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t]
+    lib.dc_model_project_clipped.argtypes = lib.dc_model_project.argtypes+[C.POINTER(C.c_size_t)]
+    lib.dc_model_project_clipped.restype=C.c_int
     lib.dc_model_project.restype = C.c_int
     lib.dc_script_find.argtypes = [C.c_void_p,C.c_size_t,C.c_size_t,C.c_uint32,C.POINTER(ScriptRecord)]
     lib.dc_script_find.restype = C.c_int
@@ -477,6 +479,8 @@ def library():
     lib.dc_pose_sample.restype = C.c_int
     lib.dc_matrix_multiply.argtypes = [C.POINTER(Matrix), C.POINTER(Matrix), C.POINTER(Matrix)]
     lib.dc_matrix_multiply.restype = C.c_int
+    lib.dc_mesh_clip_project.argtypes=[C.POINTER(MeshVertex),C.c_size_t,C.POINTER(C.c_uint16),C.c_size_t,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t,C.POINTER(C.c_size_t)]
+    lib.dc_mesh_clip_project.restype=C.c_int
     lib.dc_camera_build.argtypes = [C.POINTER(CameraOrbit), C.POINTER(CameraLens), C.POINTER(CameraMatrices)]
     lib.dc_camera_build.restype = C.c_int
     lib.dc_camera_read_preset.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(CameraOrbit)]

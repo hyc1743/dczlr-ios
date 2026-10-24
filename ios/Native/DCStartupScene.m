@@ -1,4 +1,5 @@
 #import "DCStartupScene.h"
+#include "dc_camera.h"
 #import "DCArchive.h"
 #include "dc_model.h"
 #include "dc_startup.h"
@@ -204,11 +205,11 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
         draws[count++]=(dc_vk_geometry_item){.vertices=card,.vertex_count=6,.texture=_cards[_card],.blend_mode=3};
     }
     /* Original camera 5: FOV=.5, near=.5, far=10000, inverse camera Z=1.5. */
-    float ys=1/tanf(.25f),q=10000.0f/(.5f-10000.0f);
-    dc_matrix projection={{ys/(1024.0f/768),0,0,0,0,ys,0,0,0,0,q,-1,0,0,.5f*q,0}};
-    dc_matrix view=dcStartupIdentity(),vp;view.values[14]=-1.5f;
-    status=dc_matrix_multiply(&view,&projection,&vp);
+    dc_camera_orbit orbit={.base=dcStartupIdentity(),.stored_distance=-1.5f};
+    dc_camera_lens lens={.5f,.5f,10000,1024,768};dc_camera_matrices camera;
+    status=dc_camera_build(&orbit,&lens,&camera);
     if (status!=DC_OK) return @"Startup camera matrix failed";
+    dc_matrix vp=camera.view_projection;
     __attribute__((objc_precise_lifetime)) NSMutableArray<NSMutableData *> *storage=[NSMutableArray array];
     NSData *skinSample=nil;
     for (uint32_t i=0;i<_info.submeshes;++i) {
@@ -243,11 +244,15 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
             if(an==bn && an<binding.texture_names[0].length && bn<texture.name.length && !memcmp(a,b,an)) {image=j;break;}
         }
         if (image==UINT32_MAX) return @"Startup texture name was not found";
-        NSMutableData *vertices=[NSMutableData dataWithLength:mesh.index_count*sizeof(dc_sprite_vertex)];
-        status=dc_model_project(_model,i,&vp,&viewport,dcStartupColor(&material),vertices.mutableBytes,mesh.index_count);
+        size_t vertex_count=0;
+        status=dc_model_project_clipped(_model,i,&vp,&viewport,dcStartupColor(&material),NULL,0,&vertex_count);
+        if (status!=DC_OK) return [NSString stringWithFormat:@"Startup mesh clipping failed: %d",status];
+        if (!vertex_count) continue;
+        NSMutableData *vertices=[NSMutableData dataWithLength:vertex_count*sizeof(dc_sprite_vertex)];
+        status=dc_model_project_clipped(_model,i,&vp,&viewport,dcStartupColor(&material),vertices.mutableBytes,vertex_count,&vertex_count);
         if (status!=DC_OK) return [NSString stringWithFormat:@"Startup mesh projection failed: %d",status];
         [storage addObject:vertices];
-        draws[count++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=mesh.index_count,.texture=_textures[image],.blend_mode=3};
+        draws[count++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertex_count,.texture=_textures[image],.blend_mode=3};
     }
     const uint8_t clear[4]={0,0,0,255};
     status=dc_model_query(_model,&clip,&ready);

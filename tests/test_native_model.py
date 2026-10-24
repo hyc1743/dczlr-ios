@@ -21,6 +21,22 @@ class NativeModelTests(unittest.TestCase):
         self.addCleanup(self.lib.dc_model_close,handle)
         return handle,xx,xa
 
+    def test_clipped_projection_uses_rigid_and_skinned_vertex_spaces(self):
+        rigid,xx1,xa1=self.open();skinned,xx2,xa2=self.open(skinned=True)
+        world=matrix(.3,1.2,(.1,-.2,.25));view=Viewport(0,0,100,100,0,1)
+        vp=matrix(translation=(0,0,.5));results=[]
+        for model in (rigid,skinned):
+            self.assertEqual(self.lib.dc_model_tick(model,100,100,C.byref(world)),0)
+            count=C.c_size_t(999)
+            args=(model,0,C.byref(vp),C.byref(view),0xffffffff)
+            self.assertEqual(self.lib.dc_model_project_clipped(*args,None,0,C.byref(count)),0)
+            out=(SpriteVertex*count.value)()
+            self.assertEqual(self.lib.dc_model_project_clipped(*args,out,len(out),C.byref(count)),0)
+            results.append(out)
+        self.assertGreater(len(results[0]),0);self.assertEqual(len(results[0]),len(results[1]))
+        for a,b in zip(*results):
+            for name in ('x','y','z','rhw','u','v'):self.assertAlmostEqual(getattr(a,name),getattr(b,name),delta=2e-5)
+
     def test_skinned_and_rigid_node_transform_match_without_double_world(self):
         rigid,xx1,xa1=self.open();skinned,xx2,xa2=self.open(skinned=True)
         world=matrix(.3,1.2,(.1,-.2,.25));view=Viewport(0,0,100,100,0,1);vp=matrix(translation=(0,0,.5))
