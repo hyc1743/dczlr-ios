@@ -95,7 +95,7 @@ class XAInfo(C.Structure):
         return {name: getattr(self, name) for name, _ in self._fields_}
 
 class XAMorphIndexSet(C.Structure):
-    _fields_=[('indices_offset',C.c_size_t),('data_offset',C.c_size_t),('count',C.c_uint32),('selector',C.c_uint8)]
+    _fields_=[('indices_offset',C.c_size_t),('data_offset',C.c_size_t),('count',C.c_uint32),('data_length',C.c_uint32),('selector',C.c_uint8)]
 class XAMorphVectorSet(C.Structure):
     _fields_=[('vectors_offset',C.c_size_t),('data_offset',C.c_size_t),('count',C.c_uint32)]
 class XAMorphTrack(C.Structure):

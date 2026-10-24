@@ -239,7 +239,7 @@ dc_status dc_xa_morph_index_set_at(const void *bytes,size_t length,uint32_t inde
     dc_status s=morph_cursor(bytes,length,&c,&ni,&nv,&nt);
     if (s!=DC_OK) return s;
     if (index>=ni) return DC_NOT_FOUND;
-    for(uint32_t i=0;i<=index;++i){dc_xa_morph_index_set v={0};v.selector=c.data[c.position++];if(!integer(&c,&v.count))return DC_FORMAT;v.indices_offset=c.position;if(!array(&c,v.count,4))return DC_FORMAT;uint32_t n;if(!integer(&c,&n))return DC_FORMAT;v.data_offset=c.position;if(!skip(&c,n))return DC_FORMAT;if(i==index){*out=v;return DC_OK;}}
+    for(uint32_t i=0;i<=index;++i){dc_xa_morph_index_set v={0};v.selector=c.data[c.position++];if(!integer(&c,&v.count))return DC_FORMAT;v.indices_offset=c.position;if(!array(&c,v.count,4))return DC_FORMAT;uint32_t n;if(!integer(&c,&n))return DC_FORMAT;v.data_offset=c.position;v.data_length=n;if(!skip(&c,n))return DC_FORMAT;if(i==index){*out=v;return DC_OK;}}
     return DC_NOT_FOUND;
 }
 
