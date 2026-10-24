@@ -4,7 +4,7 @@ from xx_cases import diagnostic_fixture,name,u32
 from pose_cases import key
 
 
-def fixture(mode=0,blend=0,skinned=False,events=False):
+def fixture(mode=0,blend=0,skinned=False,events=False,event_type=0):
     xx=diagnostic_fixture(skinned=skinned)
     values=[1.0]*17
     materials=name(b'diagnostic\0')+u32(2)
@@ -22,7 +22,8 @@ def fixture(mode=0,blend=0,skinned=False,events=False):
         struct.pack_into('<I',clips,at+88,blend)
     poses=name(b'synthetic-node\0')+u32(2)+u32(mode)
     poses+=bytes(key(0,-.6,(-.2,0,0),(.85,.85,1)))+bytes(key(8,1.8,(.2,0,0),(1.15,1.15,1)))
-    event_section = (b'\1' + u32(1) + u32(7) + name(b'event\0') +
-                     bytes(range(8)) + u32(0) + bytes(5)) if events else b'\0'
+    event_section = (b'\1' + u32(1) + u32(event_type) + name(b'synthetic-node\0') +
+                     bytes((0, 0)) + struct.pack('<f', 1.0) + bytes((0, 1)) +
+                     u32(0) + bytes(5)) if events else b'\0'
     xa=b'\1'+u32(1)+materials+event_section+b'\0'+b'\1'+clips+u32(1)+poses
     return xx,bytes(xa)

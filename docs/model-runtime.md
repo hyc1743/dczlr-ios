@@ -7,9 +7,9 @@ matching the final original loader setup. Pose names bind to the last matching
 root descendant; material names bind to the first matching material. Missing
 targets are inert. Tracks retain file order and individual model baselines.
 
-The current explicit profile has mode-0 node tracks, material tracks, framed
-event tracks whose target/flag payload remains opaque, unskinned meshes and
-indexed four-matrix skinning. Crossfades, mode-1 poses, billboard transforms
+The current explicit profile has mode-0 node tracks, material tracks, bounded
+unfiltered type-0/1 no-key event UV scrolling, unskinned meshes and indexed
+four-matrix skinning. Other event types, keyed/filtered events, crossfades, mode-1 poses, billboard transforms
 and morphs are still rejected. Failed updates
 preserve the model's clips, controller, node matrices, material values,
 palettes and deformed vertex buffers. This runtime is an integration
@@ -30,14 +30,16 @@ GPU appearance or scene execution. See `skinning.md` for the weighted path.
 
 The real chapter-3 path now also admits the original map-1 animation
 `RPP_10.pp/mn00_01.xa`: its clip 1 spans frames 10–50, binds 35 mode-0 node
-tracks to `mm00_01.xx`, and retains four event tracks as bounded opaque views.
+tracks to `mm00_01.xx`, and retains four event tracks; the map's unfiltered
+no-key type-0/1 tracks now update their target UV channels.
 `DCGameScene` loads that XA only when the original map archive provides it;
 selector 0 and the other audited static maps continue through the explicit
 XX-only path. The event dispatcher changes target vertex channels in the
-original runtime; that channel update is still outside the native model
-controller, so the audit proves map pose motion and admission but not original
-effect-channel equivalence. The current local audit records controller motion
-from frame 10.0 to frame 32.857 after a 400 ms tick.
+original runtime. The native path now reproduces the verified type-0 V and
+type-1 U scroll channels with the original `delta_ms / 33 * parameter * 0.001`
+step and direction byte; other event types remain inert. The current local
+audit records controller motion from frame 10.0 to frame 32.857 after a 400 ms
+tick.
 
 `dc_scene_update` implements the default, modifier-1 and modifier-2 branches of
 `0x00415620`. The default is local times parent-global using row vectors.

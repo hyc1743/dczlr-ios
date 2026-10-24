@@ -71,6 +71,7 @@ def main():
             animation_data = None
         animation_info = None
         animation_motion = None
+        event_motion = None
         if animation_data is not None:
             decoded_animation_info = XAInfo()
             if lib.dc_xa_probe(animation_data, len(animation_data), C.byref(decoded_animation_info)):
@@ -102,6 +103,42 @@ def main():
             native_info = XXInfo()
             if lib.dc_model_get_info(handle, C.byref(native_info)):
                 raise RuntimeError(f"map {selector} info failed")
+            if animation_data is not None:
+                event_handle=C.c_void_p()
+                if lib.dc_model_open(data,len(data),animation_data,len(animation_data),C.byref(event_handle)):
+                    raise RuntimeError(f"map {selector} event model reopen failed")
+                before_uv = []
+                try:
+                    if lib.dc_model_tick(event_handle,0,0,C.byref(identity_world)):
+                        raise RuntimeError(f"map {selector} event baseline tick failed")
+                    for mesh_index in range(native_info.submeshes):
+                        mesh = XXSubmesh()
+                        if lib.dc_model_mesh(event_handle, mesh_index, C.byref(mesh)):
+                            raise RuntimeError(f"map {selector} event mesh metadata failed")
+                        vertices = (MeshVertex * mesh.vertex_count)()
+                        if lib.dc_model_load_vertices(event_handle, mesh_index, vertices, mesh.vertex_count):
+                            raise RuntimeError(f"map {selector} event vertex load failed")
+                        before_uv.append([(vertices[i].uv[0], vertices[i].uv[1]) for i in range(mesh.vertex_count)])
+                    if lib.dc_model_tick(event_handle,400,400,C.byref(identity_world)):
+                        raise RuntimeError(f"map {selector} event tick failed")
+                    changed = 0
+                    first_delta = None
+                    for mesh_index in range(native_info.submeshes):
+                        mesh = XXSubmesh()
+                        if lib.dc_model_mesh(event_handle, mesh_index, C.byref(mesh)):
+                            raise RuntimeError(f"map {selector} event mesh metadata failed")
+                        vertices = (MeshVertex * mesh.vertex_count)()
+                        if lib.dc_model_load_vertices(event_handle, mesh_index, vertices, mesh.vertex_count):
+                            raise RuntimeError(f"map {selector} event vertex reload failed")
+                        for vertex in range(mesh.vertex_count):
+                            du=vertices[vertex].uv[0]-before_uv[mesh_index][vertex][0]
+                            dv=vertices[vertex].uv[1]-before_uv[mesh_index][vertex][1]
+                            if du or dv:
+                                changed+=1
+                                if first_delta is None: first_delta=(du,dv)
+                    event_motion={"changed_vertices":changed,"first_uv_delta":first_delta}
+                finally:
+                    lib.dc_model_close(event_handle)
             map_rows.append({
                 "selector": selector,
                 "resource": f"mm00_{selector:02d}.xx",
@@ -113,6 +150,7 @@ def main():
                 "animation_sha256": hashlib.sha256(animation_data).hexdigest() if animation_data is not None else None,
                 "animation_info": animation_info,
                 "animation_motion": animation_motion,
+                "event_motion": event_motion,
                 "camera": CAMERAS[selector],
                 "camera_sha256": hashlib.sha256(camera_data).hexdigest(),
                 "camera_distance": camera.stored_distance,

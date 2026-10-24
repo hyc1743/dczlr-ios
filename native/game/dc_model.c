@@ -1,13 +1,21 @@
 #include "dc_model.h"
 #include "dc_skin.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef struct pose_track { uint32_t target,mode,count; dc_pose_key *keys; } pose_track;
 typedef struct material_track { uint32_t target,count; dc_material_key *keys; dc_material_value baseline; } material_track;
+typedef struct event_track {
+    uint32_t type,target,key_count;
+    uint8_t enabled,reverse,filtered;
+    uint32_t mesh_filter;
+    float parameter;
+} event_track;
 typedef struct mesh_data {
     dc_xx_submesh info;
     dc_mesh_vertex *vertices,*deformed,*scratch_deformed;
+    dc_mesh_vertex *event_vertices,*scratch_event_vertices;
     dc_xx_weights *weights;
     uint16_t *indices;
 } mesh_data;
@@ -26,6 +34,7 @@ struct dc_model {
     dc_animation_state animation;
     dc_animation_clip clips[512];
     dc_animation_timing timing[512];
+    event_track *events;
     dc_scene_node *nodes,*scratch_nodes;
     dc_matrix *globals,*scratch_globals;
     dc_material_value *materials,*scratch_materials;
@@ -50,12 +59,13 @@ void dc_model_close(dc_model *m) {
     if (m->meshes) for (uint32_t i=0;i<m->info.submeshes;++i) {
         free(m->meshes[i].vertices);free(m->meshes[i].indices);free(m->meshes[i].weights);
         free(m->meshes[i].deformed);free(m->meshes[i].scratch_deformed);
+        free(m->meshes[i].event_vertices);free(m->meshes[i].scratch_event_vertices);
     }
     if (m->skins) for (uint32_t i=0;i<m->info.nodes;++i) {
         free(m->skins[i].bones);free(m->skins[i].palette);free(m->skins[i].scratch_palette);
     }
     free(m->nodes);free(m->scratch_nodes);free(m->globals);free(m->scratch_globals);
-    free(m->materials);free(m->scratch_materials);free(m->poses);free(m->tracks);free(m->meshes);
+    free(m->materials);free(m->scratch_materials);free(m->poses);free(m->tracks);free(m->events);free(m->meshes);
     free(m->skins);dc_xx_close(m->xx);free(m);
 }
 #define TRY(expr) do { status=(expr); if(status!=DC_OK) goto failed; } while(0)
@@ -72,9 +82,9 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
     TRY(dc_xx_open(xx,xx_length,&m->xx));
     TRY(dc_xx_get_info(m->xx,&m->info));
     if (!static_only) TRY(dc_xa_probe(xa,xa_length,&m->xa_info));
-    /* Event tracks are admitted after full XA framing validation. Their
-     * target/flag fields remain opaque to this model controller; map scene
-     * pose tracks can still run while the event consumer is reconstructed. */
+    /* Event tracks are admitted after full XA framing validation. Type 0/1
+     * target UV scrolling is applied during ticks; other event types remain
+     * inert while their serialized views stay available to the host. */
     if (m->xa_info.morph_tracks || m->xa_info.morph_index_sets ||
         m->xa_info.morph_vector_sets || m->xa_info.bone_tracks>4096 || m->xa_info.material_tracks>4096) { status=DC_FORMAT;goto failed; }
     if (!static_only) TRY(dc_xa_load_clips(xa,xa_length,m->clips,m->timing,512));
@@ -82,7 +92,8 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
     ALLOC(skins,m->info.nodes);
     ALLOC(globals,m->info.nodes);ALLOC(scratch_globals,m->info.nodes);
     ALLOC(materials,m->info.materials);ALLOC(scratch_materials,m->info.materials);
-    ALLOC(poses,m->xa_info.bone_tracks);ALLOC(tracks,m->xa_info.material_tracks);ALLOC(meshes,m->info.submeshes);
+    ALLOC(poses,m->xa_info.bone_tracks);ALLOC(tracks,m->xa_info.material_tracks);
+    ALLOC(events,m->xa_info.event_tracks);ALLOC(meshes,m->info.submeshes);
     const uint8_t *source=xx,*animation=xa;
     for (uint32_t i=0;i<m->info.nodes;++i) {
         dc_xx_node node;TRY(dc_xx_node_at(m->xx,i,&node));
@@ -138,6 +149,17 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
         p->keys=calloc(p->count?p->count:1,sizeof(*p->keys));if(!p->keys) {status=DC_MEMORY;goto failed;}
         TRY(dc_xa_load_material_keys(xa,xa_length,i,p->keys,p->count));
     }
+    for (uint32_t i=0;i<m->xa_info.event_tracks;++i) {
+        dc_xa_event_track track;TRY(dc_xa_event_track_at(xa,xa_length,i,&track));
+        event_track *event=&m->events[i];event->type=track.type;event->target=UINT32_MAX;
+        event->key_count=track.key_count;event->enabled=track.flag_d!=0;event->reverse=track.flag_b!=0;
+        event->filtered=track.flag_a!=0;event->mesh_filter=track.tail_value;
+        uint32_t bits=track.parameter;memcpy(&event->parameter,&bits,sizeof(event->parameter));
+        if (!isfinite(event->parameter)) {status=DC_RANGE;goto failed;}
+        status=dc_xx_find_node_encoded(m->xx,animation+track.name_offset,track.name_length,&event->target);
+        if (status==DC_NOT_FOUND) event->target=UINT32_MAX;
+        else if (status!=DC_OK) goto failed;
+    }
     for (uint32_t i=0;i<m->info.submeshes;++i) {
         mesh_data *mesh=&m->meshes[i];TRY(dc_xx_submesh_at(m->xx,i,&mesh->info));
         if (mesh->info.material>=m->info.materials || mesh->info.vertex_count>1048576 || mesh->info.index_count>1048576) {status=DC_RANGE;goto failed;}
@@ -146,6 +168,14 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
         if (!mesh->vertices || !mesh->indices) {status=DC_MEMORY;goto failed;}
         TRY(dc_xx_load_mesh_vertices(m->xx,i,mesh->vertices,mesh->info.vertex_count));
         TRY(dc_xx_load_mesh_indices(m->xx,i,mesh->indices,mesh->info.index_count));
+        if (m->xa_info.event_tracks) {
+            size_t bytes=(size_t)mesh->info.vertex_count*sizeof(*mesh->vertices);
+            mesh->event_vertices=malloc(bytes?bytes:sizeof(*mesh->vertices));
+            mesh->scratch_event_vertices=malloc(bytes?bytes:sizeof(*mesh->vertices));
+            if (!mesh->event_vertices || !mesh->scratch_event_vertices) {status=DC_MEMORY;goto failed;}
+            memcpy(mesh->event_vertices,mesh->vertices,bytes);
+            memcpy(mesh->scratch_event_vertices,mesh->vertices,bytes);
+        }
         skin_node *skin=&m->skins[mesh->info.node];
         if (skin->palette) {
             size_t count=mesh->info.vertex_count?mesh->info.vertex_count:1;
@@ -224,6 +254,33 @@ dc_status dc_model_tick(dc_model *m,uint32_t delta,uint32_t now,const dc_matrix 
         status=dc_material_sample(p->keys,p->count,&p->baseline,state.frame,&m->scratch_materials[p->target]);
         if(status!=DC_OK) return status;
     }
+    if (m->xa_info.event_tracks) {
+        float elapsed=(float)delta/33.0f;
+        if (!isfinite(elapsed)) return DC_RANGE;
+        for (uint32_t i=0;i<m->info.submeshes;++i) {
+            mesh_data *mesh=&m->meshes[i];
+            if (!mesh->event_vertices) continue;
+            size_t bytes=(size_t)mesh->info.vertex_count*sizeof(*mesh->event_vertices);
+            memcpy(mesh->scratch_event_vertices,mesh->event_vertices,bytes);
+        }
+        for (uint32_t i=0;i<m->xa_info.event_tracks;++i) {
+            event_track *event=&m->events[i];
+            if (!event->enabled || event->target==UINT32_MAX || event->key_count || event->filtered ||
+                (event->type!=0 && event->type!=1)) continue;
+            float step=elapsed*event->parameter*0.001f;
+            if (event->reverse) step=-step;
+            if (!isfinite(step)) return DC_RANGE;
+            for (uint32_t mesh_index=0;mesh_index<m->info.submeshes;++mesh_index) {
+                mesh_data *mesh=&m->meshes[mesh_index];
+                if (!mesh->event_vertices || mesh->info.node!=event->target) continue;
+                for (uint32_t vertex=0;vertex<mesh->info.vertex_count;++vertex) {
+                    float *coordinate=&mesh->scratch_event_vertices[vertex].uv[event->type==0 ? 1 : 0];
+                    *coordinate+=step;
+                    if (!isfinite(*coordinate)) return DC_RANGE;
+                }
+            }
+        }
+    }
     status=dc_scene_update(m->scratch_nodes,m->info.nodes,world,m->scratch_globals,m->info.nodes);
     if(status!=DC_OK) return status;
     for (uint32_t i=0;i<m->info.nodes;++i) {
@@ -234,7 +291,8 @@ dc_status dc_model_tick(dc_model *m,uint32_t delta,uint32_t now,const dc_matrix 
     }
     for (uint32_t i=0;i<m->info.submeshes;++i) {
         mesh_data *mesh=&m->meshes[i];if (!mesh->deformed) continue;
-        status=dc_skin_apply(m->skins[mesh->info.node].scratch_palette,mesh->vertices,mesh->weights,
+        const dc_mesh_vertex *source_vertices=mesh->event_vertices ? mesh->scratch_event_vertices : mesh->vertices;
+        status=dc_skin_apply(m->skins[mesh->info.node].scratch_palette,source_vertices,mesh->weights,
             mesh->info.vertex_count,DC_SKIN_TRANSFORM_NORMAL,mesh->scratch_deformed,mesh->info.vertex_count);
         if (status!=DC_OK) return status;
     }
@@ -242,6 +300,10 @@ dc_status dc_model_tick(dc_model *m,uint32_t delta,uint32_t now,const dc_matrix 
     memcpy(m->globals,m->scratch_globals,m->info.nodes*sizeof(*m->globals));
     memcpy(m->materials,m->scratch_materials,m->info.materials*sizeof(*m->materials));
     for (uint32_t i=0;i<m->info.nodes;++i) if (m->skins[i].palette) *m->skins[i].palette=*m->skins[i].scratch_palette;
+    for (uint32_t i=0;i<m->info.submeshes;++i) if (m->meshes[i].event_vertices) {
+        size_t bytes=(size_t)m->meshes[i].info.vertex_count*sizeof(*m->meshes[i].event_vertices);
+        memcpy(m->meshes[i].event_vertices,m->meshes[i].scratch_event_vertices,bytes);
+    }
     for (uint32_t i=0;i<m->info.submeshes;++i) if (m->meshes[i].deformed)
         memcpy(m->meshes[i].deformed,m->meshes[i].scratch_deformed,m->meshes[i].info.vertex_count*sizeof(dc_mesh_vertex));
     m->animation=state;
@@ -293,7 +355,7 @@ dc_status dc_model_load_vertices(const dc_model *m,uint32_t mesh,dc_mesh_vertex 
     const mesh_data *data=&m->meshes[mesh];size_t bytes=data->info.vertex_count*sizeof(*out);
     if (!output_allowed(m,out,bytes)) return DC_ARGUMENT;
     if (capacity<data->info.vertex_count) return DC_RANGE;
-    memcpy(out,data->deformed ? data->deformed : data->vertices,bytes);return DC_OK;
+    memcpy(out,data->deformed ? data->deformed : (data->event_vertices ? data->event_vertices : data->vertices),bytes);return DC_OK;
 }
 dc_status dc_model_project(const dc_model *m,uint32_t mesh,const dc_matrix *vp,const dc_viewport *viewport,
         uint32_t diffuse,dc_sprite_vertex *out,size_t capacity) {
@@ -307,7 +369,8 @@ dc_status dc_model_project(const dc_model *m,uint32_t mesh,const dc_matrix *vp,c
         status=dc_matrix_multiply(&m->globals[data->info.node],vp,&mvp);
         if(status!=DC_OK)return status;
     }
-    return dc_mesh_project(data->deformed ? data->deformed : data->vertices,data->info.vertex_count,data->indices,data->info.index_count,&mvp,viewport,diffuse,out,capacity);
+    const dc_mesh_vertex *vertices=data->deformed ? data->deformed : (data->event_vertices ? data->event_vertices : data->vertices);
+    return dc_mesh_project(vertices,data->info.vertex_count,data->indices,data->info.index_count,&mvp,viewport,diffuse,out,capacity);
 }
 
 dc_status dc_model_project_clipped(const dc_model *m,uint32_t mesh,const dc_matrix *vp,const dc_viewport *viewport,
@@ -326,6 +389,7 @@ dc_status dc_model_project_clipped(const dc_model *m,uint32_t mesh,const dc_matr
     /* vp is copied/composed above, so reject its output alias explicitly. */
     if ((out && overlap(vp,sizeof(*vp),out,capacity*sizeof(*out))) ||
         overlap(vp,sizeof(*vp),written,sizeof(*written))) return DC_ARGUMENT;
-    return dc_mesh_clip_project(data->deformed ? data->deformed : data->vertices,data->info.vertex_count,
+    const dc_mesh_vertex *vertices=data->deformed ? data->deformed : (data->event_vertices ? data->event_vertices : data->vertices);
+    return dc_mesh_clip_project(vertices,data->info.vertex_count,
         data->indices,data->info.index_count,&mvp,viewport,diffuse,out,capacity,written);
 }

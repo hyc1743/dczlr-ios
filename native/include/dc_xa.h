@@ -71,9 +71,10 @@ DC_API dc_status dc_xa_material_track_at(const void *bytes, size_t length,
     uint32_t index, dc_xa_material_track *out);
 DC_API dc_status dc_xa_load_material_keys(const void *bytes, size_t length,
     uint32_t index, dc_material_key *keys, size_t capacity);
-/* Event tracks are admitted as bounded serialized views. Their target names,
- * flags, parameter and byte-valued frame keys are exposed without assigning
- * gameplay/effect semantics. */
+/* Event tracks are admitted as bounded serialized views. The model controller
+ * consumes verified type-0/1 target UV scrolling; remaining target names,
+ * flags, parameters and byte-valued frame keys stay available without
+ * assigning unverified gameplay/effect semantics. */
 DC_API dc_status dc_xa_event_track_at(const void *bytes, size_t length,
     uint32_t index, dc_xa_event_track *out);
 DC_API dc_status dc_xa_event_key_at(const void *bytes, size_t length,
