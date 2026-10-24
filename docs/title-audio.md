@@ -32,6 +32,14 @@ offsets `0x106c` and `0x1070`; its caller-owned context and the three gameplay
 effect slots are not statically bound to the local interaction state yet, so
 the port does not trigger them speculatively.
 
+A bounded local Windows startup/title probe now correlates runtime `ReadFile`
+sizes with the local PP index: the title path reads `bgm000.wav` from
+`RPP_01.pp` (1,542,284 bytes) and `se100.wav` from `RPP_14.pp` (104,986 bytes).
+This confirms the title bindings at runtime for the renamed local copy with a
+temporary x86 D3DX dependency. No gameplay interaction was injected in that
+probe, so it does not resolve `se016/se322/se332` triggers or prove audible
+output.
+
 `PORTLAB_TITLE_AUDIO_ADVANCED` requires the title to have presented and the
 playing background track's clock to advance beyond 0.1 seconds. The simulator
 startup gate supplies generated PCM tones through generated PP archives and
