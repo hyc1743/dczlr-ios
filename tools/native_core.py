@@ -115,6 +115,18 @@ class Matrix(C.Structure):
     _fields_ = [("values", C.c_float * 16)]
 
 
+class CameraOrbit(C.Structure):
+    _fields_ = [("base", Matrix)]+[(n,C.c_float) for n in ("stored_distance","height","pitch","yaw")]
+
+
+class CameraLens(C.Structure):
+    _fields_ = [(n,C.c_float) for n in ("fov_y","near_z","far_z")]+[(n,C.c_uint32) for n in ("viewport_width","viewport_height")]
+
+
+class CameraMatrices(C.Structure):
+    _fields_ = [(n,Matrix) for n in ("world","view","projection","view_projection")]
+
+
 class MeshVertex(C.Structure):
     _fields_ = [("position", C.c_float*3), ("normal", C.c_float*3), ("uv", C.c_float*2)]
 
@@ -324,10 +336,10 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c",
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c", ROOT / "native/game/dc_camera.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -465,6 +477,10 @@ def library():
     lib.dc_pose_sample.restype = C.c_int
     lib.dc_matrix_multiply.argtypes = [C.POINTER(Matrix), C.POINTER(Matrix), C.POINTER(Matrix)]
     lib.dc_matrix_multiply.restype = C.c_int
+    lib.dc_camera_build.argtypes = [C.POINTER(CameraOrbit), C.POINTER(CameraLens), C.POINTER(CameraMatrices)]
+    lib.dc_camera_build.restype = C.c_int
+    lib.dc_camera_read_preset.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(CameraOrbit)]
+    lib.dc_camera_read_preset.restype = C.c_int
     lib.dc_xa_pose_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAPoseTrack)]
     lib.dc_xa_pose_track_at.restype = C.c_int
     lib.dc_xa_load_pose_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(PoseKey), C.c_size_t]
