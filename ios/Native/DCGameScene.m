@@ -34,6 +34,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     dc_matrix _cameraBase,_actorWorld;
     uint32_t _cameraPreset;
     uint32_t _lastTick; BOOL _tickInitialized;
+    float _lastInputX,_lastInputY; BOOL _inputInitialized;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
 }
@@ -148,8 +149,18 @@ static uint32_t gameColor(const dc_material_value *value) {
     }
     return nil;
 }
-- (NSString *)drawAtTick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height {
+- (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching
+    width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
+    if(touching) {
+        if(_inputInitialized) {
+            float dx=fmaxf(-.15f,fminf(.15f,x-_lastInputX));
+            float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
+            _actor.world.values[12]=fmaxf(-100.0f,fminf(100.0f,_actor.world.values[12]+dx*80.0f));
+            _actor.world.values[14]=fmaxf(-100.0f,fminf(100.0f,_actor.world.values[14]-dz*80.0f));
+        }
+        _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
+    } else _inputInitialized=NO;
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=-1.5f,.height=0,.pitch=0,.yaw=0};dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";

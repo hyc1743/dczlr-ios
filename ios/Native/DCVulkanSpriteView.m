@@ -242,7 +242,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
                 if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
             }
-            NSString *gameFailure=[_gameScene drawAtTick:sceneTick width:_width height:_height];
+            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
             if(gameFailure)return gameFailure;
             _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;return nil;
         }
