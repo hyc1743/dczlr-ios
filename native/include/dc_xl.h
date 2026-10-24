@@ -34,7 +34,7 @@ typedef struct dc_xl_light {
     float specular[4];
     float position[4];
     float direction[4];
-    float parameters[6];
+    float parameters[5];
     float transform[16];
 } dc_xl_light;
 

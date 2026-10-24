@@ -160,7 +160,7 @@ class XLLight(C.Structure):
                 ("flags", C.c_uint8 * 3),
                 ("diffuse", C.c_float * 4), ("ambient", C.c_float * 4),
                 ("specular", C.c_float * 4), ("position", C.c_float * 4),
-                ("direction", C.c_float * 4), ("parameters", C.c_float * 6),
+                ("direction", C.c_float * 4), ("parameters", C.c_float * 5),
                 ("transform", C.c_float * 16)]
 
 

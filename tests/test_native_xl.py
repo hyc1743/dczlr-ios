@@ -47,7 +47,7 @@ class NativeXLTests(unittest.TestCase):
         self.assertEqual((view.kind, view.enabled, list(view.flags)), (2, 1, [0, 0, 0]))
         for actual, expected in zip(view.diffuse, [1.0, 1.1, 1.2, 1.3]):
             self.assertAlmostEqual(actual, expected, places=6)
-        for actual, expected in zip(view.parameters, [3.0, 3.1, 3.2, 3.3, 3.4, 3.5]):
+        for actual, expected in zip(view.parameters, [3.0, 3.1, 3.2, 3.3, 3.4]):
             self.assertAlmostEqual(actual, expected, places=6)
         for actual, expected in zip(view.transform, [3.5 + index / 10 for index in range(16)]):
             self.assertAlmostEqual(actual, expected, places=6)

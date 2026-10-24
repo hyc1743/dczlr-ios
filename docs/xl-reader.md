@@ -11,7 +11,7 @@ little-endian floats, and no trailing bytes.
 The native `dc_xl_probe` and `dc_xl_light_at` APIs validate the complete
 container before exposing borrowed spans and the numeric groups. The float
 groups are kept in their serialized order: three RGBA groups, position and
-direction vectors, six light parameters, and a 4×4 transform. Unknown tag bytes
+direction vectors, five light parameters, and a 4×4 transform. Unknown tag bytes
 remain visible through the kind/enabled/flags fields; no shader or lighting
 semantics are guessed by the reader.
 
