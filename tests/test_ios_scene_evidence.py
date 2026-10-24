@@ -126,6 +126,8 @@ class SceneEvidenceTests(unittest.TestCase):
         self.assertEqual(report["scenes"], ["gameplay", "gameComplete"])
         self.assertEqual(report["completed_interactions"], 1)
         self.assertEqual(report["complete_game"], "terminal chapter 3 scene presented")
+        self.assertEqual(scene_evidence(complete, "gameComplete")["complete_game"],
+                         "terminal chapter 3 scene presented")
 
 
 if __name__ == "__main__":
