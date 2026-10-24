@@ -7,7 +7,7 @@ on:
       - ipa-build
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   portable:
@@ -152,3 +152,30 @@ jobs:
             ios/build/PortLab-unsigned.ipa
             ios/build/build-report.json
             ios/Resources/DczlrData.manifest.json
+
+  publish-ipa:
+    needs: unsigned-ipa
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PortLab-unsigned-ipa
+          path: out/release
+      - name: Publish public unsigned IPA release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="ipa-${GITHUB_SHA:0:7}"
+          ipa="$(find out/release -name PortLab-unsigned.ipa -type f -print -quit)"
+          report="$(find out/release -name build-report.json -type f -print -quit)"
+          manifest="$(find out/release -name DczlrData.manifest.json -type f -print -quit)"
+          test -n "$ipa" -a -n "$report" -a -n "$manifest"
+          gh release view "$tag" >/dev/null 2>&1 || \
+            gh release create "$tag" --title "$tag" \
+              --notes "Unsigned iOS build for ${GITHUB_SHA}. Sign with your own Apple identity before installation. Game resource parts remain local and are not published." \
+              --target "$GITHUB_SHA"
+          gh release upload "$tag" "$ipa" "$report" "$manifest" --clobber
