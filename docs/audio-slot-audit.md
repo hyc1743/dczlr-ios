@@ -46,6 +46,12 @@ The first natural gameplay-menu activation (hover at `(1200,470)` with input
 voice binding. The iOS host now queues that voice when row 1 is activated on
 map 0; later map-specific voice bindings remain separate until observed.
 
+The longer bounded run also observes the next automatic voice: after the
+`ast001_01.wav` read, `ast002_01.wav` (226,702 bytes) is read about ten seconds
+later while the same scene remains active. The Apple adapter now chains this
+first observed pair after row-1 activation; later voice/state transitions still
+need their own runtime evidence.
+
 ```powershell
 python tools/audit_audio_slots.py --data Data --output research/native-core/audio-slot-audit.json
 ```

@@ -3,6 +3,9 @@
 #import <AVFoundation/AVFoundation.h>
 #import <dispatch/dispatch.h>
 
+@interface DCGameAudio () <AVAudioPlayerDelegate>
+@end
+
 static NSArray<NSString *> *DCGameplaySlotNames(void) {
     static NSArray<NSString *> *names;
     static dispatch_once_t onceToken;
@@ -24,6 +27,7 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
     AVAudioPlayer *_music,*_selection;
     NSMutableDictionary<NSString *,AVAudioPlayer *> *_gameplayEffects,*_gameplayVoices;
     NSString *_directory;
+    NSString *_voiceChainNext;
     BOOL _advanced;
 }
 - (NSData *)sound:(NSString *)name inArchive:(NSString *)file directory:(NSString *)directory error:(NSString **)error {
@@ -88,8 +92,15 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
         if (!_gameplayVoices) _gameplayVoices=[NSMutableDictionary dictionary];
         _gameplayVoices[name]=player;
     }
+    player.delegate=self;
+    _voiceChainNext=[name caseInsensitiveCompare:@"ast001_01.wav"]==NSOrderedSame ? @"ast002_01.wav" : nil;
     player.currentTime=0;
     return [player play];
+}
+- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
+    if (!flag || player.delegate!=self) return;
+    NSString *next=_voiceChainNext;_voiceChainNext=nil;
+    if (next) [self playGameplayVoiceNamed:next];
 }
 - (NSString *)startTitleMusic {
     if (_music.isPlaying) return nil;
@@ -110,6 +121,6 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
 }
 - (BOOL)selectionBusy { return _selection.isPlaying; }
 - (void)stopTitleMusic { [_music stop]; }
-- (void)pause { [_music pause];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
+- (void)pause { _voiceChainNext=nil;[_music pause];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
 - (void)dealloc { [_music stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
 @end

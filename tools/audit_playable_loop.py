@@ -239,6 +239,7 @@ def main(data_root=None, report_path=None):
         effect_data = entry(data_root / "RPP_14.pp", effect_name)
         gameplay_effects[effect_name] = {"bytes": len(effect_data), "sha256": hashlib.sha256(effect_data).hexdigest()}
     first_gameplay_voice = entry(data_root / "RPP_11.pp", "ast001_01.wav")
+    second_gameplay_voice = entry(data_root / "RPP_11.pp", "ast002_01.wav")
     scene_dependencies = {}
     for archive_name, resource_names in {
         "RPP_04.pp": ("ak00_00.eyes", "am00_01.neck"),
@@ -603,9 +604,12 @@ def main(data_root=None, report_path=None):
         },
         "gameplay_effects": gameplay_effects,
         "gameplay_voice": {
-            "name": "ast001_01.wav",
-            "bytes": len(first_gameplay_voice),
-            "sha256": hashlib.sha256(first_gameplay_voice).hexdigest(),
+            "chain": [
+                {"name": "ast001_01.wav", "bytes": len(first_gameplay_voice),
+                 "sha256": hashlib.sha256(first_gameplay_voice).hexdigest()},
+                {"name": "ast002_01.wav", "bytes": len(second_gameplay_voice),
+                 "sha256": hashlib.sha256(second_gameplay_voice).hexdigest()},
+            ],
             "binding": "first natural map-0 gameplay-menu activation",
         },
         "actor_skinning": actor_skin_audit,
