@@ -31,7 +31,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     NSString *_directory;
     dc_vk_sprite *_renderer;
     dc_game_model _map,_actor;
-    dc_matrix _cameraBase;
+    dc_matrix _cameraBase,_actorWorld;
     uint32_t _cameraPreset;
     uint32_t _lastTick; BOOL _tickInitialized;
     BOOL _loaded;
@@ -95,9 +95,9 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error])return nil;
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
     uint32_t anchor=[self findAnchor:&_map];
-    if(anchor!=UINT32_MAX && dc_xx_node_matrix(_map.xx,anchor,&_cameraBase)!=DC_OK)_cameraBase=gameIdentity();
-    if(anchor==UINT32_MAX)_cameraBase=gameIdentity();
-    _actor.world=_cameraBase;
+    _actorWorld=gameIdentity();
+    if(anchor!=UINT32_MAX && dc_xx_node_matrix(_map.xx,anchor,&_actorWorld)!=DC_OK)_actorWorld=gameIdentity();
+    _cameraBase=gameIdentity();
     _cameraPreset=0;
     NSString *camPath=[directory stringByAppendingPathComponent:@"RPP_03.pp"];
     DCArchive *camArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:camPath] error:nil];
@@ -109,9 +109,8 @@ static uint32_t gameColor(const dc_material_value *value) {
     dc_camera_orbit orbit;
     if(!camData || dc_camera_read_preset(camData.bytes,camData.length,0,&orbit)!=DC_OK)
         orbit=(dc_camera_orbit){.base=gameIdentity(),.stored_distance=-1.5f};
-    dc_matrix offset=orbit.base,combined;
-    dc_matrix_multiply(&offset,&_cameraBase,&combined);orbit.base=combined;
     _cameraBase=orbit.base;
+    _actor.world=_actorWorld;
     _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
