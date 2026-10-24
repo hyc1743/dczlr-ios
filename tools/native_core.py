@@ -501,6 +501,10 @@ def library():
     lib.dc_camera_read_preset.restype = C.c_int
     lib.dc_game_player_step.argtypes=[C.POINTER(GamePlayer),C.POINTER(GameInput),C.c_float,C.POINTER(GamePlayer)]
     lib.dc_game_player_step.restype=C.c_int
+    lib.dc_game_player_save.argtypes=[C.POINTER(GamePlayer),C.c_void_p,C.c_size_t]
+    lib.dc_game_player_save.restype=C.c_int
+    lib.dc_game_player_load.argtypes=[C.c_void_p,C.c_size_t,C.POINTER(GamePlayer)]
+    lib.dc_game_player_load.restype=C.c_int
     lib.dc_xa_pose_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAPoseTrack)]
     lib.dc_xa_pose_track_at.restype = C.c_int
     lib.dc_xa_load_pose_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(PoseKey), C.c_size_t]

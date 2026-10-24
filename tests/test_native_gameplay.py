@@ -29,4 +29,11 @@ class NativeGameplayTests(unittest.TestCase):
         self.assertEqual(self.lib.dc_game_player_step(C.byref(state),None,1,C.byref(out)),1)
         self.assertEqual(self.lib.dc_game_player_step(C.byref(state),C.byref(inp),1,None),1)
 
+    def test_save_load_checksum_and_atomic_failure(self):
+        state=GamePlayer(1.25,-2.5,-4,4,-5,5,8);record=C.create_string_buffer(32)
+        self.assertEqual(self.lib.dc_game_player_save(C.byref(state),record,32),0)
+        out=GamePlayer();self.assertEqual(self.lib.dc_game_player_load(record,32,C.byref(out)),0)
+        self.assertAlmostEqual(out.x,state.x);self.assertAlmostEqual(out.z,state.z)
+        before=bytes(out);record[0]=ord('X');self.assertEqual(self.lib.dc_game_player_load(record,32,C.byref(out)),3);self.assertEqual(bytes(out),before)
+
 if __name__=='__main__':unittest.main()

@@ -41,6 +41,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
     dc_game_player _player;
+    BOOL _playerSaveDirty;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
@@ -128,6 +129,20 @@ static uint32_t gameColor(const dc_material_value *value) {
     float margin=1.0f;_walkMinX+=margin;_walkMaxX-=margin;_walkMinZ+=margin;_walkMaxZ-=margin;
     _player=(dc_game_player){.x=_actor.world.values[12],.z=_actor.world.values[14],.min_x=_walkMinX,.max_x=_walkMaxX,.min_z=_walkMinZ,.max_z=_walkMaxZ,.speed=8};
 }
+- (void)loadPlayerState {
+    NSString *path=[_directory stringByAppendingPathComponent:@"save/player.state"];
+    NSData *data=[NSData dataWithContentsOfFile:path];if(data.length<DC_GAME_PLAYER_SAVE_BYTES)return;
+    dc_game_player loaded;if(dc_game_player_load(data.bytes,data.length,&loaded)!=DC_OK)return;
+    _player.x=fmaxf(_player.min_x,fminf(_player.max_x,loaded.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,loaded.z));
+    if(loaded.speed>0)_player.speed=loaded.speed;_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
+}
+- (void)savePlayerState {
+    if(!_playerSaveDirty)return;
+    NSMutableData *data=[NSMutableData dataWithLength:DC_GAME_PLAYER_SAVE_BYTES];
+    if(dc_game_player_save(&_player,data.mutableBytes,data.length)!=DC_OK)return;
+    NSString *directory=[_directory stringByAppendingPathComponent:@"save"];[[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
+    [data writeToFile:[directory stringByAppendingPathComponent:@"player.state"] options:NSDataWritingAtomic error:nil];_playerSaveDirty=NO;
+}
 - (BOOL)surfaceYAtX:(float)x z:(float)z nearY:(float)nearY result:(float *)result {
     BOOL found=NO;float best=0,bestDistance=FLT_MAX;
     for(size_t i=0;i<_surfaceCount;++i){dc_walk_surface *s=&_surfaces[i];float den=(s->z[1]-s->z[2])*(s->x[0]-s->x[2])+(s->x[2]-s->x[1])*(s->z[0]-s->z[2]);if(fabsf(den)<1e-5f)continue;float a=((s->z[1]-s->z[2])*(x-s->x[2])+(s->x[2]-s->x[1])*(z-s->z[2]))/den;float b=((s->z[2]-s->z[0])*(x-s->x[2])+(s->x[0]-s->x[2])*(z-s->z[2]))/den;float c=1-a-b;if(a<-.01f||b<-.01f||c<-.01f)continue;float y=a*s->y[0]+b*s->y[1]+c*s->y[2],distance=fabsf(y-nearY);if(distance<bestDistance){bestDistance=distance;best=y;found=YES;}}
@@ -166,6 +181,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     [self computeWalkBounds];
     _player.x=_actor.world.values[12];_player.z=_actor.world.values[14];
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
+    [self loadPlayerState];
     _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
@@ -175,7 +191,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     slot->model=NULL;slot->xx=NULL;
 }
 - (void)detachRenderer { _renderer=NULL; }
-- (void)dealloc { free(_surfaces);[self detachModel:&_map];[self detachModel:&_actor]; }
+- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachModel:&_map];[self detachModel:&_actor]; }
 
 - (uint32_t)textureFor:(dc_game_model *)slot mesh:(const dc_xx_submesh *)mesh {
     dc_xx_material material;if(dc_xx_material_at(slot->xx,mesh->material,&material)!=DC_OK)return UINT32_MAX;
@@ -212,10 +228,10 @@ static uint32_t gameColor(const dc_material_value *value) {
             float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
             dc_game_player next;
             dc_game_input input={.axis_x=dx/.15f,.axis_z=-dz/.15f,.touching=1};
-            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK){_player=next;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;float floorY;if([self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY])_actor.world.values[13]=floorY;}
+            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK){_player=next;_playerSaveDirty=YES;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;float floorY;if([self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY])_actor.world.values[13]=floorY;}
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
-    } else _inputInitialized=NO;
+    } else { _inputInitialized=NO;[self savePlayerState]; }
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=-1.5f,.height=0,.pitch=0,.yaw=0};
     float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
