@@ -904,7 +904,8 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (status != DC_OK) break;
         uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
         draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
-            .image = image, .pipeline = 3 + blend + 3*item->depth_mode, .filter = item->point_filter ? 0 : 1, .alpha_op = 4};
+            .image = image, .pipeline = 3 + blend + 3*item->depth_mode, .filter = item->point_filter ? 0 : 1,
+            .alpha_op = blend == 0 ? 0 : 4};
         total += item->vertex_count;
     }
     if (status == DC_OK) status = render_prepared(r, draws, visible, clear, rgba,clip);
