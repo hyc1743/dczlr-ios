@@ -8,7 +8,7 @@ root descendant; material names bind to the first matching material. Missing
 targets are inert. Tracks retain file order and individual model baselines.
 
 The current explicit profile has mode-0 node tracks, material tracks, bounded
-unfiltered type-0/1 no-key event UV scrolling, unskinned meshes and indexed
+unfiltered type-0/1 no-key event UV scrolling, rigid meshes and indexed
 four-matrix skinning. Other event types, keyed/filtered events, crossfades, mode-1 poses, billboard transforms
 and morphs are still rejected. Failed updates
 preserve the model's clips, controller, node matrices, material values,
@@ -27,6 +27,12 @@ All 91 meshes project under a synthetic bounded camera. Across two world
 matrices, 196 node-global comparisons match the isolated original hierarchy
 driver with reference D3DX math exactly. This is not the original game camera,
 GPU appearance or scene execution. See `skinning.md` for the weighted path.
+
+The local playable-loop audit also opens the real actor and advances clip 1
+through a 400 ms tick. It admits 61 world-space skinned meshes and observes
+259 changed vertices in a selected skinned mesh, confirming that the actor
+path is connected to the model runtime. This remains resource/runtime evidence;
+Apple GPU presentation and original lighting are separate gates.
 
 The real chapter-3 path now also admits the original map-1 animation
 `RPP_10.pp/mn00_01.xa`: its clip 1 spans frames 10–50, binds 35 mode-0 node

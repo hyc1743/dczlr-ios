@@ -179,6 +179,45 @@ def main():
 
     actor = entry(ROOT / "Data/RPP_08.pp", "am00_01.xx")
     actor_xa = entry(ROOT / "Data/RPP_08.pp", "an00_02.xa")
+    skin_handle = C.c_void_p()
+    if lib.dc_model_open(actor, len(actor), actor_xa, len(actor_xa), C.byref(skin_handle)):
+        raise RuntimeError("actor skin audit admission failed")
+    actor_skin_audit = {"skinned_meshes": 0, "changed_vertices": 0, "verified": False}
+    try:
+        if lib.dc_model_request(skin_handle, 1, 0) or lib.dc_model_tick(skin_handle, 0, 0, C.byref(identity_world)):
+            raise RuntimeError("actor skin audit initial tick failed")
+        actor_skin_info = XXInfo()
+        if lib.dc_model_get_info(skin_handle, C.byref(actor_skin_info)):
+            raise RuntimeError("actor skin audit info failed")
+        selected_skin_mesh = None
+        for mesh_index in range(actor_skin_info.submeshes):
+            mesh = XXSubmesh()
+            space = C.c_uint32()
+            if lib.dc_model_mesh(skin_handle, mesh_index, C.byref(mesh)) or \
+                    lib.dc_model_vertex_space(skin_handle, mesh_index, C.byref(space)):
+                raise RuntimeError("actor skin audit mesh metadata failed")
+            if space.value == 1:
+                actor_skin_audit["skinned_meshes"] += 1
+                if selected_skin_mesh is None:
+                    selected_skin_mesh = mesh_index
+        if selected_skin_mesh is not None:
+            mesh = XXSubmesh()
+            lib.dc_model_mesh(skin_handle, selected_skin_mesh, C.byref(mesh))
+            before_vertices = (MeshVertex * mesh.vertex_count)()
+            after_vertices = (MeshVertex * mesh.vertex_count)()
+            if lib.dc_model_load_vertices(skin_handle, selected_skin_mesh, before_vertices, mesh.vertex_count) or \
+                    lib.dc_model_tick(skin_handle, 400, 400, C.byref(identity_world)) or \
+                    lib.dc_model_load_vertices(skin_handle, selected_skin_mesh, after_vertices, mesh.vertex_count):
+                raise RuntimeError("actor skin audit vertex update failed")
+            actor_skin_audit["changed_vertices"] = sum(
+                bytes(before_vertices[index]) != bytes(after_vertices[index])
+                for index in range(mesh.vertex_count)
+            )
+            actor_skin_audit["verified"] = actor_skin_audit["changed_vertices"] > 0
+        if not actor_skin_audit["verified"]:
+            raise RuntimeError("actor skin audit observed no changed skinned vertices")
+    finally:
+        lib.dc_model_close(skin_handle)
     actor_handle = C.c_void_p()
     if lib.dc_model_open(actor, len(actor), actor_xa, len(actor_xa), C.byref(actor_handle)):
         raise RuntimeError("actor admission failed")
@@ -556,6 +595,7 @@ def main():
             "vector_views": len(vectors),
         },
         "gameplay_effects": gameplay_effects,
+        "actor_skinning": actor_skin_audit,
         "scene_dependencies": scene_dependencies,
         "projection": projection,
         "interaction_rows": interaction_rows,

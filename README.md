@@ -13,7 +13,7 @@ product. See [the reference comparison](docs/weixing3-porting-method.md) and
 [native architecture](docs/native-runtime-design.md).
 
 The implemented resource/runtime chain includes bounded PP and BMP/TGA/EMA
-readers, XX nodes/materials/embedded images and unskinned meshes, XA clips and
+readers, XX nodes/materials/embedded images, rigid and indexed-skinned meshes, XA clips and
 material/node keys, numeric animation/material/pose sampling, node hierarchy,
 triangle projection and Vulkan rendering. Original-function oracles and local
 resource audits document their admitted profiles; skinning, complete effects,
