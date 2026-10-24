@@ -37,7 +37,8 @@ alone, avoiding a second node-world transform. Unskinned meshes retain their
 node-local path. Hierarchical hidden flags have a separate draw-admission API.
 Current admission requires active non-255 indices to belong to the node's
 serialized bone set. The general palette API can preserve state across draws.
-Crossfades, morphs/events and broader game-scene initialization remain pending.
+Crossfades, morphs and unsupported/keyed event channels remain pending; the
+verified map-1 type-0/1 no-key UV event path is now part of model ticking.
 
 A private first-actor audit follows three actual-data animation samples through
 384 original pose calls, 675 original hierarchy comparisons and 93 original
