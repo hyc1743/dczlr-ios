@@ -225,7 +225,6 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
      * map/actor triangle lists. Two opaque self-authored quads overlap at the
      * center; the smaller Z wins in both orders. */
     OK(dc_vk_sprite_remove_texture(r,texture));
-    OK(dc_vk_sprite_remove_texture(r,transparent));
     const uint8_t red_pixel[4]={255,0,0,255},green_pixel[4]={0,255,0,255};
     uintptr_t red_texture=0,green_texture=0;
     OK(dc_vk_sprite_upload(r,1,1,red_pixel,sizeof(red_pixel),&red_texture));
