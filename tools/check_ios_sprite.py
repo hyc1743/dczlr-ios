@@ -168,19 +168,17 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         from startup_fixture import install
         profile=install(container/'Documents/game/Data')
         (output/'fixture.json').write_text(json.dumps(profile,indent=2)+'\n',encoding='utf-8')
-    try:
-        launch_environment=dict(os.environ)
-        if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
-        if exercise_new_game:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_NEW_GAME']='1'
-        launch_process = subprocess.run(["xcrun", "simctl", "launch", "--terminate-running-process",
-            device, "org.example.portlab"], capture_output=True, text=True, timeout=60,env=launch_environment)
-        launch = launch_process.stdout + launch_process.stderr
-        launch_timed_out = launch_process.returncode != 0
-    except subprocess.TimeoutExpired as error:
-        launch_timed_out = True
-        launch = "launch timed out after 60s; stdout=" + str(error.stdout)[-1000:] + "; stderr=" + str(error.stderr)[-1000:]
-    (output / "launch.txt").write_text(launch + "\n", encoding="utf-8")
-    deadline = time.monotonic() + (100 if startup_fixture else 60)
+    launch_environment=dict(os.environ)
+    if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
+    if exercise_new_game:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_NEW_GAME']='1'
+    # Cold CoreSimulator may queue the same request for over two minutes.
+    # Observe that live command and app-authored evidence concurrently; never
+    # issue another launch merely because an observation interval elapsed.
+    launch_output=(output/'launch.txt').open('w',encoding='utf-8')
+    launch_process=subprocess.Popen(['xcrun','simctl','launch','--terminate-running-process',device,'org.example.portlab'],
+        stdout=launch_output,stderr=subprocess.STDOUT,text=True,env=launch_environment)
+    wait_seconds=300 if startup_fixture else 240
+    deadline = time.monotonic() + wait_seconds
     log = ""
     captured=set()
     while time.monotonic() < deadline:
@@ -201,6 +199,20 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             if (scene_ok and audio_ok) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
+    launch_pending=launch_process.poll() is None
+    launch_returncode=launch_process.poll()
+    if launch_pending:
+        # This owns only the simctl request process. The app is left running
+        # for evidence collection, then terminated explicitly at the end.
+        launch_process.terminate()
+        try:launch_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:launch_process.kill();launch_process.wait(timeout=5)
+    launch_output.close()
+    launch=(output/'launch.txt').read_text(encoding='utf-8')
+    launch_timed_out=launch_pending or launch_returncode!=0
+    launch_state={'pid':launch_process.pid,'pending_when_frame_poll_ended':launch_pending,
+        'returncode_before_cleanup':launch_returncode,'frame_wait_seconds':wait_seconds,'single_launch_request':True}
+    (output/'launch-state.json').write_text(json.dumps(launch_state,indent=2)+'\n',encoding='utf-8')
     (output / "app.log").write_text(log, encoding="utf-8")
     try:
         unified = subprocess.run(["xcrun", "simctl", "spawn", device, "log", "show", "--last", "3m",
@@ -230,6 +242,12 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     except subprocess.TimeoutExpired as error:
         screenshot_log = str(error)
     (output / "screenshot-command.txt").write_text(screenshot_log, encoding="utf-8")
+    # Diagnostics can outlast a late cold launch. Re-read the same container's
+    # evidence before classifying the outcome; a stale empty snapshot is not
+    # proof that the app failed to start.
+    path=container/'Documents/log.txt' if container else None
+    if path and path.exists():
+        log=path.read_text(encoding='utf-8');(output/'app.log').write_text(log,encoding='utf-8')
     if not scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose):
         try:
             process = subprocess.run(["xcrun", "simctl", "spawn", device, "launchctl", "list"],
@@ -242,7 +260,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified_log[-1500:])
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame; launch_timed_out=" +
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
-    report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,
+    report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,"launch_command":launch_state,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)
