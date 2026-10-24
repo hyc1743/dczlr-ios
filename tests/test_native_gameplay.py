@@ -35,6 +35,8 @@ class NativeGameplayTests(unittest.TestCase):
         out=GamePlayer();self.assertEqual(self.lib.dc_game_player_load(record,32,C.byref(out)),0)
         self.assertAlmostEqual(out.x,state.x);self.assertAlmostEqual(out.z,state.z);self.assertEqual((out.interaction_count,out.map_selector),(3,5))
         before=bytes(out);record[0]=ord('X');self.assertEqual(self.lib.dc_game_player_load(record,32,C.byref(out)),3);self.assertEqual(bytes(out),before)
+        bad=GamePlayer(1.25,-2.5,-4,4,-5,5,8,3,2)
+        self.assertEqual(self.lib.dc_game_player_save(C.byref(bad),record,32),4)
 
     def test_real_map_sequence_is_atomic_and_terminal(self):
         sequence=(0,1,3,4,5,6,7,8)

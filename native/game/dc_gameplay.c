@@ -25,11 +25,13 @@ dc_status dc_game_next_map_selector(uint32_t current,uint32_t *next,uint32_t *fi
 }
 dc_status dc_game_player_save(const dc_game_player *state,void *bytes,size_t length){
     if(!state||!bytes)return DC_ARGUMENT;if(length<DC_GAME_PLAYER_SAVE_BYTES)return DC_RANGE;
-    if(!isfinite(state->x)||!isfinite(state->z)||state->min_x>state->max_x||state->min_z>state->max_z||state->speed<0)return DC_RANGE;
+    uint32_t nextSelector=0,finished=0;
+    if(!isfinite(state->x)||!isfinite(state->z)||state->min_x>state->max_x||state->min_z>state->max_z||state->speed<0||dc_game_next_map_selector(state->map_selector,&nextSelector,&finished)!=DC_OK)return DC_RANGE;
     uint8_t record[DC_GAME_PLAYER_SAVE_BYTES]={0};memcpy(record,"PLGP",4);record[4]=1;memcpy(record+8,&state->x,4);memcpy(record+12,&state->z,4);memcpy(record+16,&state->speed,4);memcpy(record+20,&state->interaction_count,4);memcpy(record+24,&state->map_selector,4);uint32_t sum=checksum(record,28);memcpy(record+28,&sum,4);memcpy(bytes,record,sizeof(record));return DC_OK;
 }
 dc_status dc_game_player_load(const void *bytes,size_t length,dc_game_player *out){
     if(!bytes||!out)return DC_ARGUMENT;if(length<DC_GAME_PLAYER_SAVE_BYTES)return DC_RANGE;const uint8_t *record=bytes;uint32_t expected=checksum(record,28),actual;memcpy(&actual,record+28,4);if(memcmp(record,"PLGP",4)||record[4]!=1||expected!=actual)return DC_FORMAT;
     dc_game_player next={0};memcpy(&next.x,record+8,4);memcpy(&next.z,record+12,4);memcpy(&next.speed,record+16,4);memcpy(&next.interaction_count,record+20,4);memcpy(&next.map_selector,record+24,4);
-    if(!isfinite(next.x)||!isfinite(next.z)||!isfinite(next.speed)||next.speed<0)return DC_RANGE;*out=next;return DC_OK;
+    uint32_t nextSelector=0,finished=0;
+    if(!isfinite(next.x)||!isfinite(next.z)||!isfinite(next.speed)||next.speed<0||dc_game_next_map_selector(next.map_selector,&nextSelector,&finished)!=DC_OK)return DC_RANGE;*out=next;return DC_OK;
 }
