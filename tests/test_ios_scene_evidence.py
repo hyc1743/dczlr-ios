@@ -119,7 +119,8 @@ class SceneEvidenceTests(unittest.TestCase):
         interaction = base + "2026-10-25T00:00:01Z PORTLAB_GAME_INTERACTION_COMPLETED submitted\n"
         with self.assertRaises(ValueError):
             gameplay_evidence(interaction)
-        complete = interaction + "2026-10-25T00:00:02Z PORTLAB_SCENE_PRESENTED=gameComplete submitted\n"
+        complete = interaction + "2026-10-25T00:00:02Z PORTLAB_GAMEPLAY_SKIN_ADVANCED submitted\n"
+        complete += "2026-10-25T00:00:02Z PORTLAB_SCENE_PRESENTED=gameComplete submitted\n"
         complete += "2026-10-25T00:00:02Z PORTLAB_GAME_COMPLETED submitted\n"
         report = gameplay_evidence(complete)
         self.assertEqual(report["scenes"], ["gameplay", "gameComplete"])

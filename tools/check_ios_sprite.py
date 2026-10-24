@@ -68,19 +68,23 @@ def gameplay_scenes(log):
     return re.findall(r"(?m)^\S+ PORTLAB_SCENE_PRESENTED=(gameplay|gameComplete)(?= |$)", log)
 
 
-def gameplay_evidence(log, require_complete=True):
+def gameplay_evidence(log, require_complete=True, require_skin=True):
     scenes = gameplay_scenes(log)
     if not scenes or scenes[0] != "gameplay":
         raise ValueError("Chapter 3 gameplay scene was not presented")
     interactions = re.findall(r"(?m)^\S+ PORTLAB_GAME_INTERACTION_COMPLETED(?= |$)", log)
     if not interactions:
         raise ValueError("No completed gameplay interaction was reported")
+    skin = bool(re.search(r"(?m)^\S+ PORTLAB_GAMEPLAY_SKIN_ADVANCED(?= |$)", log))
+    if require_skin and not skin:
+        raise ValueError("Real gameplay actor skinning was not reported")
     if require_complete and "gameComplete" not in scenes:
         raise ValueError("Terminal gameplay scene was not presented")
     return {
         "scenes": scenes,
         "completed_interactions": len(interactions),
         "gameplay": "chapter 3 scene presented and at least one interaction completed",
+        "actor_skinning": "real actor skinning advanced and was presented" if skin else "not required",
         "complete_game": "terminal chapter 3 scene presented" if "gameComplete" in scenes else "not required",
         "physical_iphone": "not tested",
     }

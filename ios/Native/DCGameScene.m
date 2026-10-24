@@ -79,6 +79,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     uint32_t _interactionCount;BOOL _interactionCompleted;
     BOOL _mapAdvanced;uint32_t _mapSelector;
     BOOL _gameFinished;
+    uint32_t _actorSkinMeshCount;
+    BOOL _actorSkinAdvanced;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
@@ -89,6 +91,7 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (uint32_t)interactionCount { return _interactionCount; }
 - (BOOL)interactionCompleted { return _interactionCompleted; }
 - (BOOL)gameFinished { return _gameFinished; }
+- (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
 
 - (NSString *)decodedName:(const uint8_t *)raw length:(size_t)length {
     if (!raw || !length || length > 1024) return nil;
@@ -409,6 +412,11 @@ static void freeMorphCaches(dc_game_model *slot) {
      }
     if(![self loadMapVariantLightForSelector:0 archive:mapArchive error:error] ||
        ![self loadLightForSelector:0 archive:lightArchive error:error])return nil;
+    for(uint32_t mesh=0;mesh<_actor.info.submeshes;++mesh) {
+        uint32_t space=DC_MODEL_SPACE_LOCAL;
+        if(dc_model_vertex_space(_actor.model,mesh,&space)!=DC_OK) { if(error)*error=@"Actor skin profile query failed";return nil; }
+        if(space==DC_MODEL_SPACE_WORLD)++_actorSkinMeshCount;
+    }
     uint32_t anchor=[self findAnchor:&_map];
     _actorWorld=gameIdentity();
     if(anchor!=UINT32_MAX && dc_xx_node_matrix(_map.xx,anchor,&_actorWorld)!=DC_OK)_actorWorld=gameIdentity();
@@ -667,6 +675,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
     NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
     if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
+    if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;
     if(!failure && _face.model) {
         if(_actorHeadNode!=UINT32_MAX && dc_model_global(_actor.model,_actorHeadNode,&_face.world)!=DC_OK)
             failure=@"Game face anchor lookup failed";
