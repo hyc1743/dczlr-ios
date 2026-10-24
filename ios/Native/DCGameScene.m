@@ -138,7 +138,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     NSData *data=[NSData dataWithContentsOfFile:path];if(data.length<DC_GAME_PLAYER_SAVE_BYTES)return;
     dc_game_player loaded;if(dc_game_player_load(data.bytes,data.length,&loaded)!=DC_OK)return;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,loaded.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,loaded.z));
-    if(loaded.speed>0)_player.speed=loaded.speed;_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
+    if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
 }
 - (void)savePlayerState {
     if(!_playerSaveDirty)return;
@@ -234,7 +234,7 @@ static uint32_t gameColor(const dc_material_value *value) {
         _interactionActive=YES;_interactionStartTick=tick;
     } else if(_interactionActive&&(uint32_t)(tick-_interactionStartTick)>800){
         if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction animation restore failed";
-        _interactionActive=NO;_interactionCount++;_interactionCompleted=YES;
+        _interactionActive=NO;_interactionCount++;_interactionCompleted=YES;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;
     }
     if(touching) {
         if(_inputInitialized) {
