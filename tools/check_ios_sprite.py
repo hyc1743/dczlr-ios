@@ -1,5 +1,6 @@
 """Launch the self-authored sprite integration scene on an iOS simulator."""
 import argparse
+import hashlib
 import json
 import plistlib
 import re
@@ -7,6 +8,7 @@ from pathlib import Path
 import subprocess
 import time
 import os
+import shutil
 import uuid
 
 
@@ -156,9 +158,38 @@ def select_device(output, runtime):
     return phone
 
 
-def check(app, output, runtime, expected_scene="checker", startup_fixture=False, exercise_new_game=False):
-    if exercise_new_game and (not startup_fixture or expected_scene!='intro'):
-        raise ValueError('New-game exercise requires generated startup fixture and intro target')
+def stage_resource_parts(parts_root, container, output):
+    """Copy verified local dczdata parts into the simulator Documents tree."""
+    parts_root = Path(parts_root).resolve(strict=True)
+    manifest_path = parts_root / "DczlrData.manifest.json"
+    if not parts_root.is_dir() or not manifest_path.is_file():
+        raise ValueError("resource-parts must contain DczlrData.manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    destination = container / "ResourcePacks"
+    destination.mkdir(parents=True, exist_ok=True)
+    staged = []
+    for part in manifest.get("parts", []):
+        source = parts_root / part["name"]
+        if not source.is_file():
+            raise ValueError("missing resource part: " + str(source))
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        if digest != part.get("sha256") or source.stat().st_size != part.get("size"):
+            raise ValueError("resource part checksum/size mismatch: " + source.name)
+        shutil.copy2(source, destination / source.name)
+        staged.append({"name": source.name, "size": source.stat().st_size, "sha256": digest})
+    (output / "resource-staging.json").write_text(json.dumps({
+        "source": str(parts_root), "destination": str(destination),
+        "parts": staged, "manifest_total_bytes": manifest.get("total_bytes")
+    }, indent=2) + "\n", encoding="utf-8")
+    return staged
+
+
+def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
+          exercise_new_game=False, resource_parts=None):
+    if exercise_new_game and (not startup_fixture and not resource_parts):
+        raise ValueError('New-game exercise requires generated startup fixture or staged resource parts')
+    if exercise_new_game and startup_fixture and expected_scene != 'intro':
+        raise ValueError('Generated startup fixture new-game exercise requires intro target')
     require_animation = expected_scene == "checker"
     require_xa = expected_scene == "checker"
     require_material = expected_scene == "checker"
@@ -201,6 +232,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         from startup_fixture import install
         profile=install(container/'Documents/game/Data')
         (output/'fixture.json').write_text(json.dumps(profile,indent=2)+'\n',encoding='utf-8')
+    if resource_parts:
+        if container is None:
+            raise ValueError('resource-parts requires a resolved simulator app container')
+        stage_resource_parts(resource_parts, container, output)
     launch_environment=dict(os.environ)
     session=uuid.uuid4().hex
     launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
@@ -334,10 +369,12 @@ if __name__ == "__main__":
     parser.add_argument("--boot-only", action="store_true")
     parser.add_argument("--startup-fixture", action="store_true")
     parser.add_argument("--exercise-new-game", action="store_true")
+    parser.add_argument("--resource-parts", type=Path,
+                        help="local directory containing DczlrData.manifest.json and all dczdata parts")
     args = parser.parse_args()
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts)
     else:
         parser.error("--app is required unless --boot-only is selected")

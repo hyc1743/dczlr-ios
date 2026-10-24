@@ -42,3 +42,15 @@ original menu result `3`; the following action transition additionally checks
 the context mode at `+0x504`, the action input byte at `+0x261`, and the local
 state flags before calling `0x00532240`. These gates are now observable in the
 probe, while a real user interaction still needs to drive them naturally.
+
+On a macOS host with Xcode and a built simulator app, local resource packs can
+be staged without putting them in the repository:
+
+```text
+python tools/check_ios_sprite.py --app <PortLab.app> --runtime iOS-18-5 \
+  --expected-scene intro --exercise-new-game \
+  --resource-parts out/resource-packs --output out/ios-real-resources
+```
+
+The tool verifies every part against `DczlrData.manifest.json`, copies them to
+the simulator's `Documents/ResourcePacks`, and records the staging manifest.
