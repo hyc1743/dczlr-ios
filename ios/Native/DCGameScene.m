@@ -63,6 +63,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
     dc_game_player _player;
     BOOL _playerSaveDirty;
+    dc_game_interaction_state _interactionState;
     BOOL _interactionActive;uint32_t _interactionStartTick;
     uint32_t _interactionCount;BOOL _interactionCompleted;
     BOOL _mapAdvanced;uint32_t _mapSelector;
@@ -199,13 +200,14 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(!isfinite(_walkMinZ)||!isfinite(_walkMaxZ)||_walkMinZ>=_walkMaxZ){_walkMinZ=-100;_walkMaxZ=100;}
     float margin=1.0f;_walkMinX+=margin;_walkMaxX-=margin;_walkMinZ+=margin;_walkMaxZ-=margin;
     uint32_t savedInteractions=_player.interaction_count,savedMap=_player.map_selector;_player=(dc_game_player){.x=_actor.world.values[12],.z=_actor.world.values[14],.min_x=_walkMinX,.max_x=_walkMaxX,.min_z=_walkMinZ,.max_z=_walkMaxZ,.speed=8,.interaction_count=savedInteractions,.map_selector=savedMap};
+    _interactionState.interaction_count=savedInteractions;
 }
 - (void)loadPlayerState {
     NSString *path=[_directory stringByAppendingPathComponent:@"save/player.state"];
     NSData *data=[NSData dataWithContentsOfFile:path];if(data.length<DC_GAME_PLAYER_SAVE_BYTES)return;
     dc_game_player loaded;if(dc_game_player_load(data.bytes,data.length,&loaded)!=DC_OK)return;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,loaded.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,loaded.z));
-    if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_player.map_selector=loaded.map_selector;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
+    if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_player.map_selector=loaded.map_selector;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_interactionState=(dc_game_interaction_state){.interaction_count=loaded.interaction_count,.completed=loaded.interaction_count>0};_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
 }
 - (void)savePlayerState {
     if(!_playerSaveDirty)return;
@@ -243,7 +245,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
     _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
     _face.world=_actor.world;
-    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;return nil;
+    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;_interactionState.active=0;_interactionState.completed=0;return nil;
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
@@ -489,13 +491,16 @@ static void freeMorphCaches(dc_game_model *slot) {
     BOOL newTouch=touching&&!_inputInitialized;
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    if(newTouch&&!_interactionActive&&nearInteraction){
+    dc_game_interaction_input interactionInput={.tick=tick,.new_touch=newTouch,.near_target=nearInteraction};
+    dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
+    if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
+    if(interactionResult.begin) {
         if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
-        _interactionActive=YES;_interactionStartTick=tick;
-    } else if(_interactionActive&&(uint32_t)(tick-_interactionStartTick)>800){
+    } else if(interactionResult.restore) {
         if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction animation restore failed";
-        _interactionActive=NO;_interactionCount++;_interactionCompleted=YES;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;
     }
+    _interactionState=interactionNext;_interactionActive=_interactionState.active;_interactionStartTick=_interactionState.start_tick;_interactionCount=_interactionState.interaction_count;
+    if(interactionResult.completed){_interactionCompleted=YES;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;}
     if(touching) {
         if(_inputInitialized) {
             float dx=fmaxf(-.15f,fminf(.15f,x-_lastInputX));

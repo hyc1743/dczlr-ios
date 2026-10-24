@@ -23,6 +23,19 @@ dc_status dc_game_next_map_selector(uint32_t current,uint32_t *next,uint32_t *fi
     *finished=index+1==DC_GAME_MAP_SEQUENCE_COUNT;
     return DC_OK;
 }
+dc_status dc_game_interaction_step(const dc_game_interaction_state *state,
+        const dc_game_interaction_input *input,dc_game_interaction_state *out,
+        dc_game_interaction_result *result){
+    if(!state||!input||!out||!result)return DC_ARGUMENT;
+    if(state->active>1||state->completed>1||input->new_touch>1||input->near_target>1)return DC_RANGE;
+    dc_game_interaction_state next=*state;dc_game_interaction_result event={0};
+    if(input->new_touch&&input->near_target&&!state->active&&!state->completed){
+        next.active=1;next.start_tick=input->tick;event.begin=1;
+    } else if(state->active&&(uint32_t)(input->tick-state->start_tick)>DC_GAME_INTERACTION_DELAY_MS){
+        next.active=0;next.interaction_count++;next.completed=1;event.restore=1;event.completed=1;
+    }
+    *out=next;*result=event;return DC_OK;
+}
 dc_status dc_game_player_save(const dc_game_player *state,void *bytes,size_t length){
     if(!state||!bytes)return DC_ARGUMENT;if(length<DC_GAME_PLAYER_SAVE_BYTES)return DC_RANGE;
     uint32_t nextSelector=0,finished=0;

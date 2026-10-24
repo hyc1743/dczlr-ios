@@ -139,6 +139,12 @@ class GamePlayer(C.Structure):
     _fields_=[(n,C.c_float) for n in ("x","z","min_x","max_x","min_z","max_z","speed")]+[(n,C.c_uint32) for n in ("interaction_count","map_selector")]
 class GameInput(C.Structure):
     _fields_=[("axis_x",C.c_float),("axis_z",C.c_float),("touching",C.c_uint32)]
+class GameInteractionState(C.Structure):
+    _fields_=[("interaction_count",C.c_uint32),("start_tick",C.c_uint32),("active",C.c_uint32),("completed",C.c_uint32)]
+class GameInteractionInput(C.Structure):
+    _fields_=[("tick",C.c_uint32),("new_touch",C.c_uint32),("near_target",C.c_uint32)]
+class GameInteractionResult(C.Structure):
+    _fields_=[("begin",C.c_uint32),("restore",C.c_uint32),("completed",C.c_uint32)]
 
 
 class MeshVertex(C.Structure):
@@ -507,6 +513,8 @@ def library():
     lib.dc_game_player_load.restype=C.c_int
     lib.dc_game_next_map_selector.argtypes=[C.c_uint32,C.POINTER(C.c_uint32),C.POINTER(C.c_uint32)]
     lib.dc_game_next_map_selector.restype=C.c_int
+    lib.dc_game_interaction_step.argtypes=[C.POINTER(GameInteractionState),C.POINTER(GameInteractionInput),C.POINTER(GameInteractionState),C.POINTER(GameInteractionResult)]
+    lib.dc_game_interaction_step.restype=C.c_int
     lib.dc_xa_pose_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAPoseTrack)]
     lib.dc_xa_pose_track_at.restype = C.c_int
     lib.dc_xa_load_pose_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(PoseKey), C.c_size_t]

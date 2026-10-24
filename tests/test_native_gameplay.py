@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
-from native_core import library,GamePlayer,GameInput
+from native_core import library,GamePlayer,GameInput,GameInteractionState,GameInteractionInput,GameInteractionResult
 
 class NativeGameplayTests(unittest.TestCase):
     @classmethod
@@ -48,5 +48,17 @@ class NativeGameplayTests(unittest.TestCase):
         next_selector=C.c_uint32(0xa5a5a5a5);finished=C.c_uint32(0xa5a5a5a5)
         self.assertEqual(self.lib.dc_game_next_map_selector(2,C.byref(next_selector),C.byref(finished)),4)
         self.assertEqual((next_selector.value,finished.value),(0xa5a5a5a5,0xa5a5a5a5))
+
+    def test_interaction_state_machine_preserves_edges_and_wraps_ticks(self):
+        state=GameInteractionState();out=GameInteractionState();event=GameInteractionResult()
+        self.assertEqual(self.lib.dc_game_interaction_step(C.byref(state),C.byref(GameInteractionInput(100,1,1)),C.byref(out),C.byref(event)),0)
+        self.assertEqual((out.active,out.start_tick,event.begin,event.restore),(1,100,1,0))
+        state=out
+        self.assertEqual(self.lib.dc_game_interaction_step(C.byref(state),C.byref(GameInteractionInput(899,0,1)),C.byref(out),C.byref(event)),0)
+        self.assertEqual((out.interaction_count,out.active,event.completed),(0,1,0))
+        state=out
+        self.assertEqual(self.lib.dc_game_interaction_step(C.byref(state),C.byref(GameInteractionInput(901,0,1)),C.byref(out),C.byref(event)),0)
+        self.assertEqual((out.interaction_count,out.active,out.completed,event.restore,event.completed),(1,0,1,1,1))
+        state=GameInteractionState(0,0xffffffff,1,0);self.assertEqual(self.lib.dc_game_interaction_step(C.byref(state),C.byref(GameInteractionInput(800,0,1)),C.byref(out),C.byref(event)),0);self.assertEqual((out.active,out.interaction_count,event.restore),(0,1,1))
 
 if __name__=='__main__':unittest.main()
