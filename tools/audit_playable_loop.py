@@ -18,6 +18,7 @@ from native_core import (  # noqa: E402
     CameraLens,
     CameraMatrices,
     CameraOrbit,
+    AnimationState,
     GameInteractionInput,
     GameInteractionResult,
     GameInteractionState,
@@ -56,6 +57,7 @@ def entry(path, name):
 
 def main():
     lib = library()
+    identity_world = Matrix((C.c_float * 16)(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1))
     with PPArchive(ROOT / "Data/RPP_03.pp") as camera_archive:
         camera_names = [camera_archive.entry(i).name_bytes.decode("ascii") for i in range(camera_archive.count)]
     map_rows = []
@@ -68,6 +70,7 @@ def main():
         except ValueError:
             animation_data = None
         animation_info = None
+        animation_motion = None
         if animation_data is not None:
             decoded_animation_info = XAInfo()
             if lib.dc_xa_probe(animation_data, len(animation_data), C.byref(decoded_animation_info)):
@@ -83,6 +86,19 @@ def main():
         if status:
             raise RuntimeError(f"map {selector} admission failed: {status}")
         try:
+            if animation_data is not None:
+                before = AnimationState()
+                after = AnimationState()
+                if (lib.dc_model_tick(handle, 0, 0, C.byref(identity_world)) or
+                        lib.dc_model_get_animation(handle, C.byref(before)) or
+                        lib.dc_model_tick(handle, 400, 400, C.byref(identity_world)) or
+                        lib.dc_model_get_animation(handle, C.byref(after))):
+                    raise RuntimeError(f"map {selector} animation controller failed")
+                animation_motion = {
+                    "frame_before": before.frame,
+                    "frame_after": after.frame,
+                    "advanced": bool(after.frame != before.frame),
+                }
             native_info = XXInfo()
             if lib.dc_model_get_info(handle, C.byref(native_info)):
                 raise RuntimeError(f"map {selector} info failed")
@@ -96,6 +112,7 @@ def main():
                 "animation": animation_name if animation_data is not None else None,
                 "animation_sha256": hashlib.sha256(animation_data).hexdigest() if animation_data is not None else None,
                 "animation_info": animation_info,
+                "animation_motion": animation_motion,
                 "camera": CAMERAS[selector],
                 "camera_sha256": hashlib.sha256(camera_data).hexdigest(),
                 "camera_distance": camera.stored_distance,
