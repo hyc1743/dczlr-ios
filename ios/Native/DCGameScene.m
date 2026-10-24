@@ -3,6 +3,7 @@
 #include "dc_camera.h"
 #include "dc_eyeneck.h"
 #include "dc_gameplay.h"
+#include "dc_menu.h"
 #include "dc_model.h"
 #include "dc_xl.h"
 #include <math.h>
@@ -71,6 +72,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     uint32_t _actorHeadNode;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
+    dc_menu_state _gameMenu; BOOL _gameMenuInitialized,_previousGameMenuTouch;
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
     dc_game_player _player;
     BOOL _playerSaveDirty;
@@ -366,11 +368,15 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
     _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
     _face.world=_actor.world;
-    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;_interactionState.active=0;_interactionState.completed=0;_cameraAutoSelected=NO;return nil;
+    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;_interactionState.active=0;_interactionState.completed=0;
+    _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};_previousGameMenuTouch=NO;
+    _cameraAutoSelected=NO;return nil;
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
     _cameraFallbacks=[NSMutableDictionary dictionary];
+    _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};
+    _gameMenuInitialized=YES;
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
@@ -639,9 +645,28 @@ static void freeMorphCaches(dc_game_model *slot) {
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
     BOOL newTouch=touching&&!_inputInitialized;
+    BOOL menuActivated=NO;
+    if ((_gameMenuInitialized && touching) || _previousGameMenuTouch) {
+        float menuScale=fminf((float)width/1024.0f,(float)height/768.0f);
+        float menuOffsetX=((float)width-1024.0f*menuScale)*.5f;
+        float menuOffsetY=((float)height-768.0f*menuScale)*.5f;
+        float screenX=(x+1.0f)*.5f*(float)width;
+        float screenY=(1.0f-y)*.5f*(float)height;
+        dc_menu_button buttons[DC_GAME_MENU_COUNT];
+        if (dc_game_menu_profile(buttons,DC_GAME_MENU_COUNT)!=DC_OK)
+            return @"Game menu profile unavailable";
+        int32_t menuResult=-1;
+        uint8_t menuInput=touching ? 0 : 3;
+        if (dc_menu_step(&_gameMenu,buttons,6,(int32_t)lrintf(screenX-menuOffsetX),
+                         (int32_t)lrintf(screenY-menuOffsetY),menuScale,menuInput,
+                         &menuResult)!=DC_OK)
+            return @"Game menu input update failed";
+        menuActivated=menuResult==1 && _gameMenu.selected==1;
+    }
+    _previousGameMenuTouch=touching;
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    dc_game_interaction_input interactionInput={.tick=tick,.new_touch=newTouch,.near_target=nearInteraction};
+    dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated),.near_target=nearInteraction};
     dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
     if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
     if(interactionResult.begin) {

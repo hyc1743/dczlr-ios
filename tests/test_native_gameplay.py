@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
-from native_core import library,GamePlayer,GameInput,GameInteractionState,GameInteractionInput,GameInteractionResult
+from native_core import library,GamePlayer,GameInput,GameInteractionState,GameInteractionInput,GameInteractionResult,MenuButton
 
 class NativeGameplayTests(unittest.TestCase):
     @classmethod
@@ -48,6 +48,17 @@ class NativeGameplayTests(unittest.TestCase):
         next_selector=C.c_uint32(0xa5a5a5a5);finished=C.c_uint32(0xa5a5a5a5)
         self.assertEqual(self.lib.dc_game_next_map_selector(2,C.byref(next_selector),C.byref(finished)),4)
         self.assertEqual((next_selector.value,finished.value),(0xa5a5a5a5,0xa5a5a5a5))
+
+    def test_observed_gameplay_menu_profile_is_stable_and_bounded(self):
+        buttons=(MenuButton*6)()
+        self.assertEqual(self.lib.dc_game_menu_profile(buttons,6),0)
+        self.assertEqual([(b.x,b.y,b.width,b.height,b.disabled) for b in buttons],[
+            (-1,0,0,0,1),(920,328,96,96,0),(920,440,96,96,1),
+            (920,552,96,96,0),(920,664,96,96,0),(0,504,352,264,0)])
+        before=bytes(buttons)
+        self.assertEqual(self.lib.dc_game_menu_profile(buttons,5),4)
+        self.assertEqual(bytes(buttons),before)
+        self.assertEqual(self.lib.dc_game_menu_profile(None,6),1)
 
     def test_interaction_state_machine_preserves_edges_and_wraps_ticks(self):
         state=GameInteractionState();out=GameInteractionState();event=GameInteractionResult()

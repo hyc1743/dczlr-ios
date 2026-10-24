@@ -23,6 +23,20 @@ dc_status dc_game_next_map_selector(uint32_t current,uint32_t *next,uint32_t *fi
     *finished=index+1==DC_GAME_MAP_SEQUENCE_COUNT;
     return DC_OK;
 }
+dc_status dc_game_menu_profile(dc_menu_button *buttons,size_t capacity){
+    if(!buttons)return DC_ARGUMENT;
+    if(capacity<DC_GAME_MENU_COUNT)return DC_RANGE;
+    static const dc_menu_button profile[DC_GAME_MENU_COUNT]={
+        {-1,0,0,0,1,0,0},
+        {920,328,96,96,0,0,0},
+        {920,440,96,96,1,0,0},
+        {920,552,96,96,0,0,0},
+        {920,664,96,96,0,0,0},
+        {0,504,352,264,0,0,0}
+    };
+    memcpy(buttons,profile,sizeof(profile));
+    return DC_OK;
+}
 dc_status dc_game_interaction_step(const dc_game_interaction_state *state,
         const dc_game_interaction_input *input,dc_game_interaction_state *out,
         dc_game_interaction_result *result){

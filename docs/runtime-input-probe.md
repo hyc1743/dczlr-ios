@@ -43,8 +43,22 @@ the context mode at `+0x504`, the action input byte at `+0x261`, and the local
 state flags before calling `0x00532240`. These gates are now observable in the
 probe, while a real user interaction still needs to drive them naturally.
 
-On a macOS host with Xcode and a built simulator app, local resource packs can
-be staged without putting them in the repository:
+A follow-up bounded run now drives the menu in its original order: five hover
+frames with input code `0`, followed by five release frames with input code
+`3` at `(1200,470)`. The original menu returns `2` while the row is first
+entered and `1` on release, confirming activation of row 1. The captured menu
+table has six rows: row 1 at `(920,328,96,96)`, disabled row 2 at
+`(920,440,96,96)`, rows 3 and 4 at y `552` and `664`, and row 5 at
+`(0,504,352,264)`. The same run loads the post-action `RPP_11.pp` records;
+the report is kept locally as
+`research/native-core/directinput-frida-gameplay-natural-menu.json`.
+
+The iOS gameplay scene now uses this six-row table and the same hover/release
+codes through `dc_menu_step`. Its existing near-target touch path remains as a
+compatibility input for the local playable-loop exercise; menu activation and
+near-target admission are kept as separate state gates.
+
+The simulator resource check is optional and can run in the public macOS workflow; it is not required for the Windows native validation path. When a built simulator app is available, local resource packs can be staged without putting them in the repository:
 
 ```text
 python tools/check_ios_sprite.py --app <PortLab.app> --runtime iOS-18-5 \
