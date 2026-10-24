@@ -22,7 +22,7 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
 
 @implementation DCGameAudio {
     AVAudioPlayer *_music,*_selection;
-    NSMutableDictionary<NSString *,AVAudioPlayer *> *_gameplayEffects;
+    NSMutableDictionary<NSString *,AVAudioPlayer *> *_gameplayEffects,*_gameplayVoices;
     NSString *_directory;
     BOOL _advanced;
 }
@@ -77,6 +77,20 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
     if(slot>=names.count)return NO;
     return [self playGameplayEffectNamed:names[slot]];
 }
+- (BOOL)playGameplayVoiceNamed:(NSString *)name {
+    if (!name.length) return NO;
+    AVAudioPlayer *player=_gameplayVoices[name];
+    if (!player) {
+        NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_11.pp" directory:_directory error:&error];
+        if (!data) return NO;
+        NSError *reason=nil;player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
+        if (!player || ![player prepareToPlay]) return NO;
+        if (!_gameplayVoices) _gameplayVoices=[NSMutableDictionary dictionary];
+        _gameplayVoices[name]=player;
+    }
+    player.currentTime=0;
+    return [player play];
+}
 - (NSString *)startTitleMusic {
     if (_music.isPlaying) return nil;
     NSError *reason=nil;
@@ -96,6 +110,6 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
 }
 - (BOOL)selectionBusy { return _selection.isPlaying; }
 - (void)stopTitleMusic { [_music stop]; }
-- (void)pause { [_music pause];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop]; }
-- (void)dealloc { [_music stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop]; }
+- (void)pause { [_music pause];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
+- (void)dealloc { [_music stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
 @end

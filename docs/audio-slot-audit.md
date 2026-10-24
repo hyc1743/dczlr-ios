@@ -40,6 +40,12 @@ In follow-up runs, the chapter-3 callback received DirectInput scan code
 verified callback branches and slot reads, while the `se016/se322/se332`
 interaction triggers remain unresolved.
 
+The first natural gameplay-menu activation (hover at `(1200,470)` with input
+`0`, then release with input `3`) additionally opens `RPP_11.pp` and reads the
+`325272`-byte `ast001_01.wav` entry. This is the first observed chapter-3
+voice binding. The iOS host now queues that voice when row 1 is activated on
+map 0; later map-specific voice bindings remain separate until observed.
+
 ```powershell
 python tools/audit_audio_slots.py --data Data --output research/native-core/audio-slot-audit.json
 ```

@@ -151,6 +151,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
     _suppressGameplayTouch=YES;
     return nil;
 }
+- (NSString *)playPendingGameplayVoice {
+    NSString *name=[_gameScene takePendingVoiceName];
+    if (!name) return nil;
+    if (!_gameAudio || ![_gameAudio playGameplayVoiceNamed:name])
+        return [NSString stringWithFormat:@"Gameplay voice %@ did not start",name];
+    return nil;
+}
 - (void)destroyRenderer {
     [_gameScene detachRenderer];
     [_introScene detachRenderer];
@@ -269,6 +276,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
                 NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
                 if(gameFailure)return gameFailure;
+                NSString *voiceFailure=[self playPendingGameplayVoice];
+                if(voiceFailure)return voiceFailure;
                 _previousGameplayTouch=gameTouch;
                 _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
                 ++_presentedFrames;
@@ -419,6 +428,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
             if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
             NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
             if(gameFailure)return gameFailure;
+            NSString *voiceFailure=[self playPendingGameplayVoice];
+            if(voiceFailure)return voiceFailure;
             _previousGameplayTouch=gameTouch;
             _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
             ++_presentedFrames;

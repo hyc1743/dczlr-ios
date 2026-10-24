@@ -19,5 +19,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)detachRenderer;
 - (nullable NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching
     width:(uint32_t)width height:(uint32_t)height;
+- (nullable NSString *)takePendingVoiceName;
 @end
 NS_ASSUME_NONNULL_END

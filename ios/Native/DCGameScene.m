@@ -81,6 +81,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     uint32_t _interactionCount;BOOL _interactionCompleted;
     BOOL _mapAdvanced;uint32_t _mapSelector;
     BOOL _gameFinished;
+    NSString *_pendingVoiceName;
     uint32_t _actorSkinMeshCount;
     BOOL _actorSkinAdvanced;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
@@ -94,6 +95,7 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (BOOL)interactionCompleted { return _interactionCompleted; }
 - (BOOL)gameFinished { return _gameFinished; }
 - (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
+- (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
 
 - (NSString *)decodedName:(const uint8_t *)raw length:(size_t)length {
     if (!raw || !length || length > 1024) return nil;
@@ -657,7 +659,7 @@ static void freeMorphCaches(dc_game_model *slot) {
             return @"Game menu profile unavailable";
         int32_t menuResult=-1;
         uint8_t menuInput=touching ? 0 : 3;
-        if (dc_menu_step(&_gameMenu,buttons,6,(int32_t)lrintf(screenX-menuOffsetX),
+        if (dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(screenX-menuOffsetX),
                          (int32_t)lrintf(screenY-menuOffsetY),menuScale,menuInput,
                          &menuResult)!=DC_OK)
             return @"Game menu input update failed";
@@ -666,6 +668,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _previousGameMenuTouch=touching;
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
+    if (menuActivated && nearInteraction && _mapSelector==0) _pendingVoiceName=@"ast001_01.wav";
     dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated),.near_target=nearInteraction};
     dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
     if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
