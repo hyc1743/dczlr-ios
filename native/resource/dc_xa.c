@@ -234,13 +234,21 @@ static dc_status morph_cursor(const void *bytes,size_t length,cursor *out,uint32
 }
 
 dc_status dc_xa_morph_index_set_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_index_set *out){
-    if(!bytes||!out||overlaps(bytes,length,out,sizeof(*out)))return DC_ARGUMENT;cursor c;uint32_t ni,nv,nt;dc_status s=morph_cursor(bytes,length,&c,&ni,&nv,&nt);if(s!=DC_OK)return s;if(index>=ni)return DC_NOT_FOUND;
+    if (!bytes || !out || overlaps(bytes,length,out,sizeof(*out))) return DC_ARGUMENT;
+    cursor c;uint32_t ni,nv,nt;
+    dc_status s=morph_cursor(bytes,length,&c,&ni,&nv,&nt);
+    if (s!=DC_OK) return s;
+    if (index>=ni) return DC_NOT_FOUND;
     for(uint32_t i=0;i<=index;++i){dc_xa_morph_index_set v={0};v.selector=c.data[c.position++];if(!integer(&c,&v.count))return DC_FORMAT;v.indices_offset=c.position;if(!array(&c,v.count,4))return DC_FORMAT;uint32_t n;if(!integer(&c,&n))return DC_FORMAT;v.data_offset=c.position;if(!skip(&c,n))return DC_FORMAT;if(i==index){*out=v;return DC_OK;}}
     return DC_NOT_FOUND;
 }
 
 dc_status dc_xa_morph_vector_set_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_vector_set *out){
-    if(!bytes||!out||overlaps(bytes,length,out,sizeof(*out)))return DC_ARGUMENT;cursor c;uint32_t ni,nv,nt;dc_status s=morph_cursor(bytes,length,&c,&ni,&nv,&nt);if(s!=DC_OK)return s;if(index>=nv)return DC_NOT_FOUND;
+    if (!bytes || !out || overlaps(bytes,length,out,sizeof(*out))) return DC_ARGUMENT;
+    cursor c;uint32_t ni,nv,nt;
+    dc_status s=morph_cursor(bytes,length,&c,&ni,&nv,&nt);
+    if (s!=DC_OK) return s;
+    if (index>=nv) return DC_NOT_FOUND;
     for(uint32_t i=0;i<ni;++i){uint32_t n;c.position++;if(!integer(&c,&n)||!skip(&c,(size_t)n*4)||!block(&c))return DC_FORMAT;}
     uint32_t set_count;if(!integer(&c,&set_count)||set_count!=nv)return DC_FORMAT;
     for(uint32_t i=0;i<=index;++i){dc_xa_morph_vector_set v={0};if(!integer(&c,&v.count))return DC_FORMAT;v.vectors_offset=c.position;if(!array(&c,v.count,24))return DC_FORMAT;uint32_t n;if(!integer(&c,&n)||!skip(&c,n))return DC_FORMAT;if(i==index){*out=v;return DC_OK;}}
@@ -248,7 +256,11 @@ dc_status dc_xa_morph_vector_set_at(const void *bytes,size_t length,uint32_t ind
 }
 
 dc_status dc_xa_morph_track_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_track *out){
-    if(!bytes||!out||overlaps(bytes,length,out,sizeof(*out)))return DC_ARGUMENT;cursor c;uint32_t ni,nv,nt;dc_status s=morph_cursor(bytes,length,&c,&ni,&nv,&nt);if(s!=DC_OK)return s;if(index>=nt)return DC_NOT_FOUND;
+    if (!bytes || !out || overlaps(bytes,length,out,sizeof(*out))) return DC_ARGUMENT;
+    cursor c;uint32_t ni,nv,nt;
+    dc_status s=morph_cursor(bytes,length,&c,&ni,&nv,&nt);
+    if (s!=DC_OK) return s;
+    if (index>=nt) return DC_NOT_FOUND;
     for(uint32_t i=0;i<ni;++i){c.position++;uint32_t n;if(!integer(&c,&n)||!skip(&c,(size_t)n*4)||!block(&c))return DC_FORMAT;}
     uint32_t set_count;if(!integer(&c,&set_count)||set_count!=nv)return DC_FORMAT;
     for(uint32_t i=0;i<nv;++i){uint32_t n;if(!integer(&c,&n)||!skip(&c,(size_t)n*24)||!block(&c))return DC_FORMAT;}
@@ -258,5 +270,19 @@ dc_status dc_xa_morph_track_at(const void *bytes,size_t length,uint32_t index,dc
 }
 
 dc_status dc_xa_morph_key_at(const void *bytes,size_t length,uint32_t track,uint32_t key,dc_xa_morph_key *out){
-    if(!bytes||!out||overlaps(bytes,length,out,sizeof(*out)))return DC_ARGUMENT;dc_xa_morph_track t;dc_status s=dc_xa_morph_track_at(bytes,length,track,&t);if(s!=DC_OK)return s;if(key>=t.key_count)return DC_NOT_FOUND;cursor c={(const uint8_t*)bytes,length,t.keys_offset};for(uint32_t i=0;i<=key;++i){dc_xa_morph_key v={0};if(c.length-c.position<6)return DC_FORMAT;memcpy(v.raw,c.data+c.position,6);c.position+=6;uint32_t n;if(!integer(&c,&n))return DC_FORMAT;v.value_offset=c.position;v.value_length=n;if(!skip(&c,n))return DC_FORMAT;if(i==key){*out=v;return DC_OK;}}return DC_NOT_FOUND;
+    if (!bytes || !out || overlaps(bytes,length,out,sizeof(*out))) return DC_ARGUMENT;
+    dc_xa_morph_track t;dc_status s=dc_xa_morph_track_at(bytes,length,track,&t);
+    if (s!=DC_OK) return s;
+    if (key>=t.key_count) return DC_NOT_FOUND;
+    cursor c={(const uint8_t*)bytes,length,t.keys_offset};
+    for (uint32_t i=0;i<=key;++i) {
+        dc_xa_morph_key v={0};
+        if (c.length-c.position<6) return DC_FORMAT;
+        memcpy(v.raw,c.data+c.position,6);c.position+=6;
+        uint32_t n;if(!integer(&c,&n)) return DC_FORMAT;
+        v.value_offset=c.position;v.value_length=n;
+        if(!skip(&c,n)) return DC_FORMAT;
+        if(i==key){*out=v;return DC_OK;}
+    }
+    return DC_NOT_FOUND;
 }
