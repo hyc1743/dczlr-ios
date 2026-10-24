@@ -26,10 +26,12 @@ background GPU recreation. Title music and selection sound use archive-backed
 AVAudioPlayer; pointer hover and selection use the reconstructed menu helper.
 Existing save prefixes supply title unlock flags. The native chapter-3 path now
 loads the real map chain, actor, PLST neck attachment, face morphs, movement,
-collision, interaction timing, save/load and title resume routing. The local
-playable-loop audit covers all eight real maps and reaches its terminal state;
-Apple rendering execution and original event/script/audio routing remain to be
-verified.
+collision, interaction timing, save/load and title resume routing. The first
+observed gameplay menu route now uses the original six-row hit table and chains
+the first two verified map-0 voice records. Normal gameplay waits for the next
+menu action before changing maps; the local playable-loop audit keeps a bounded
+automatic route for host-side coverage of all eight real maps. Apple rendering
+execution and the remaining event/script/audio routing remain to be verified.
 
 Public CI uses entirely generated fixtures. The inspected app stage, source
 `f199ad8`, passed 146 portable tests, 107 ARM64 native tests, compilation of 16
