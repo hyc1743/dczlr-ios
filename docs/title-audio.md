@@ -23,6 +23,15 @@ prepares the three effect resources named by the original scene callback:
 `RPP_14.pp/se016.wav`, `se322.wav` and `se332.wav`. They remain available to
 the later event router; no guessed event-to-sound mapping is claimed yet.
 
+The original callback builds 35 `RPP_14` sound slots. Static string/data
+binding places `se016.wav` at slot 10, `se322.wav` at slot 17 and `se332.wav`
+at slot 20. The direct `0x00513690` state branches at input keys `0x3b` and
+`0x3c` use slot 0 (`se100.wav`) for the verified selection/transition sound.
+The broader action dispatcher `0x00532240` plays context-owned slots at
+offsets `0x106c` and `0x1070`; its caller-owned context and the three gameplay
+effect slots are not statically bound to the local interaction state yet, so
+the port does not trigger them speculatively.
+
 `PORTLAB_TITLE_AUDIO_ADVANCED` requires the title to have presented and the
 playing background track's clock to advance beyond 0.1 seconds. The simulator
 startup gate supplies generated PCM tones through generated PP archives and
