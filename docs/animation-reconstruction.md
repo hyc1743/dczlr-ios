@@ -157,3 +157,10 @@ updates, and projects the result through the same clipped geometry path. The
 local binding audit covers all 10 tracks, 181 vector sets and 50 sampled
 track/frame selections. This is resource-level evidence; original facial
 controller blending and physical-device presentation remain unverified.
+
+The same chapter scene now admits the original `RPP_04.pp` auxiliary records
+`ak00_00.eyes` and `am00_01.neck`, validates their encoded `a_Np_me_R`,
+`a_Np_me_L` and `a_Kp_kubi2` bindings against the face/actor XX nodes, and
+fails initialization if those required local records are missing. Their
+special object geometry and renderer state are still outside the native face
+mesh path.

@@ -3,9 +3,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 /* First real chapter-3 scene: local RPP_10 map (including mn00_01.xa when the
- * original map loader supplies it), RPP_08 actor, RPP_09 face model/morph
- * data, and the native camera/model/clip path. Unsupported later systems
- * still fail explicitly instead of substituting generated content. */
+ * original map loader supplies it), RPP_08 actor, RPP_09 face model/morph,
+ * RPP_04 eyes/neck binding and the native camera/model/clip path. Unsupported
+ * later systems still fail explicitly instead of substituting generated content. */
 @interface DCGameScene : NSObject
 @property(nonatomic,readonly) BOOL loaded;
 @property(nonatomic,readonly) uint32_t visibleMapTriangles;

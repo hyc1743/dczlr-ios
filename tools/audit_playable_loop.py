@@ -189,6 +189,14 @@ def main():
                 "bytes": len(resource_data),
                 "sha256": hashlib.sha256(resource_data).hexdigest(),
             }
+    def encoded_name_present(data, name):
+        encoded=bytes(value ^ 255 for value in name.encode("ascii"))
+        return encoded in data
+    scene_dependencies["RPP_04.pp"]["bindings"] = {
+        "eyes_right": encoded_name_present(entry(ROOT / "Data/RPP_04.pp", "ak00_00.eyes"), "a_Np_me_R"),
+        "eyes_left": encoded_name_present(entry(ROOT / "Data/RPP_04.pp", "ak00_00.eyes"), "a_Np_me_L"),
+        "neck_head": encoded_name_present(entry(ROOT / "Data/RPP_04.pp", "am00_01.neck"), "a_Kp_kubi2"),
+    }
     scene_dependencies["RPP_07.pp"] = {}
     for selector in SEQUENCE:
         with PPArchive(ROOT / "Data/RPP_07.pp") as archive:

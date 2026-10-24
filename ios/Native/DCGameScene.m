@@ -50,6 +50,7 @@ static void freeMorphCaches(dc_game_model *slot) {
 
 @implementation DCGameScene {
     NSString *_directory;
+    NSData *_eyesData,*_neckData;
     dc_vk_sprite *_renderer;
     dc_game_model _map,_actor;
     dc_game_model _face;
@@ -128,6 +129,14 @@ static void freeMorphCaches(dc_game_model *slot) {
             return [archive readEntryAtIndex:i limit:128*1024*1024 error:nil];
     if(error)*error=[NSString stringWithFormat:@"Missing game resource %@",name];
     return nil;
+}
+- (BOOL)encodedName:(NSString *)name presentInData:(NSData *)data {
+    if (!name.length || !data.length) return NO;
+    NSData *plain=[name dataUsingEncoding:NSASCIIStringEncoding];
+    NSMutableData *encoded=[NSMutableData dataWithLength:plain.length];
+    const uint8_t *source=plain.bytes;uint8_t *destination=encoded.mutableBytes;
+    for(NSUInteger i=0;i<plain.length;++i)destination[i]=(uint8_t)(source[i]^255u);
+    return [data rangeOfData:encoded options:0 range:NSMakeRange(0,data.length)].location!=NSNotFound;
 }
 - (BOOL)openModel:(dc_game_model *)slot staticOnly:(BOOL)staticOnly error:(NSString **)error {
     dc_status status=staticOnly ? dc_model_open_static(slot->xxData.bytes,slot->xxData.length,&slot->model)
@@ -309,14 +318,17 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
-    if(!mapArchive || !actorArchive || !faceArchive) { if(error)*error=reason.localizedDescription;return nil; }
+     DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:&reason];
+     if(!mapArchive || !actorArchive || !faceArchive || !auxiliaryArchive) { if(error)*error=reason.localizedDescription;return nil; }
     _map.xxData=[self entry:@"mm00_00.xx" archive:mapArchive error:error];
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
     NSData *actorPlacement=[self entry:@"am00_01.plst" archive:actorArchive error:nil];
     _face.xxData=[self entry:@"ak00_00.xx" archive:faceArchive error:error];
     _face.xaData=[self entry:@"an00_01.xa" archive:faceArchive error:error];
-    if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData)return nil;
+     _eyesData=[self entry:@"ak00_00.eyes" archive:auxiliaryArchive error:error];
+     _neckData=[self entry:@"am00_01.neck" archive:auxiliaryArchive error:error];
+     if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData || !_eyesData || !_neckData)return nil;
     if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error] ||
        ![self openModel:&_face staticOnly:YES error:error])return nil;
     NSString *morphError=nil;
@@ -325,6 +337,14 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
+     if(![self encodedName:@"a_Np_me_R" presentInData:_eyesData] ||
+        ![self encodedName:@"a_Np_me_L" presentInData:_eyesData] ||
+        ![self encodedName:@"a_Kp_kubi2" presentInData:_neckData] ||
+        [self findNode:&_face name:@"a_Np_me_R"]==UINT32_MAX ||
+        [self findNode:&_face name:@"a_Np_me_L"]==UINT32_MAX ||
+        [self findNode:&_actor name:@"a_Kp_kubi2"]==UINT32_MAX) {
+         if(error)*error=@"Eyes/neck auxiliary binding failed";return nil;
+     }
     uint32_t anchor=[self findAnchor:&_map];
     _actorWorld=gameIdentity();
     if(anchor!=UINT32_MAX && dc_xx_node_matrix(_map.xx,anchor,&_actorWorld)!=DC_OK)_actorWorld=gameIdentity();
