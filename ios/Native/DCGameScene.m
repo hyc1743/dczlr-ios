@@ -133,14 +133,14 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(!isfinite(_walkMinX)||!isfinite(_walkMaxX)||_walkMinX>=_walkMaxX){_walkMinX=-100;_walkMaxX=100;}
     if(!isfinite(_walkMinZ)||!isfinite(_walkMaxZ)||_walkMinZ>=_walkMaxZ){_walkMinZ=-100;_walkMaxZ=100;}
     float margin=1.0f;_walkMinX+=margin;_walkMaxX-=margin;_walkMinZ+=margin;_walkMaxZ-=margin;
-    _player=(dc_game_player){.x=_actor.world.values[12],.z=_actor.world.values[14],.min_x=_walkMinX,.max_x=_walkMaxX,.min_z=_walkMinZ,.max_z=_walkMaxZ,.speed=8};
+    uint32_t savedInteractions=_player.interaction_count,savedMap=_player.map_selector;_player=(dc_game_player){.x=_actor.world.values[12],.z=_actor.world.values[14],.min_x=_walkMinX,.max_x=_walkMaxX,.min_z=_walkMinZ,.max_z=_walkMaxZ,.speed=8,.interaction_count=savedInteractions,.map_selector=savedMap};
 }
 - (void)loadPlayerState {
     NSString *path=[_directory stringByAppendingPathComponent:@"save/player.state"];
     NSData *data=[NSData dataWithContentsOfFile:path];if(data.length<DC_GAME_PLAYER_SAVE_BYTES)return;
     dc_game_player loaded;if(dc_game_player_load(data.bytes,data.length,&loaded)!=DC_OK)return;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,loaded.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,loaded.z));
-    if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
+    if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_player.map_selector=loaded.map_selector;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
 }
 - (void)savePlayerState {
     if(!_playerSaveDirty)return;
@@ -174,7 +174,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     NSData *cameraData=[self entry:[NSString stringWithUTF8String:cameraName] archive:[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:nil] error:nil];
     if(cameraData){dc_camera_orbit nextCamera;if(dc_camera_read_preset(cameraData.bytes,cameraData.length,0,&nextCamera)==DC_OK){_cameraBase=nextCamera.base;_cameraDistance=nextCamera.stored_distance;_cameraHeight=nextCamera.height;_cameraPitch=nextCamera.pitch;_cameraYaw=nextCamera.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];}}
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
-    _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));
+    _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));_player.map_selector=nextSelector;_playerSaveDirty=YES;
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;_mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;return nil;
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
@@ -212,6 +212,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     _player.x=_actor.world.values[12];_player.z=_actor.world.values[14];
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
     [self loadPlayerState];
+    uint32_t savedMap=_player.map_selector;while(_mapSelector<savedMap){NSString *advanceError=[self advanceToNextMap];if(advanceError)break;}
     _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {

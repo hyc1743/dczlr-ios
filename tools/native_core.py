@@ -136,7 +136,7 @@ class CameraMatrices(C.Structure):
     _fields_ = [(n,Matrix) for n in ("world","view","projection","view_projection")]
 
 class GamePlayer(C.Structure):
-    _fields_=[(n,C.c_float) for n in ("x","z","min_x","max_x","min_z","max_z","speed")]+[("interaction_count",C.c_uint32)]
+    _fields_=[(n,C.c_float) for n in ("x","z","min_x","max_x","min_z","max_z","speed")]+[(n,C.c_uint32) for n in ("interaction_count","map_selector")]
 class GameInput(C.Structure):
     _fields_=[("axis_x",C.c_float),("axis_z",C.c_float),("touching",C.c_uint32)]
 
