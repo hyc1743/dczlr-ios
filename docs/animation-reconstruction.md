@@ -133,3 +133,11 @@ binding, pose/material sampling,
 the fullscreen transition model and final composition. The view's existing
 fixed two-second title preview remains temporary. The complete game and physical
 device playability remain unverified.
+
+The XA reader also exposes bounded borrowed views for morph index sets, vector
+sets, morph target names and per-key value blocks. The local `RPP_09/an00_01.xa`
+profile contains 10 index sets, 181 vector sets and 10 tracks, including
+encoded targets such as `a_face_me`, `a_face_kuti`, `a_mayu` and `a_yodare`.
+These APIs preserve offsets, encoded bytes and six-byte key headers after full
+framing validation. They do not yet assign those sets to XX vertices or apply
+face deformation; model morph integration remains outstanding.
