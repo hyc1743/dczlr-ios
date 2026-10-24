@@ -486,7 +486,7 @@ function hookGameFunctions() {
       }
     }
   });
-  [0x00513320, 0x00513690, 0x005179e0, 0x00517a00, 0x00517a20].forEach(function (address) {
+  [0x00513320, 0x00513690, 0x005179e0, 0x00517a00, 0x00517a20, 0x005319e0].forEach(function (address) {
     const fn = relative(address);
     gameplayCallbackCounts[address] = 0;
     installOnce(fn, 'GameplayCallback_' + address.toString(16), {
@@ -522,6 +522,10 @@ function hookGameFunctions() {
               main.add(0x260).writeU8(3);
               main.add(0x261).writeU8(3);
               main.add(0x26c).writeS32(1);
+              const input = base.add(0x4393b4);
+              input.add(0x260).writeU8(3);
+              input.add(0x261).writeU8(3);
+              input.add(0x26c).writeS32(1);
               forceActionsRemaining -= 1;
               emit('ForceGameplayActions', {remaining: forceActionsRemaining});
             }
