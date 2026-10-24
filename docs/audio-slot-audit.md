@@ -15,6 +15,11 @@ index are not yet recovered, so the iOS scene does not trigger these effects by
 guessing. The audit output makes that boundary explicit while preserving the
 local inventory needed for the next routing pass.
 
+The Apple audio adapter now prepares the complete 35-name chapter-3 table in
+the verified original order (`se000`, `se015`–`se031`, `se100`, `se101`,
+`se200`, `se300`–`se332`) and exposes slot-index playback. Event semantics stay
+separate until the original caller state is recovered.
+
 A bounded local Frida run now reaches the first non-script callback through the
 original title dispatcher. With the title START selection and chapter-3
 dispatcher forced in process memory for this experiment, the target opened

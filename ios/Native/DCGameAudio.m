@@ -2,6 +2,23 @@
 #import "DCArchive.h"
 #import <AVFoundation/AVFoundation.h>
 
+static NSArray<NSString *> *DCGameplaySlotNames(void) {
+    static NSArray<NSString *> *names;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        names = @[
+            @"se000.wav", @"se015.wav", @"se016.wav", @"se017.wav", @"se018.wav",
+            @"se019.wav", @"se020.wav", @"se021.wav", @"se022.wav", @"se023.wav",
+            @"se024.wav", @"se025.wav", @"se026.wav", @"se027.wav", @"se028.wav",
+            @"se029.wav", @"se030.wav", @"se031.wav", @"se100.wav", @"se101.wav",
+            @"se200.wav", @"se300.wav", @"se301.wav", @"se302.wav", @"se310.wav",
+            @"se311.wav", @"se312.wav", @"se320.wav", @"se321.wav", @"se322.wav",
+            @"se330.wav", @"se331.wav", @"se332.wav"
+        ];
+    });
+    return names;
+}
+
 @implementation DCGameAudio {
     AVAudioPlayer *_music,*_selection;
     NSMutableDictionary<NSString *,AVAudioPlayer *> *_gameplayEffects;
@@ -39,8 +56,9 @@
 }
 - (NSString *)prepareGameplayAudio {
     if(_gameplayEffects)return nil;
-    NSMutableDictionary<NSString *,AVAudioPlayer *> *prepared=[NSMutableDictionary dictionaryWithCapacity:3];
-    for(NSString *name in @[@"se016.wav",@"se322.wav",@"se332.wav"]) {
+    NSArray<NSString *> *slotNames=DCGameplaySlotNames();
+    NSMutableDictionary<NSString *,AVAudioPlayer *> *prepared=[NSMutableDictionary dictionaryWithCapacity:slotNames.count];
+    for(NSString *name in slotNames) {
         NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_14.pp" directory:_directory error:&error];
         if(!data)return error ?: [NSString stringWithFormat:@"Gameplay audio resource unavailable: %@",name];
         NSError *reason=nil;AVAudioPlayer *player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
@@ -52,6 +70,11 @@
 }
 - (BOOL)playGameplayEffectNamed:(NSString *)name {
     AVAudioPlayer *player=_gameplayEffects[name];if(!player)return NO;player.currentTime=0;return [player play];
+}
+- (BOOL)playGameplaySlot:(NSUInteger)slot {
+    NSArray<NSString *> *names=DCGameplaySlotNames();
+    if(slot>=names.count)return NO;
+    return [self playGameplayEffectNamed:names[slot]];
 }
 - (NSString *)startTitleMusic {
     if (_music.isPlaying) return nil;
