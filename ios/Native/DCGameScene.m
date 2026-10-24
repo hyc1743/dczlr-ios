@@ -85,6 +85,23 @@ static uint32_t gameColor(const dc_material_value *value) {
     return UINT32_MAX;
 }
 
+- (uint32_t)placementNodeFromPLST:(NSData *)data model:(dc_game_model *)slot {
+    if(!data || data.length<9 || !slot->xx) return UINT32_MAX;
+    const uint8_t *bytes=data.bytes;size_t cursor=4;
+    /* The observed PLST record starts with a one-byte variant, then four
+     * encoded name blocks and an eight-byte zero tail. */
+    cursor+=1;
+    uint32_t selected=UINT32_MAX;
+    while(cursor+4<=data.length) {
+        uint32_t length=0;memcpy(&length,bytes+cursor,sizeof(length));cursor+=4;
+        if(!length)break;
+        if(length>1024 || cursor+length>data.length) return UINT32_MAX;
+        NSString *name=[self decodedName:bytes+cursor length:length];cursor+=length;
+        uint32_t node=[self findNode:slot name:name];if(node!=UINT32_MAX)selected=node;
+    }
+    return selected;
+}
+
 - (NSData *)entry:(NSString *)name archive:(DCArchive *)archive error:(NSString **)error {
     for(uint32_t i=0;i<archive.entryCount;++i)
         if([[archive asciiNameAtIndex:i] caseInsensitiveCompare:name]==NSOrderedSame)
@@ -220,13 +237,15 @@ static uint32_t gameColor(const dc_material_value *value) {
     _map.xxData=[self entry:@"mm00_00.xx" archive:mapArchive error:error];
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
+    NSData *actorPlacement=[self entry:@"am00_01.plst" archive:actorArchive error:nil];
     _face.xxData=[self entry:@"ak00_00.xx" archive:faceArchive error:error];
     _face.xaData=[self entry:@"an00_01.xa" archive:faceArchive error:error];
     if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData)return nil;
     if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error] ||
        ![self openModel:&_face staticOnly:YES error:error])return nil;
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
-    _actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
+    _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
+    if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
     uint32_t anchor=[self findAnchor:&_map];
     _actorWorld=gameIdentity();
