@@ -142,6 +142,10 @@ These APIs preserve offsets, encoded bytes and six-byte key headers after full
 framing validation. The native view layer remains framing-only; the iOS scene
 owns the resource-specific binding described below.
 
+`dc_xa_load_morph_vector_sets` provides the validated vector-set view table in
+one pass, so the Apple scene does not rescan the full XA payload for every
+track key while constructing its cache.
+
 The chapter-3 face resource now has a bounded local binding path. In
 `RPP_09/ak00_00.xx` plus `an00_01.xa`, each vector set has one position array
 followed by one normal array for the named XX node; the packed 16-bit pairs in
