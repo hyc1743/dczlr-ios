@@ -10,6 +10,7 @@
 const presses = __PRESSES__;
 const forceMenu = __FORCE_MENU__;
 const forceChapter = __FORCE_CHAPTER__;
+const forceActions = __FORCE_ACTIONS__;
 const startedAt = Date.now();
 const seen = {};
 const hookedFunctions = {};
@@ -28,6 +29,7 @@ let forceMenuRemaining = forceMenu ? (forceMenu.frames || 5) : 0;
 let introStateSnapshot = '';
 let dispatcherSnapshot = '';
 let forceChapterApplied = false;
+let forceActionsRemaining = forceActions ? (forceActions.frames || 3) : 0;
 let audioDispatcherSnapshot = '';
 const gameplayCallbackCounts = {};
 
@@ -484,13 +486,27 @@ function hookGameFunctions() {
     const fn = relative(address);
     gameplayCallbackCounts[address] = 0;
     installOnce(fn, 'GameplayCallback_' + address.toString(16), {
-      onEnter: function () {
+      onEnter: function (args) {
         gameplayCallbackCounts[address] += 1;
         const count = gameplayCallbackCounts[address];
+        if (address === 0x00513690 && forceActions && forceActionsRemaining > 0 &&
+            elapsed() >= forceActions.at) {
+          try {
+            const main = args[0];
+            if (validPointer(main)) {
+              main.add(0x260).writeU8(3);
+              main.add(0x261).writeU8(3);
+              main.add(0x26c).writeS32(1);
+              forceActionsRemaining -= 1;
+              emit('ForceGameplayActions', {remaining: forceActionsRemaining});
+            }
+          } catch (_) {}
+        }
         if (count <= 3 || elapsed() >= 49) {
           emit('GameplayCallback', {address: '0x' + address.toString(16), count: count});
         }
-      }
+      },
+      onLeave: function () {}
     });
   });
   gameHooksInstalled = true;

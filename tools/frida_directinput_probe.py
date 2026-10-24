@@ -167,6 +167,20 @@ def parse_force_chapter(value: str) -> dict:
     return {"at": at, "chapter": chapter}
 
 
+def parse_force_actions(value: str) -> dict:
+    parts = value.split(":")
+    if len(parts) not in (1, 2):
+        raise argparse.ArgumentTypeError("force-actions must be AT[:FRAMES]")
+    try:
+        at = float(parts[0])
+        frames = int(parts[1], 0) if len(parts) == 2 else 3
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    if at < 0 or frames <= 0:
+        raise argparse.ArgumentTypeError("force-actions values are out of range")
+    return {"at": at, "frames": frames}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", type=Path, default=ROOT / "tmp" / "directx" / "gameprobe.exe")
@@ -177,6 +191,7 @@ def main() -> int:
     parser.add_argument("--cursor", action="append", type=parse_cursor, default=[])
     parser.add_argument("--force-menu", type=parse_force_menu)
     parser.add_argument("--force-chapter", type=parse_force_chapter)
+    parser.add_argument("--force-actions", type=parse_force_actions)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -192,6 +207,7 @@ def main() -> int:
     agent_source = agent_template.replace("__PRESSES__", json.dumps(presses, separators=(",", ":")))
     agent_source = agent_source.replace("__FORCE_MENU__", json.dumps(args.force_menu, separators=(",", ":")))
     agent_source = agent_source.replace("__FORCE_CHAPTER__", json.dumps(args.force_chapter, separators=(",", ":")))
+    agent_source = agent_source.replace("__FORCE_ACTIONS__", json.dumps(args.force_actions, separators=(",", ":")))
 
     os.chdir(ROOT)
     device = frida.get_local_device()
@@ -252,6 +268,7 @@ def main() -> int:
         "presses": presses,
         "force_menu": args.force_menu,
         "force_chapter": args.force_chapter,
+        "force_actions": args.force_actions,
         "process_interaction": "startup dialog BM_CLICK plus bounded DirectInput buffer probe",
         "start_clicked": start_clicked is not None,
         "events": messages,
