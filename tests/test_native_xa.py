@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from native_core import library, XAInfo, AnimationClip, AnimationTiming, AnimationState, AnimationTickResult
+from native_core import library, XAInfo, AnimationClip, AnimationTiming, AnimationState, AnimationTickResult, XAMorphIndexSet, XAMorphVectorSet, XAMorphTrack, XAMorphKey
 from xa_cases import fixture, clip_table, numeric_reference, looping_fixture
 
 
@@ -35,6 +35,25 @@ class NativeXATests(unittest.TestCase):
             "morph_index_sets": 1, "morph_vector_sets": 1, "morph_tracks": 1,
             "bone_tracks": 1, "has_clip_table": 1, "clip_count": 512,
             "clip_table_offset": offset, "parsed_bytes": len(data)})
+
+    def test_morph_views_preserve_encoded_spans_and_key_headers(self):
+        data, _ = fixture()
+        index, vector, track, key = XAMorphIndexSet(), XAMorphVectorSet(), XAMorphTrack(), XAMorphKey()
+        self.assertEqual(self.lib.dc_xa_morph_index_set_at(data,len(data),0,C.byref(index)),0)
+        self.assertEqual((index.count,index.selector), (2,1))
+        self.assertEqual(self.lib.dc_xa_morph_vector_set_at(data,len(data),0,C.byref(vector)),0)
+        self.assertEqual(vector.count,2)
+        self.assertEqual(self.lib.dc_xa_morph_track_at(data,len(data),0,C.byref(track)),0)
+        self.assertEqual((track.name_length,track.target_length,track.key_count),(6,9,1))
+        self.assertEqual(self.lib.dc_xa_morph_key_at(data,len(data),0,0,C.byref(key)),0)
+        self.assertEqual((bytes(key.raw),key.value_length),(bytes(range(6)),8))
+
+    def test_morph_views_reject_truncation_and_overlap(self):
+        data, _ = fixture(); source=C.create_string_buffer(data); out=XAMorphTrack();before=bytes(out)
+        for size in range(len(data)):
+            self.assertIn(self.lib.dc_xa_morph_track_at(source,size,0,C.byref(out)),(3,6),size)
+            self.assertEqual(bytes(out),before,size)
+        self.assertEqual(self.lib.dc_xa_morph_track_at(source,len(data),0,C.cast(source,C.POINTER(XAMorphTrack))),1)
 
     def test_all_slots_float_bits_and_output_canaries(self):
         data, _ = fixture()

@@ -23,6 +23,10 @@ typedef struct dc_xa_pose_track {
     size_t name_offset, keys_offset;
     uint32_t name_length, key_count, mode;
 } dc_xa_pose_track;
+typedef struct dc_xa_morph_index_set { size_t indices_offset, data_offset; uint32_t count; uint8_t selector; } dc_xa_morph_index_set;
+typedef struct dc_xa_morph_vector_set { size_t vectors_offset, data_offset; uint32_t count; } dc_xa_morph_vector_set;
+typedef struct dc_xa_morph_track { size_t name_offset, target_offset, keys_offset, tail_offset; uint32_t name_length, target_length, key_count; } dc_xa_morph_track;
+typedef struct dc_xa_morph_key { size_t value_offset; uint32_t value_length; uint8_t raw[6]; } dc_xa_morph_key;
 
 /* Validate the admitted serialized XA profile without allocating or modifying
  * input: four 0/1 section flags, bounded variable blocks and (when present) the
@@ -59,6 +63,12 @@ DC_API dc_status dc_xa_pose_track_at(const void *bytes, size_t length,
     uint32_t index, dc_xa_pose_track *out);
 DC_API dc_status dc_xa_load_pose_keys(const void *bytes, size_t length,
     uint32_t index, dc_pose_key *keys, size_t capacity);
+/* Morph section views. Name/value blocks remain encoded borrowed spans; no
+ * target binding, vertex deformation or interpolation is implied. */
+DC_API dc_status dc_xa_morph_index_set_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_index_set *out);
+DC_API dc_status dc_xa_morph_vector_set_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_vector_set *out);
+DC_API dc_status dc_xa_morph_track_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_track *out);
+DC_API dc_status dc_xa_morph_key_at(const void *bytes,size_t length,uint32_t track,uint32_t key,dc_xa_morph_key *out);
 
 #ifdef __cplusplus
 }

@@ -94,6 +94,15 @@ class XAInfo(C.Structure):
     def record(self):
         return {name: getattr(self, name) for name, _ in self._fields_}
 
+class XAMorphIndexSet(C.Structure):
+    _fields_=[('indices_offset',C.c_size_t),('data_offset',C.c_size_t),('count',C.c_uint32),('selector',C.c_uint8)]
+class XAMorphVectorSet(C.Structure):
+    _fields_=[('vectors_offset',C.c_size_t),('data_offset',C.c_size_t),('count',C.c_uint32)]
+class XAMorphTrack(C.Structure):
+    _fields_=[('name_offset',C.c_size_t),('target_offset',C.c_size_t),('keys_offset',C.c_size_t),('tail_offset',C.c_size_t),('name_length',C.c_uint32),('target_length',C.c_uint32),('key_count',C.c_uint32)]
+class XAMorphKey(C.Structure):
+    _fields_=[('value_offset',C.c_size_t),('value_length',C.c_uint32),('raw',C.c_uint8*6)]
+
 
 class MaterialValue(C.Structure):
     _fields_ = [("components", C.c_float * 17)]
@@ -489,6 +498,14 @@ def library():
     lib.dc_xa_pose_track_at.restype = C.c_int
     lib.dc_xa_load_pose_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(PoseKey), C.c_size_t]
     lib.dc_xa_load_pose_keys.restype = C.c_int
+    lib.dc_xa_morph_index_set_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(XAMorphIndexSet)]
+    lib.dc_xa_morph_index_set_at.restype=C.c_int
+    lib.dc_xa_morph_vector_set_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(XAMorphVectorSet)]
+    lib.dc_xa_morph_vector_set_at.restype=C.c_int
+    lib.dc_xa_morph_track_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(XAMorphTrack)]
+    lib.dc_xa_morph_track_at.restype=C.c_int
+    lib.dc_xa_morph_key_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.c_uint32,C.POINTER(XAMorphKey)]
+    lib.dc_xa_morph_key_at.restype=C.c_int
     lib.dc_material_interpolate.argtypes = [C.POINTER(MaterialKey), C.POINTER(MaterialKey), C.c_float, C.POINTER(MaterialValue)]
     lib.dc_material_interpolate.restype = C.c_int
     lib.dc_material_sample.argtypes = [C.POINTER(MaterialKey), C.c_size_t, C.POINTER(MaterialValue), C.c_float, C.POINTER(MaterialValue)]
