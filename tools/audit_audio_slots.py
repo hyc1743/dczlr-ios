@@ -14,6 +14,16 @@ VERIFIED_SLOT_BINDINGS = {
     20: "se332.wav",
 }
 
+CHAPTER3_SLOT_NAMES = (
+    "se000.wav", "se015.wav", "se016.wav", "se017.wav", "se018.wav",
+    "se019.wav", "se020.wav", "se021.wav", "se022.wav", "se023.wav",
+    "se024.wav", "se025.wav", "se026.wav", "se027.wav", "se028.wav",
+    "se029.wav", "se030.wav", "se031.wav", "se100.wav", "se101.wav",
+    "se200.wav", "se300.wav", "se301.wav", "se302.wav", "se310.wav",
+    "se311.wav", "se312.wav", "se320.wav", "se321.wav", "se322.wav",
+    "se330.wav", "se331.wav", "se332.wav",
+)
+
 
 def audit(data_directory: Path) -> dict:
     archive_path = data_directory / "RPP_14.pp"
@@ -34,12 +44,17 @@ def audit(data_directory: Path) -> dict:
     missing = [name for name in VERIFIED_SLOT_BINDINGS.values() if name not in names]
     if missing:
         raise ValueError("verified slot names are missing from RPP_14.pp: " + ", ".join(missing))
+    missing_chapter3 = [name for name in CHAPTER3_SLOT_NAMES if name not in names]
+    if missing_chapter3:
+        raise ValueError("chapter-3 slot names are missing from RPP_14.pp: " + ", ".join(missing_chapter3))
     return {
         "schema": 1,
         "method": "local PP inventory plus static call-site slot bindings",
         "archive": "RPP_14.pp",
         "entries": entries,
         "runtime_slot_count_observed": 35,
+        "chapter3_slot_names": list(CHAPTER3_SLOT_NAMES),
+        "chapter3_slot_names_verified": True,
         "verified_slot_bindings": [
             {"slot": slot, "name": name, "source": source}
             for slot, name, source in (
