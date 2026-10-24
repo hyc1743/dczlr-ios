@@ -40,6 +40,7 @@ final class SpritePresenter: NSObject {
     private var lastIntroRecord: String?
     private var reportedTextFade = false
     private var reportedSkinAdvance = false
+    private var reportedInteraction = false
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -87,7 +88,7 @@ final class SpritePresenter: NSObject {
             touching = (elapsed >= 2 && elapsed < 2.2) || (elapsed >= 3 && elapsed < 3.2) || (elapsed >= 4 && elapsed < 4.2)
         }
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
-            touching: touching) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced in
+            touching: touching) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, interactionCompleted in
                 guard let self = self else { return }
                 self.renderPending = false
                 if let error = error {
@@ -162,6 +163,10 @@ final class SpritePresenter: NSObject {
                 if skinAdvanced, !self.reportedSkinAdvance {
                     self.reportedSkinAdvance = true
                     self.model.record("Generated world-space skinned geometry changed and presented", event: "PORTLAB_NATIVE_SKIN_ADVANCED")
+                }
+                if interactionCompleted, !self.reportedInteraction {
+                    self.reportedInteraction = true
+                    self.model.record("Chapter interaction animation completed", event: "PORTLAB_GAME_INTERACTION_COMPLETED")
                 }
             }
     }
