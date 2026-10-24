@@ -1,4 +1,5 @@
 import ctypes as C
+import struct
 import hashlib
 import json
 from pathlib import Path
@@ -54,6 +55,16 @@ class NativeXATests(unittest.TestCase):
             self.assertIn(self.lib.dc_xa_morph_track_at(source,size,0,C.byref(out)),(3,6),size)
             self.assertEqual(bytes(out),before,size)
         self.assertEqual(self.lib.dc_xa_morph_track_at(source,len(data),0,C.cast(source,C.POINTER(XAMorphTrack))),1)
+
+    def test_morph_arrays_copy_raw_indices_and_six_float_vectors(self):
+        data, _ = fixture()
+        indices=(C.c_uint32*2)();vectors=(C.c_float*12)()
+        self.assertEqual(self.lib.dc_xa_load_morph_indices(data,len(data),0,indices,2),0)
+        self.assertEqual(list(indices),[0x03020100,0x07060504])
+        self.assertEqual(self.lib.dc_xa_load_morph_vectors(data,len(data),0,vectors,2),0)
+        self.assertEqual(bytes(vectors)[:24], bytes(range(24)))
+        self.assertEqual(self.lib.dc_xa_load_morph_indices(data,len(data),0,indices,1),4)
+        self.assertEqual(self.lib.dc_xa_load_morph_vectors(data,len(data),0,vectors,1),4)
 
     def test_all_slots_float_bits_and_output_canaries(self):
         data, _ = fixture()

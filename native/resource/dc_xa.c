@@ -286,3 +286,23 @@ dc_status dc_xa_morph_key_at(const void *bytes,size_t length,uint32_t track,uint
     }
     return DC_NOT_FOUND;
 }
+
+dc_status dc_xa_load_morph_indices(const void *bytes,size_t length,uint32_t index,uint32_t *out,size_t capacity){
+    dc_xa_morph_index_set view;dc_status status=dc_xa_morph_index_set_at(bytes,length,index,&view);
+    if(status!=DC_OK)return status;
+    if(capacity<view.count)return DC_RANGE;
+    if(view.count && (!out||overlaps(bytes,length,out,(size_t)view.count*sizeof(*out))))return DC_ARGUMENT;
+    for(uint32_t i=0;i<view.count;++i)out[i]=word((const uint8_t*)bytes+view.indices_offset+i*4);
+    return DC_OK;
+}
+
+dc_status dc_xa_load_morph_vectors(const void *bytes,size_t length,uint32_t index,float *out,size_t capacity){
+    dc_xa_morph_vector_set view;dc_status status=dc_xa_morph_vector_set_at(bytes,length,index,&view);
+    if(status!=DC_OK)return status;
+    if(capacity<view.count)return DC_RANGE;
+    size_t bytes_needed=(size_t)view.count*6*sizeof(float);
+    if(view.count && (!out||overlaps(bytes,length,out,bytes_needed)))return DC_ARGUMENT;
+    const uint8_t *source=(const uint8_t*)bytes+view.vectors_offset;
+    for(uint32_t i=0;i<view.count*6;++i){uint32_t bits=word(source+i*4);memcpy(out+i,&bits,4);}
+    return DC_OK;
+}

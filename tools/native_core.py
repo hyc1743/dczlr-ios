@@ -506,6 +506,10 @@ def library():
     lib.dc_xa_morph_track_at.restype=C.c_int
     lib.dc_xa_morph_key_at.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.c_uint32,C.POINTER(XAMorphKey)]
     lib.dc_xa_morph_key_at.restype=C.c_int
+    lib.dc_xa_load_morph_indices.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(C.c_uint32),C.c_size_t]
+    lib.dc_xa_load_morph_indices.restype=C.c_int
+    lib.dc_xa_load_morph_vectors.argtypes=[C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(C.c_float),C.c_size_t]
+    lib.dc_xa_load_morph_vectors.restype=C.c_int
     lib.dc_material_interpolate.argtypes = [C.POINTER(MaterialKey), C.POINTER(MaterialKey), C.c_float, C.POINTER(MaterialValue)]
     lib.dc_material_interpolate.restype = C.c_int
     lib.dc_material_sample.argtypes = [C.POINTER(MaterialKey), C.c_size_t, C.POINTER(MaterialValue), C.c_float, C.POINTER(MaterialValue)]

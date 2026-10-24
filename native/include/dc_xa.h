@@ -69,6 +69,9 @@ DC_API dc_status dc_xa_morph_index_set_at(const void *bytes,size_t length,uint32
 DC_API dc_status dc_xa_morph_vector_set_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_vector_set *out);
 DC_API dc_status dc_xa_morph_track_at(const void *bytes,size_t length,uint32_t index,dc_xa_morph_track *out);
 DC_API dc_status dc_xa_morph_key_at(const void *bytes,size_t length,uint32_t track,uint32_t key,dc_xa_morph_key *out);
+DC_API dc_status dc_xa_load_morph_indices(const void *bytes,size_t length,uint32_t index,uint32_t *out,size_t capacity);
+/* Six binary32 values per vector record: two three-component positions. */
+DC_API dc_status dc_xa_load_morph_vectors(const void *bytes,size_t length,uint32_t index,float *out,size_t capacity);
 
 #ifdef __cplusplus
 }
