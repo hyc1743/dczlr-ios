@@ -36,6 +36,7 @@ final class SpritePresenter: NSObject {
     private var reportedIntroAudioAdvance = false
     private var testTitleTime: CFTimeInterval?
     private var testIntroTime: CFTimeInterval?
+    private var testGameplayTime: CFTimeInterval?
     private var introChapter = 0
     private var lastIntroRecord: String?
     private var reportedTextFade = false
@@ -87,6 +88,16 @@ final class SpritePresenter: NSObject {
            let introTime = testIntroTime, lastReportedScene == .intro, introChapter == 0 {
             let elapsed = CACurrentMediaTime() - introTime
             touching = (elapsed >= 2 && elapsed < 2.2) || (elapsed >= 3 && elapsed < 3.2) || (elapsed >= 4 && elapsed < 4.2)
+        }
+        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
+           lastReportedScene == .gameplay {
+            if testGameplayTime == nil { testGameplayTime = CACurrentMediaTime() }
+            let elapsed = CACurrentMediaTime() - (testGameplayTime ?? CACurrentMediaTime())
+            let px = view.bounds.midX
+            let py = view.bounds.midY
+            pointerX = Float(2 * px / view.bounds.width - 1)
+            pointerY = Float(1 - 2 * py / view.bounds.height)
+            touching = elapsed >= 1 && (elapsed - 1).truncatingRemainder(dividingBy: 2.5) < 0.22
         }
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
             touching: touching) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in

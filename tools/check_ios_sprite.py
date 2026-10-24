@@ -189,11 +189,13 @@ def stage_resource_parts(parts_root, container, output):
 
 
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
-          exercise_new_game=False, resource_parts=None):
+          exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False):
     if exercise_new_game and (not startup_fixture and not resource_parts):
         raise ValueError('New-game exercise requires generated startup fixture or staged resource parts')
     if exercise_new_game and startup_fixture and expected_scene != 'intro':
         raise ValueError('Generated startup fixture new-game exercise requires intro target')
+    if exercise_real_gameplay and (not resource_parts or expected_scene not in ('gameplay', 'gameComplete')):
+        raise ValueError('Real gameplay exercise requires resource parts and gameplay target')
     require_animation = expected_scene == "checker"
     require_xa = expected_scene == "checker"
     require_material = expected_scene == "checker"
@@ -245,6 +247,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
     if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
     if exercise_new_game:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_NEW_GAME']='1'
+    if exercise_real_gameplay:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_REAL_GAMEPLAY']='1'
     # Cold CoreSimulator may queue the same request for over two minutes.
     # Observe that live command and app-authored evidence concurrently; never
     # issue another launch merely because an observation interval elapsed.
@@ -365,6 +368,12 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             'intro_fixture_markers': 'not required',
             'gameplay_evidence': 'validated by expected scene and gameplay markers'
         }
+    if exercise_real_gameplay and resource_parts:
+        report['real_resource_gameplay'] = {
+            'resources': 'local dczdata parts staged and imported',
+            'interaction_input': 'automated touch pulses through the normal input adapter',
+            'scene_evidence': 'expected gameplay/gameComplete marker and gameplay interaction evidence'
+        }
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")
@@ -381,10 +390,12 @@ if __name__ == "__main__":
     parser.add_argument("--exercise-new-game", action="store_true")
     parser.add_argument("--resource-parts", type=Path,
                         help="local directory containing DczlrData.manifest.json and all dczdata parts")
+    parser.add_argument("--exercise-real-gameplay", action="store_true",
+                        help="automatically pulse interaction input after staging real resource parts")
     args = parser.parse_args()
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay)
     else:
         parser.error("--app is required unless --boot-only is selected")

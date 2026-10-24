@@ -48,9 +48,10 @@ be staged without putting them in the repository:
 
 ```text
 python tools/check_ios_sprite.py --app <PortLab.app> --runtime iOS-18-5 \
-  --expected-scene intro --exercise-new-game \
+  --expected-scene gameComplete --exercise-real-gameplay \
   --resource-parts out/resource-packs --output out/ios-real-resources
 ```
 
 The tool verifies every part against `DczlrData.manifest.json`, copies them to
-the simulator's `Documents/ResourcePacks`, and records the staging manifest.
+the simulator's `Documents/ResourcePacks`, sends touch pulses through the
+normal input adapter, and records the staging manifest plus gameplay markers.
