@@ -53,7 +53,7 @@ Implementation and verification details:
 
 - [Model runtime, startup connection and triangle geometry](docs/model-runtime.md)
 - [Animation controller](docs/animation-reconstruction.md), [material sampling](docs/material-sampling.md), [node pose sampling](docs/pose-sampling.md)
-- [XX reader](docs/xx-reader.md), [XA reader](docs/xa-reader.md), [script framing](docs/script-framing.md)
+- [XX reader](docs/xx-reader.md), [XA reader](docs/xa-reader.md), [XL light reader](docs/xl-reader.md), [eyes/neck reader](docs/eyeneck-reader.md), [script framing](docs/script-framing.md)
 - [Menu input](docs/menu-input.md), [title audio](docs/title-audio.md), [save-prefix metadata](docs/save-metadata.md)
 - [Vulkan pixel gates](docs/vulkan-sprites.md), [offline effect/shader tools](docs/effect-conversion-tools.md)
 

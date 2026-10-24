@@ -145,6 +145,34 @@ class CameraLens(C.Structure):
 class CameraMatrices(C.Structure):
     _fields_ = [(n,Matrix) for n in ("world","view","projection","view_projection")]
 
+
+class XLSpan(C.Structure):
+    _fields_ = [("offset", C.c_size_t), ("length", C.c_uint32)]
+
+
+class XLInfo(C.Structure):
+    _fields_ = [("lights", C.c_uint32), ("parsed_bytes", C.c_size_t)]
+
+
+class XLLight(C.Structure):
+    _fields_ = [("name", XLSpan), ("target", XLSpan),
+                ("kind", C.c_uint8), ("enabled", C.c_uint8),
+                ("flags", C.c_uint8 * 3),
+                ("diffuse", C.c_float * 4), ("ambient", C.c_float * 4),
+                ("specular", C.c_float * 4), ("position", C.c_float * 4),
+                ("direction", C.c_float * 4), ("parameters", C.c_float * 6),
+                ("transform", C.c_float * 16)]
+
+
+class EyeNeckSpan(C.Structure):
+    _fields_ = [("offset", C.c_size_t), ("length", C.c_uint32)]
+
+
+class EyeNeckInfo(C.Structure):
+    _fields_ = [("kind", C.c_uint32), ("targets", C.c_uint32),
+                ("records", C.c_uint32), ("body_offset", C.c_size_t),
+                ("parsed_bytes", C.c_size_t)]
+
 class GamePlayer(C.Structure):
     _fields_=[(n,C.c_float) for n in ("x","z","min_x","max_x","min_z","max_z","speed")]+[(n,C.c_uint32) for n in ("interaction_count","map_selector")]
 class GameInput(C.Structure):
@@ -364,12 +392,12 @@ def compiler_command():
 @lru_cache(maxsize=1)
 def library():
     command = compiler_command()
-    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c",
+    sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c", ROOT / "native/resource/dc_xl.c", ROOT / "native/resource/dc_eyeneck.c",
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_mesh_clip.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
                ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c", ROOT / "native/game/dc_camera.c", ROOT / "native/game/dc_gameplay.c"]
     inputs = sources + [ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -407,6 +435,14 @@ def library():
     lib.dc_pp_basename_offset.restype = C.c_int
     lib.dc_pp_find_ascii_path.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
     lib.dc_pp_find_ascii_path.restype = C.c_int
+    lib.dc_xl_probe.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(XLInfo)]
+    lib.dc_xl_probe.restype = C.c_int
+    lib.dc_xl_light_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XLLight)]
+    lib.dc_xl_light_at.restype = C.c_int
+    lib.dc_eyeneck_probe.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(EyeNeckInfo)]
+    lib.dc_eyeneck_probe.restype = C.c_int
+    lib.dc_eyeneck_target_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(EyeNeckSpan)]
+    lib.dc_eyeneck_target_at.restype = C.c_int
     lib.dc_image_probe.argtypes = [C.c_void_p, C.c_size_t, C.c_int, C.POINTER(ImageInfo)]
     lib.dc_image_probe.restype = C.c_int
     lib.dc_image_decode.argtypes = [C.c_void_p, C.c_size_t, C.c_int, C.c_void_p,

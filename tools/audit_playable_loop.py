@@ -23,6 +23,8 @@ from native_core import (  # noqa: E402
     GameInteractionResult,
     GameInteractionState,
     GamePlayer,
+    EyeNeckInfo,
+    EyeNeckSpan,
     Matrix,
     MeshVertex,
     SpriteVertex,
@@ -32,6 +34,8 @@ from native_core import (  # noqa: E402
     XAMorphKey,
     XAMorphTrack,
     XAMorphVectorSet,
+    XLInfo,
+    XLLight,
     XXInfo,
     XXModel,
     XXSubmesh,
@@ -189,13 +193,30 @@ def main():
                 "bytes": len(resource_data),
                 "sha256": hashlib.sha256(resource_data).hexdigest(),
             }
-    def encoded_name_present(data, name):
-        encoded=bytes(value ^ 255 for value in name.encode("ascii"))
-        return encoded in data
+    eyes_data = entry(ROOT / "Data/RPP_04.pp", "ak00_00.eyes")
+    neck_data = entry(ROOT / "Data/RPP_04.pp", "am00_01.neck")
+    eyes_info, neck_info = EyeNeckInfo(), EyeNeckInfo()
+    eyes_right, eyes_left, neck_head = EyeNeckSpan(), EyeNeckSpan(), EyeNeckSpan()
+    if (lib.dc_eyeneck_probe(eyes_data, len(eyes_data), C.byref(eyes_info)) or
+            lib.dc_eyeneck_probe(neck_data, len(neck_data), C.byref(neck_info)) or
+            lib.dc_eyeneck_target_at(eyes_data, len(eyes_data), 0, C.byref(eyes_right)) or
+            lib.dc_eyeneck_target_at(eyes_data, len(eyes_data), 1, C.byref(eyes_left)) or
+            lib.dc_eyeneck_target_at(neck_data, len(neck_data), 0, C.byref(neck_head))):
+        raise RuntimeError("RPP_04 eyes/neck profile admission failed")
+    def encoded_span_matches(data, span, name):
+        expected = name.encode("ascii")
+        return len(expected) == span.length and all(
+            data[span.offset + index] == (value ^ 255)
+            for index, value in enumerate(expected)
+        )
     scene_dependencies["RPP_04.pp"]["bindings"] = {
-        "eyes_right": encoded_name_present(entry(ROOT / "Data/RPP_04.pp", "ak00_00.eyes"), "a_Np_me_R"),
-        "eyes_left": encoded_name_present(entry(ROOT / "Data/RPP_04.pp", "ak00_00.eyes"), "a_Np_me_L"),
-        "neck_head": encoded_name_present(entry(ROOT / "Data/RPP_04.pp", "am00_01.neck"), "a_Kp_kubi2"),
+        "eyes_right": encoded_span_matches(eyes_data, eyes_right, "a_Np_me_R"),
+        "eyes_left": encoded_span_matches(eyes_data, eyes_left, "a_Np_me_L"),
+        "neck_head": encoded_span_matches(neck_data, neck_head, "a_Kp_kubi2"),
+    }
+    scene_dependencies["RPP_04.pp"]["profiles"] = {
+        "eyes": {"kind": eyes_info.kind, "targets": eyes_info.targets, "records": eyes_info.records},
+        "neck": {"kind": neck_info.kind, "targets": neck_info.targets, "records": neck_info.records},
     }
     scene_dependencies["RPP_07.pp"] = {}
     for selector in SEQUENCE:
@@ -206,7 +227,21 @@ def main():
             raise RuntimeError(f"missing auxiliary XL resource for map {selector}")
         resource_name = sorted(candidates)[0]
         resource_data = entry(ROOT / "Data/RPP_07.pp", resource_name)
-        scene_dependencies["RPP_07.pp"][resource_name] = {"selector": selector, "bytes": len(resource_data), "sha256": hashlib.sha256(resource_data).hexdigest()}
+        light_info = XLInfo()
+        light = XLLight()
+        if lib.dc_xl_probe(resource_data, len(resource_data), C.byref(light_info)) or not light_info.lights or \
+                lib.dc_xl_light_at(resource_data, len(resource_data), 0, C.byref(light)):
+            raise RuntimeError(f"XL light admission failed for map {selector}")
+        scene_dependencies["RPP_07.pp"][resource_name] = {
+            "selector": selector,
+            "bytes": len(resource_data),
+            "sha256": hashlib.sha256(resource_data).hexdigest(),
+            "lights": light_info.lights,
+            "first_light_kind": light.kind,
+            "first_light_enabled": light.enabled,
+            "first_light_diffuse": [round(value, 7) for value in light.diffuse],
+            "first_light_position": [round(value, 7) for value in light.position],
+        }
     face_handle = C.c_void_p()
     if lib.dc_model_open_static(face, len(face), C.byref(face_handle)):
         lib.dc_model_close(actor_handle)

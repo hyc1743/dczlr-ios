@@ -1,8 +1,10 @@
 #import "DCGameScene.h"
 #import "DCArchive.h"
 #include "dc_camera.h"
+#include "dc_eyeneck.h"
 #include "dc_gameplay.h"
 #include "dc_model.h"
+#include "dc_xl.h"
 #include <math.h>
 #include <float.h>
 #include <stdio.h>
@@ -51,6 +53,9 @@ static void freeMorphCaches(dc_game_model *slot) {
 @implementation DCGameScene {
     NSString *_directory;
     NSData *_eyesData,*_neckData;
+    NSData *_lightData;
+    dc_xl_info _lightInfo;
+    dc_xl_light _mapLight;
     dc_vk_sprite *_renderer;
     dc_game_model _map,_actor;
     dc_game_model _face;
@@ -130,13 +135,33 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(error)*error=[NSString stringWithFormat:@"Missing game resource %@",name];
     return nil;
 }
-- (BOOL)encodedName:(NSString *)name presentInData:(NSData *)data {
-    if (!name.length || !data.length) return NO;
+- (NSData *)lightEntryForSelector:(uint32_t)selector archive:(DCArchive *)archive {
+    NSString *prefix=[NSString stringWithFormat:@"pp%02u_",selector];
+    for(uint32_t i=0;i<archive.entryCount;++i) {
+        NSString *name=[archive asciiNameAtIndex:i];
+        if(!name || ![name.lowercaseString hasPrefix:prefix.lowercaseString] ||
+           ![name.lowercaseString hasSuffix:@".xl"]) continue;
+        return [archive readEntryAtIndex:i limit:128*1024 error:nil];
+    }
+    return nil;
+}
+- (BOOL)loadLightForSelector:(uint32_t)selector archive:(DCArchive *)archive error:(NSString **)error {
+    NSData *data=[self lightEntryForSelector:selector archive:archive];
+    if(!data) { if(error)*error=[NSString stringWithFormat:@"Missing XL light resource for map %u",selector]; return NO; }
+    dc_xl_info info;dc_xl_light light;
+    if(dc_xl_probe(data.bytes,data.length,&info)!=DC_OK || !info.lights ||
+       dc_xl_light_at(data.bytes,data.length,0,&light)!=DC_OK) {
+        if(error)*error=[NSString stringWithFormat:@"XL light resource rejected for map %u",selector];
+        return NO;
+    }
+    _lightData=data;_lightInfo=info;_mapLight=light;return YES;
+}
+- (BOOL)encodedSpan:(dc_eyeneck_span)span matchesName:(NSString *)name data:(NSData *)data {
     NSData *plain=[name dataUsingEncoding:NSASCIIStringEncoding];
-    NSMutableData *encoded=[NSMutableData dataWithLength:plain.length];
-    const uint8_t *source=plain.bytes;uint8_t *destination=encoded.mutableBytes;
-    for(NSUInteger i=0;i<plain.length;++i)destination[i]=(uint8_t)(source[i]^255u);
-    return [data rangeOfData:encoded options:0 range:NSMakeRange(0,data.length)].location!=NSNotFound;
+    if(!plain || span.length!=plain.length || span.offset>data.length || span.length>data.length-span.offset)return NO;
+    const uint8_t *raw=(const uint8_t *)data.bytes+span.offset;const uint8_t *expected=plain.bytes;
+    for(NSUInteger i=0;i<span.length;++i)if((uint8_t)(expected[i]^255u)!=raw[i])return NO;
+    return YES;
 }
 - (BOOL)openModel:(dc_game_model *)slot staticOnly:(BOOL)staticOnly error:(NSString **)error {
     dc_status status=staticOnly ? dc_model_open_static(slot->xxData.bytes,slot->xxData.length,&slot->model)
@@ -295,9 +320,15 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(!nextData)return @"Next map resource is unavailable";
     NSString *nextAnimationName=[NSString stringWithFormat:@"mn00_%02u.xa",nextSelector];
     NSData *nextAnimation=[self entry:nextAnimationName archive:archive error:nil];
+    DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
+    NSData *nextLightData=lightArchive ? [self lightEntryForSelector:nextSelector archive:lightArchive] : nil;
+    dc_xl_info nextLightInfo;dc_xl_light nextLight;
+    if(!nextLightData || dc_xl_probe(nextLightData.bytes,nextLightData.length,&nextLightInfo)!=DC_OK ||
+       !nextLightInfo.lights || dc_xl_light_at(nextLightData.bytes,nextLightData.length,0,&nextLight)!=DC_OK)
+        return @"Next map XL light resource is unavailable";
     dc_game_model nextMap={0};nextMap.xxData=nextData;nextMap.xaData=nextAnimation;nextMap.world=gameIdentity();
     NSString *error=nil;if(![self openModel:&nextMap staticOnly:(nextAnimation==nil) error:&error]){[self detachModel:&nextMap];return error ?: @"Next map could not be loaded";}
-    [self detachModel:&_map];_map=nextMap;
+    [self detachModel:&_map];_map=nextMap;_lightData=nextLightData;_lightInfo=nextLightInfo;_mapLight=nextLight;
     _map.world=gameIdentity();_mapSelector=nextSelector;
     const char *anchors[]={(nextSelector==1?"m_Nn_yuka_p_a":nextSelector==3?"m_Nn_yuka_r_a":nextSelector==4?"m_Nn_yuka_5_a":nextSelector==5?"m_Nn_yuka_5_a":nextSelector==6?"m_Nn_yuka_2b_a":"m_Nn_yuka_5_a"),"m_Nn_yuka_3_a","m_Nn_yuka_2f_a"};
     for(unsigned candidate=0;candidate<3;++candidate)for(uint32_t i=1;i<_map.info.nodes;++i){dc_xx_node node;if(dc_xx_node_at(_map.xx,i,&node)!=DC_OK)continue;const uint8_t *raw=(const uint8_t *)_map.xxData.bytes+node.name.offset;size_t n=0;while(n<node.name.length&&raw[n]!=255)++n;char decoded[40];if(n>=sizeof(decoded))continue;for(size_t j=0;j<n;++j)decoded[j]=(char)(raw[j]^255);decoded[n]=0;if(!strcmp(decoded,anchors[candidate])){dc_xx_node_matrix(_map.xx,i,&_actorWorld);_actor.world=_actorWorld;candidate=3;break;}}
@@ -319,7 +350,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
      DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:&reason];
-     if(!mapArchive || !actorArchive || !faceArchive || !auxiliaryArchive) { if(error)*error=reason.localizedDescription;return nil; }
+     DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:&reason];
+     if(!mapArchive || !actorArchive || !faceArchive || !auxiliaryArchive || !lightArchive) { if(error)*error=reason.localizedDescription;return nil; }
     _map.xxData=[self entry:@"mm00_00.xx" archive:mapArchive error:error];
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
@@ -337,14 +369,23 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
-     if(![self encodedName:@"a_Np_me_R" presentInData:_eyesData] ||
-        ![self encodedName:@"a_Np_me_L" presentInData:_eyesData] ||
-        ![self encodedName:@"a_Kp_kubi2" presentInData:_neckData] ||
+    dc_eyeneck_info eyesInfo,neckInfo;dc_eyeneck_span eyesRight,eyesLeft,neckHead;
+    if(dc_eyeneck_probe(_eyesData.bytes,_eyesData.length,&eyesInfo)!=DC_OK ||
+       dc_eyeneck_probe(_neckData.bytes,_neckData.length,&neckInfo)!=DC_OK ||
+       eyesInfo.kind!=DC_EYENECK_EYES || eyesInfo.targets!=2 || eyesInfo.records!=5 ||
+       neckInfo.kind!=DC_EYENECK_NECK || neckInfo.targets!=1 || neckInfo.records!=3 ||
+       dc_eyeneck_target_at(_eyesData.bytes,_eyesData.length,0,&eyesRight)!=DC_OK ||
+       dc_eyeneck_target_at(_eyesData.bytes,_eyesData.length,1,&eyesLeft)!=DC_OK ||
+       dc_eyeneck_target_at(_neckData.bytes,_neckData.length,0,&neckHead)!=DC_OK ||
+       ![self encodedSpan:eyesRight matchesName:@"a_Np_me_R" data:_eyesData] ||
+       ![self encodedSpan:eyesLeft matchesName:@"a_Np_me_L" data:_eyesData] ||
+       ![self encodedSpan:neckHead matchesName:@"a_Kp_kubi2" data:_neckData] ||
         [self findNode:&_face name:@"a_Np_me_R"]==UINT32_MAX ||
         [self findNode:&_face name:@"a_Np_me_L"]==UINT32_MAX ||
         [self findNode:&_actor name:@"a_Kp_kubi2"]==UINT32_MAX) {
          if(error)*error=@"Eyes/neck auxiliary binding failed";return nil;
      }
+    if(![self loadLightForSelector:0 archive:lightArchive error:error])return nil;
     uint32_t anchor=[self findAnchor:&_map];
     _actorWorld=gameIdentity();
     if(anchor!=UINT32_MAX && dc_xx_node_matrix(_map.xx,anchor,&_actorWorld)!=DC_OK)_actorWorld=gameIdentity();
