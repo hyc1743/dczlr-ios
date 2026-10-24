@@ -13,6 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from native_core import (  # noqa: E402
+    CameraOrbit,
     GameInteractionInput,
     GameInteractionResult,
     GameInteractionState,
@@ -45,6 +46,10 @@ def main():
     map_rows = []
     for selector in SEQUENCE:
         data = entry(ROOT / "Data/RPP_10.pp", f"mm00_{selector:02d}.xx")
+        camera_data = entry(ROOT / "Data/RPP_03.pp", CAMERAS[selector])
+        camera = CameraOrbit()
+        if lib.dc_camera_read_preset(camera_data, len(camera_data), 0, C.byref(camera)):
+            raise RuntimeError(f"camera {selector} admission failed")
         handle = C.c_void_p()
         status = lib.dc_model_open_static(data, len(data), C.byref(handle))
         if status:
@@ -61,6 +66,11 @@ def main():
                 "submeshes": native_info.submeshes,
                 "textures": native_info.textures,
                 "camera": CAMERAS[selector],
+                "camera_sha256": hashlib.sha256(camera_data).hexdigest(),
+                "camera_distance": camera.stored_distance,
+                "camera_height": camera.height,
+                "camera_pitch": camera.pitch,
+                "camera_yaw": camera.yaw,
             })
         finally:
             lib.dc_model_close(handle)
