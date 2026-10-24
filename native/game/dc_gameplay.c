@@ -13,6 +13,16 @@ dc_status dc_game_player_step(const dc_game_player *s,const dc_game_input *in,fl
     if(!isfinite(next.x)||!isfinite(next.z))return DC_RANGE;*out=next;return DC_OK;
 }
 static uint32_t checksum(const uint8_t *p,size_t n){uint32_t h=2166136261u;for(size_t i=0;i<n;++i)h=(h^p[i])*16777619u;return h;}
+dc_status dc_game_next_map_selector(uint32_t current,uint32_t *next,uint32_t *finished){
+    if(!next||!finished)return DC_ARGUMENT;
+    static const uint32_t sequence[DC_GAME_MAP_SEQUENCE_COUNT]={0,1,3,4,5,6,7,8};
+    uint32_t index=UINT32_MAX;
+    for(uint32_t i=0;i<DC_GAME_MAP_SEQUENCE_COUNT;++i)if(sequence[i]==current){index=i;break;}
+    if(index==UINT32_MAX)return DC_RANGE;
+    *next=index+1<DC_GAME_MAP_SEQUENCE_COUNT?sequence[index+1]:current;
+    *finished=index+1==DC_GAME_MAP_SEQUENCE_COUNT;
+    return DC_OK;
+}
 dc_status dc_game_player_save(const dc_game_player *state,void *bytes,size_t length){
     if(!state||!bytes)return DC_ARGUMENT;if(length<DC_GAME_PLAYER_SAVE_BYTES)return DC_RANGE;
     if(!isfinite(state->x)||!isfinite(state->z)||state->min_x>state->max_x||state->min_z>state->max_z||state->speed<0)return DC_RANGE;

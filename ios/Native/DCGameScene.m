@@ -221,9 +221,9 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (NSString *)advanceToNextMap {
     if(_mapAdvanced)return nil;
-    uint32_t nextSelector=UINT32_MAX;
-    if(_mapSelector==0)nextSelector=1;else if(_mapSelector==1)nextSelector=3;else if(_mapSelector==3)nextSelector=4;else if(_mapSelector==4)nextSelector=5;else if(_mapSelector==5)nextSelector=6;else if(_mapSelector==6)nextSelector=7;else if(_mapSelector==7)nextSelector=8;
-    if(nextSelector==UINT32_MAX){_mapAdvanced=YES;_gameFinished=YES;_interactionCompleted=YES;_playerSaveDirty=YES;return nil;}
+    uint32_t nextSelector=UINT32_MAX,finished=0;
+    if(dc_game_next_map_selector(_mapSelector,&nextSelector,&finished)!=DC_OK)return @"Current map is outside the playable sequence";
+    if(finished){_mapAdvanced=YES;_gameFinished=YES;_interactionCompleted=YES;_playerSaveDirty=YES;return nil;}
     NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     if(!archive)return reason.localizedDescription ?: @"Map archive could not be opened";
     NSString *nextName=[NSString stringWithFormat:@"mm00_%02u.xx",nextSelector];

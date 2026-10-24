@@ -36,4 +36,15 @@ class NativeGameplayTests(unittest.TestCase):
         self.assertAlmostEqual(out.x,state.x);self.assertAlmostEqual(out.z,state.z);self.assertEqual((out.interaction_count,out.map_selector),(3,5))
         before=bytes(out);record[0]=ord('X');self.assertEqual(self.lib.dc_game_player_load(record,32,C.byref(out)),3);self.assertEqual(bytes(out),before)
 
+    def test_real_map_sequence_is_atomic_and_terminal(self):
+        sequence=(0,1,3,4,5,6,7,8)
+        for index,current in enumerate(sequence):
+            next_selector=C.c_uint32(0xa5a5a5a5);finished=C.c_uint32(0xa5a5a5a5)
+            self.assertEqual(self.lib.dc_game_next_map_selector(current,C.byref(next_selector),C.byref(finished)),0)
+            self.assertEqual(next_selector.value,sequence[index+1] if index+1<len(sequence) else current)
+            self.assertEqual(finished.value,index+1==len(sequence))
+        next_selector=C.c_uint32(0xa5a5a5a5);finished=C.c_uint32(0xa5a5a5a5)
+        self.assertEqual(self.lib.dc_game_next_map_selector(2,C.byref(next_selector),C.byref(finished)),4)
+        self.assertEqual((next_selector.value,finished.value),(0xa5a5a5a5,0xa5a5a5a5))
+
 if __name__=='__main__':unittest.main()

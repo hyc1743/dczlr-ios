@@ -505,6 +505,8 @@ def library():
     lib.dc_game_player_save.restype=C.c_int
     lib.dc_game_player_load.argtypes=[C.c_void_p,C.c_size_t,C.POINTER(GamePlayer)]
     lib.dc_game_player_load.restype=C.c_int
+    lib.dc_game_next_map_selector.argtypes=[C.c_uint32,C.POINTER(C.c_uint32),C.POINTER(C.c_uint32)]
+    lib.dc_game_next_map_selector.restype=C.c_int
     lib.dc_xa_pose_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAPoseTrack)]
     lib.dc_xa_pose_track_at.restype = C.c_int
     lib.dc_xa_load_pose_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(PoseKey), C.c_size_t]
