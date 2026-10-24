@@ -4,6 +4,8 @@ CG存档/
 *.exe
 *.dll
 out/
+/work/
+ios/work/
 ios/build/
 ios/Generated/
 ios/PortLab.xcodeproj/
