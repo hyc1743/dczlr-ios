@@ -167,7 +167,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     [self detachModel:&_map];_map.xxData=nextData;_map.xaData=nil;_map.model=NULL;_map.xx=NULL;_map.info=(dc_xx_info){0};_map.textureCount=0;_map.textures=NULL;_map.world=gameIdentity();
     NSString *error=nil;if(![self openModel:&_map staticOnly:YES error:&error])return error ?: @"Next map could not be loaded";
     _map.world=gameIdentity();_mapSelector=nextSelector;
-    const char *anchors[]={(nextSelector==1?"m_Nn_yuka_p_a":nextSelector==3?"m_Nn_yuka_3_a":nextSelector==4?"m_Nn_yuka_4_a":nextSelector==5?"m_Nn_yuka_5_a":"m_Nn_yuka_l_a"),"m_Nn_yuka_p_a","m_Nn_yuka_l_a"};
+    const char *anchors[]={(nextSelector==1?"m_Nn_yuka_p_a":nextSelector==3?"m_Nn_yuka_r_a":nextSelector==4?"m_Nn_yuka_5_a":nextSelector==5?"m_Nn_yuka_5_a":nextSelector==6?"m_Nn_yuka_2b_a":"m_Nn_yuka_5_a"),"m_Nn_yuka_3_a","m_Nn_yuka_2f_a"};
     for(unsigned candidate=0;candidate<3;++candidate)for(uint32_t i=1;i<_map.info.nodes;++i){dc_xx_node node;if(dc_xx_node_at(_map.xx,i,&node)!=DC_OK)continue;const uint8_t *raw=(const uint8_t *)_map.xxData.bytes+node.name.offset;size_t n=0;while(n<node.name.length&&raw[n]!=255)++n;char decoded[40];if(n>=sizeof(decoded))continue;for(size_t j=0;j<n;++j)decoded[j]=(char)(raw[j]^255);decoded[n]=0;if(!strcmp(decoded,anchors[candidate])){dc_xx_node_matrix(_map.xx,i,&_actorWorld);_actor.world=_actorWorld;candidate=3;break;}}
     [self computeWalkBounds];
     const char *cameraName=nextSelector==1?"home_2f.cam":nextSelector==3?"home_3f.cam":nextSelector==4?"home_4f.cam":nextSelector==5?"home_5p.cam":"home_5p.cam";
