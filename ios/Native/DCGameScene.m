@@ -58,6 +58,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
     uint32_t _cameraPreset;
     BOOL _cameraAutoSelected;
+    NSMutableDictionary<NSNumber *, NSValue *> *_cameraFallbacks;
     uint32_t _actorHeadNode;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
@@ -245,6 +246,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     uint32_t currentActor=[self projectedTrianglesForModel:_actor.model camera:&currentMatrices viewport:&viewport];
     uint32_t currentFace=[self projectedTrianglesForModel:_face.model camera:&currentMatrices viewport:&viewport];
     if(currentMap&&currentActor&&currentFace){_cameraAutoSelected=YES;return nil;}
+    NSValue *cached=_cameraFallbacks[@(_mapSelector)];
+    if(cached){dc_camera_orbit candidate;[cached getValue:&candidate];_cameraBase=candidate.base;_cameraDistance=candidate.stored_distance;_cameraHeight=candidate.height;_cameraPitch=candidate.pitch;_cameraYaw=candidate.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];_cameraAutoSelected=YES;return nil;}
     NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:&reason];
     if(!archive)return reason.localizedDescription ?: @"Camera archive could not be opened";
     uint64_t bestScore=0;dc_camera_orbit best=current;BOOL found=NO;
@@ -255,7 +258,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         uint32_t mapTriangles=[self projectedTrianglesForModel:_map.model camera:&matrices viewport:&viewport];uint32_t actorTriangles=[self projectedTrianglesForModel:_actor.model camera:&matrices viewport:&viewport];uint32_t faceTriangles=[self projectedTrianglesForModel:_face.model camera:&matrices viewport:&viewport];
         if(!actorTriangles||!faceTriangles)continue;uint64_t score=(uint64_t)mapTriangles*1000u+(uint64_t)actorTriangles*10u+faceTriangles;if(!found||score>bestScore){found=YES;bestScore=score;best=candidate;}
     }
-    if(found){_cameraBase=best.base;_cameraDistance=best.stored_distance;_cameraHeight=best.height;_cameraPitch=best.pitch;_cameraYaw=best.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];}
+    if(found){_cameraBase=best.base;_cameraDistance=best.stored_distance;_cameraHeight=best.height;_cameraPitch=best.pitch;_cameraYaw=best.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];[_cameraFallbacks setObject:[NSValue valueWithBytes:&best objCType:@encode(dc_camera_orbit)] forKey:@(_mapSelector)];}
     _cameraAutoSelected=YES;return found?nil:@"No camera preset projects the actor";
 }
 - (NSString *)advanceToNextMap {
@@ -287,6 +290,7 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
+    _cameraFallbacks=[NSMutableDictionary dictionary];
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
