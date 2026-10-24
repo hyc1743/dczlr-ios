@@ -140,6 +140,14 @@ static void dc_write_float_le(uint8_t *out, float value) {
     _titleSceneLoaded = YES;
     return YES;
 }
+- (NSString *)startGameSceneFromDirectory:(NSString *)directory {
+    if(_gameScene)return nil;
+    NSString *gameError=nil;
+    _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
+    if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
+    _previousGameplayTouch=NO;
+    return nil;
+}
 - (void)destroyRenderer {
     [_gameScene detachRenderer];
     [_introScene detachRenderer];
@@ -233,29 +241,26 @@ static void dc_write_float_le(uint8_t *out, float value) {
         return nil;
     }
     BOOL titleReady = _startupScene.finished && [self tryLoadTitleSceneFromDirectory:directory];
-    BOOL showTitle = titleReady;
+    BOOL showTitle = titleReady && !_gameScene;
     if (_startupScene.finished && !titleReady) return @"Startup completed but title resources are unavailable";
     double sceneMilliseconds=time*1000.0;
     if(!isfinite(sceneMilliseconds) || sceneMilliseconds<0)return @"Invalid scene animation time";
     uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
+    if(_gameScene.gameFinished && touching && !_previousGameplayTouch){
+        [_gameScene detachRenderer];
+        _gameScene=nil;
+        [_introScene detachRenderer];
+        _introScene=nil;
+        _titleStateInitialized=NO;
+        _titleMenuInitialized=NO;
+        _previousTitleTouch=NO;
+        _previousGameplayTouch=NO;
+    }
     if(_introScene) {
         if(_introScene.completed) {
-            if(_gameScene.gameFinished && touching && !_previousGameplayTouch){
-                [_gameScene detachRenderer];
-                _gameScene=nil;
-                [_introScene detachRenderer];
-                _introScene=nil;
-                _titleStateInitialized=NO;
-                _titleMenuInitialized=NO;
-                _previousTitleTouch=NO;
-                _previousGameplayTouch=NO;
-            }
             if(_introScene) {
-                if(!_gameScene) {
-                    NSString *gameError=nil;
-                    _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
-                    if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
-                }
+                NSString *gameError=[self startGameSceneFromDirectory:directory];
+                if(gameError)return gameError;
                 NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
                 if(gameFailure)return gameFailure;
                 _previousGameplayTouch=touching;
@@ -349,8 +354,19 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 if([_startupScene requestTransition:command.value tick:sceneTick]!=DC_OK)return @"Title selection transition failed";
             } else if(command.kind==DC_TITLE_CLEANUP || command.kind==DC_TITLE_STOP_MUSIC) {
                 [_gameAudio stopTitleMusic];
+            } else if(command.kind==DC_TITLE_BACKUP || command.kind==DC_TITLE_HIDE) {
+                /* Load-slot and hide callbacks are represented by the native
+                 * planner. The local port resumes the persisted player slot
+                 * directly when ENTER=2 arrives. */
             } else if(command.kind==DC_TITLE_ENTER) {
-                if(command.value!=1)return [NSString stringWithFormat:@"Title destination %u is not implemented",command.value];
+                if(command.value==2) {
+                    NSString *gameError=[self startGameSceneFromDirectory:directory];
+                    if(gameError)return gameError;
+                    [_introScene detachRenderer];
+                    _introScene=nil;
+                } else if(command.value!=1) {
+                    return [NSString stringWithFormat:@"Title destination %u is not implemented",command.value];
+                }
             } else if(command.kind==DC_TITLE_INIT_GAME) {
                 NSString *introError=nil;
                 _introScene=[[DCIntroScene alloc] initWithDirectory:directory error:&introError];
@@ -392,6 +408,14 @@ static void dc_write_float_le(uint8_t *out, float value) {
         }
 #undef ADD_TITLE_LAYER
     } else {
+        if(_gameScene) {
+            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
+            if(gameFailure)return gameFailure;
+            _previousGameplayTouch=touching;
+            _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
+            ++_presentedFrames;
+            return nil;
+        }
         double milliseconds = time * 1000.0;
         if (!isfinite(milliseconds) || milliseconds < 0) return @"Invalid diagnostic animation time";
         uint32_t tick = (uint32_t)fmod(milliseconds, 4294967296.0);
