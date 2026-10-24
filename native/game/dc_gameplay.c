@@ -35,6 +35,7 @@ dc_status dc_game_interaction_step(const dc_game_interaction_state *state,
     if(input->new_touch&&input->near_target&&!state->active&&!state->completed){
         next.active=1;next.start_tick=input->tick;event.begin=1;
     } else if(state->active&&(uint32_t)(input->tick-state->start_tick)>DC_GAME_INTERACTION_DELAY_MS){
+        if(state->interaction_count==UINT32_MAX)return DC_RANGE;
         next.active=0;next.interaction_count++;next.completed=1;event.restore=1;event.completed=1;
     }
     *out=next;*result=event;return DC_OK;

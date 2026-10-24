@@ -63,5 +63,6 @@ class NativeGameplayTests(unittest.TestCase):
         before_state=bytes(state);before_event=bytes(event)
         self.assertEqual(self.lib.dc_game_interaction_step(C.byref(state),C.byref(GameInteractionInput(900,0,1)),C.cast(C.byref(state),C.POINTER(GameInteractionState)),C.byref(event)),1)
         self.assertEqual((bytes(state),bytes(event)),(before_state,before_event))
+        state=GameInteractionState(0xffffffff,0,1,0);before=bytes(state);self.assertEqual(self.lib.dc_game_interaction_step(C.byref(state),C.byref(GameInteractionInput(801,0,1)),C.byref(out),C.byref(event)),4);self.assertEqual(bytes(state),before)
 
 if __name__=='__main__':unittest.main()
