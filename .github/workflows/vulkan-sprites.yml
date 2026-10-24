@@ -67,6 +67,7 @@ jobs:
             -Inative/include -Inative/render/vulkan -Iout/apple-vulkan/shaders -I"$base/include" \
             tests/native/test_vk_sprite.c native/render/vulkan/dc_vk_sprite.c \
             native/render/dc_sprite.c native/render/dc_sprite_vertices.c \
+            native/game/dc_pose.c native/game/dc_camera.c native/render/dc_mesh_clip.c \
             "$base/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a" \
             -framework Metal -framework QuartzCore -framework Foundation -framework IOKit \
             -framework IOSurface -framework AppKit -framework CoreGraphics -lc++ \
@@ -81,6 +82,7 @@ jobs:
             -Inative/include -Inative/render/vulkan -Iout/apple-vulkan/shaders -I"$base/include" \
             tests/native/test_vk_metal_surface.m tests/native/test_vk_sprite.c native/render/vulkan/dc_vk_sprite.c \
             native/render/dc_sprite.c native/render/dc_sprite_vertices.c \
+            native/game/dc_pose.c native/game/dc_camera.c native/render/dc_mesh_clip.c \
             "$base/static/MoltenVK.xcframework/macos-arm64_x86_64/libMoltenVK.a" \
             -framework Metal -framework QuartzCore -framework Foundation -framework IOKit \
             -framework IOSurface -framework AppKit -framework CoreGraphics -lc++ \
