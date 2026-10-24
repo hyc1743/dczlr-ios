@@ -24,8 +24,12 @@ local archives, follows the original two-card action planner, and presents title
 layers after its normal waits. CPU scene state survives renderer resize and
 background GPU recreation. Title music and selection sound use archive-backed
 AVAudioPlayer; pointer hover and selection use the reconstructed menu helper.
-Existing save prefixes supply title unlock flags. **New-game/load/extra actions,
-full script execution, gameplay and actual game-save writing are not complete.**
+Existing save prefixes supply title unlock flags. The native chapter-3 path now
+loads the real map chain, actor, PLST neck attachment, face morphs, movement,
+collision, interaction timing, save/load and title resume routing. The local
+playable-loop audit covers all eight real maps and reaches its terminal state;
+Apple rendering execution and original event/script/audio routing remain to be
+verified.
 
 Public CI uses entirely generated fixtures. The inspected app stage, source
 `f199ad8`, passed 146 portable tests, 107 ARM64 native tests, compilation of 16
