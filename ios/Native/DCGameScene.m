@@ -234,6 +234,17 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     return triangles;
 }
+- (NSString *)preferredCameraNameForSelector:(uint32_t)selector {
+    switch(selector){
+        case 1:return @"roji_4p.cam";
+        case 3:return @"home_sh.cam";
+        case 4:return @"roji_4p.cam";
+        case 5:return @"home_sh.cam";
+        case 6:case 7:return @"roji_4p.cam";
+        case 8:return @"home_sh.cam";
+        default:return nil;
+    }
+}
 - (NSString *)autoSelectCameraAtTick:(uint32_t)tick {
     if(_cameraAutoSelected)return nil;
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_viewport viewport={0,0,1024,768,0,1};
@@ -251,6 +262,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:&reason];
     if(!archive)return reason.localizedDescription ?: @"Camera archive could not be opened";
     uint64_t bestScore=0;dc_camera_orbit best=current;BOOL found=NO;
+    NSString *preferred=[self preferredCameraNameForSelector:_mapSelector];
+    if(preferred){for(uint32_t i=0;i<archive.entryCount;++i){if([[archive asciiNameAtIndex:i] caseInsensitiveCompare:preferred]!=NSOrderedSame)continue;NSData *data=[archive readEntryAtIndex:i limit:4096 error:nil];dc_camera_orbit candidate;dc_camera_matrices matrices;if(data&&dc_camera_read_preset(data.bytes,data.length,0,&candidate)==DC_OK&&dc_camera_build(&candidate,&lens,&matrices)==DC_OK&&[self projectedTrianglesForModel:_map.model camera:&matrices viewport:&viewport]&&[self projectedTrianglesForModel:_actor.model camera:&matrices viewport:&viewport]&&[self projectedTrianglesForModel:_face.model camera:&matrices viewport:&viewport]){_cameraBase=candidate.base;_cameraDistance=candidate.stored_distance;_cameraHeight=candidate.height;_cameraPitch=candidate.pitch;_cameraYaw=candidate.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];[_cameraFallbacks setObject:[NSValue valueWithBytes:&candidate objCType:@encode(dc_camera_orbit)] forKey:@(_mapSelector)];_cameraAutoSelected=YES;return nil;}break;}}
     for(uint32_t i=0;i<archive.entryCount;++i) {
         NSString *name=[archive asciiNameAtIndex:i];if(![name.lowercaseString hasSuffix:@".cam"])continue;
         NSData *data=[archive readEntryAtIndex:i limit:4096 error:nil];if(!data)continue;dc_camera_orbit candidate;dc_camera_matrices matrices;
