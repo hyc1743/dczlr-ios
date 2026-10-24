@@ -11,6 +11,7 @@
 #import "DCStartupScene.h"
 #import "DCGameAudio.h"
 #import "DCIntroScene.h"
+#import "DCGameScene.h"
 #include "dc_menu.h"
 #include "dc_save.h"
 #include <math.h>
@@ -34,6 +35,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     DCStartupScene *_startupScene;
     DCGameAudio *_gameAudio;
     DCIntroScene *_introScene;
+    DCGameScene *_gameScene;
     dc_title_state _titleState;
     BOOL _titleStateInitialized;
     dc_menu_state _titleMenu;
@@ -137,6 +139,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     return YES;
 }
 - (void)destroyRenderer {
+    [_gameScene detachRenderer];
     [_introScene detachRenderer];
     [_startupScene detachRenderer];
     dc_vk_sprite_destroy(_renderer);
@@ -146,6 +149,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     memset(_titleWidths, 0, sizeof(_titleWidths));
     memset(_titleHeights, 0, sizeof(_titleHeights));
     _titleSceneLoaded = NO;
+    _gameScene = nil;
     _lastTitleScan = 0;
     _presentedScene = DCVulkanSpriteSceneDiagnostic;
     _diagnosticTickInitialized = NO;
@@ -232,6 +236,16 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(!isfinite(sceneMilliseconds) || sceneMilliseconds<0)return @"Invalid scene animation time";
     uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
     if(_introScene) {
+        if(_introScene.completed) {
+            if(!_gameScene) {
+                NSString *gameError=nil;
+                _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
+                if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
+            }
+            NSString *gameFailure=[_gameScene drawAtTick:sceneTick width:_width height:_height];
+            if(gameFailure)return gameFailure;
+            _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;return nil;
+        }
         NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
             touching:touching width:_width height:_height];
         if(failure)return failure;

@@ -1,0 +1,17 @@
+#import <Foundation/Foundation.h>
+#include "dc_vk_sprite.h"
+
+NS_ASSUME_NONNULL_BEGIN
+/* First real chapter-3 scene: local RPP_10 map, RPP_08 actor and native
+ * camera/model/clip path. It deliberately reports unsupported later systems
+ * instead of substituting generated content. */
+@interface DCGameScene : NSObject
+@property(nonatomic,readonly) BOOL loaded;
+@property(nonatomic,readonly) uint32_t visibleMapTriangles;
+@property(nonatomic,readonly) uint32_t visibleActorTriangles;
+- (nullable instancetype)initWithDirectory:(NSString *)directory
+    renderer:(dc_vk_sprite *)renderer error:(NSString **)error;
+- (void)detachRenderer;
+- (nullable NSString *)drawAtTick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height;
+@end
+NS_ASSUME_NONNULL_END
