@@ -13,6 +13,7 @@ typedef struct dc_game_model {
     dc_model *model;
     dc_xx *xx;
     dc_xx_info info;
+    dc_xa_info xaInfo;
     uintptr_t *textures;
     uint32_t textureCount;
     dc_matrix world;
@@ -34,10 +35,12 @@ static uint32_t gameColor(const dc_material_value *value) {
     NSString *_directory;
     dc_vk_sprite *_renderer;
     dc_game_model _map,_actor;
+    dc_game_model _face;
     dc_matrix _cameraBase,_actorWorld;
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginZ;
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
     uint32_t _cameraPreset;
+    uint32_t _actorHeadNode;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
@@ -58,6 +61,30 @@ static uint32_t gameColor(const dc_material_value *value) {
 - (BOOL)interactionCompleted { return _interactionCompleted; }
 - (BOOL)gameFinished { return _gameFinished; }
 
+- (NSString *)decodedName:(const uint8_t *)raw length:(size_t)length {
+    if (!raw || !length || length > 1024) return nil;
+    char decoded[1025];
+    size_t count=0;
+    while(count<length && raw[count]!=255 && raw[count]!=0) {
+        decoded[count]=(char)(raw[count]^255);
+        if (!decoded[count]) break;
+        ++count;
+    }
+    if (!count) return @"";
+    return [[NSString alloc] initWithBytes:decoded length:count encoding:NSASCIIStringEncoding];
+}
+
+- (uint32_t)findNode:(dc_game_model *)slot name:(NSString *)name {
+    if (!slot->xx || !name.length) return UINT32_MAX;
+    for(uint32_t i=0;i<slot->info.nodes;++i) {
+        dc_xx_node node;
+        if(dc_xx_node_at(slot->xx,i,&node)!=DC_OK) continue;
+        NSString *decoded=[self decodedName:(const uint8_t *)slot->xxData.bytes+node.name.offset length:node.name.length];
+        if([decoded isEqualToString:name]) return i;
+    }
+    return UINT32_MAX;
+}
+
 - (NSData *)entry:(NSString *)name archive:(DCArchive *)archive error:(NSString **)error {
     for(uint32_t i=0;i<archive.entryCount;++i)
         if([[archive asciiNameAtIndex:i] caseInsensitiveCompare:name]==NSOrderedSame)
@@ -71,6 +98,8 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(status!=DC_OK) { if(error)*error=[NSString stringWithFormat:@"Game model open failed: %d",status]; return NO; }
     status=dc_xx_open(slot->xxData.bytes,slot->xxData.length,&slot->xx);
     if(status==DC_OK)status=dc_model_get_info(slot->model,&slot->info);
+    if(status==DC_OK && slot->xaData)
+        status=dc_xa_probe(slot->xaData.bytes,slot->xaData.length,&slot->xaInfo);
     if(status!=DC_OK || slot->info.textures>64) { if(error)*error=@"Game model profile rejected"; return NO; }
     slot->textureCount=slot->info.textures;slot->textures=calloc(slot->textureCount,sizeof(uintptr_t));
     if(slot->textureCount && !slot->textures) { if(error)*error=@"Game texture handle allocation failed"; return NO; }
@@ -177,19 +206,28 @@ static uint32_t gameColor(const dc_material_value *value) {
     if(cameraData){dc_camera_orbit nextCamera;if(dc_camera_read_preset(cameraData.bytes,cameraData.length,0,&nextCamera)==DC_OK){_cameraBase=nextCamera.base;_cameraDistance=nextCamera.stored_distance;_cameraHeight=nextCamera.height;_cameraPitch=nextCamera.pitch;_cameraYaw=nextCamera.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];}}
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));_player.map_selector=nextSelector;_playerSaveDirty=YES;
-    _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;_mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;return nil;
+    _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
+    _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
+    _face.world=_actor.world;
+    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;return nil;
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
-    if(!mapArchive || !actorArchive) { if(error)*error=reason.localizedDescription;return nil; }
+    DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
+    if(!mapArchive || !actorArchive || !faceArchive) { if(error)*error=reason.localizedDescription;return nil; }
     _map.xxData=[self entry:@"mm00_00.xx" archive:mapArchive error:error];
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
-    if(!_map.xxData || !_actor.xxData || !_actor.xaData)return nil;
-    if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error])return nil;
+    _face.xxData=[self entry:@"ak00_00.xx" archive:faceArchive error:error];
+    _face.xaData=[self entry:@"an00_01.xa" archive:faceArchive error:error];
+    if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData)return nil;
+    if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error] ||
+       ![self openModel:&_face staticOnly:YES error:error])return nil;
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
+    _actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
+    if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
     uint32_t anchor=[self findAnchor:&_map];
     _actorWorld=gameIdentity();
     if(anchor!=UINT32_MAX && dc_xx_node_matrix(_map.xx,anchor,&_actorWorld)!=DC_OK)_actorWorld=gameIdentity();
@@ -208,6 +246,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     _cameraBase=orbit.base;
     _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
     _actor.world=_actorWorld;
+    _face.world=_actorWorld;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
     _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
     [self computeWalkBounds];
@@ -224,7 +263,7 @@ static uint32_t gameColor(const dc_material_value *value) {
     slot->model=NULL;slot->xx=NULL;
 }
 - (void)detachRenderer { _renderer=NULL; }
-- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachModel:&_map];[self detachModel:&_actor]; }
+- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face]; }
 
 - (uint32_t)textureFor:(dc_game_model *)slot mesh:(const dc_xx_submesh *)mesh {
     dc_xx_material material;if(dc_xx_material_at(slot->xx,mesh->material,&material)!=DC_OK)return UINT32_MAX;
@@ -237,19 +276,141 @@ static uint32_t gameColor(const dc_material_value *value) {
     }
     return UINT32_MAX;
 }
+
+- (uint32_t)morphVectorNamed:(NSString *)name model:(dc_game_model *)slot {
+    if(!slot->xaData || !name.length) return UINT32_MAX;
+    for(uint32_t i=0;i<slot->xaInfo.morph_vector_sets;++i) {
+        dc_xa_morph_vector_set view;
+        if(dc_xa_morph_vector_set_at(slot->xaData.bytes,slot->xaData.length,i,&view)!=DC_OK) return UINT32_MAX;
+        NSString *decoded=[self decodedName:(const uint8_t *)slot->xaData.bytes+view.data_offset length:view.data_length];
+        if([decoded isEqualToString:name]) return i;
+    }
+    return UINT32_MAX;
+}
+
+- (uint32_t)morphIndexSetNamed:(NSString *)name model:(dc_game_model *)slot {
+    if(!slot->xaData || !name.length) return UINT32_MAX;
+    for(uint32_t i=0;i<slot->xaInfo.morph_index_sets;++i) {
+        dc_xa_morph_index_set view;
+        if(dc_xa_morph_index_set_at(slot->xaData.bytes,slot->xaData.length,i,&view)!=DC_OK) return UINT32_MAX;
+        NSString *decoded=[self decodedName:(const uint8_t *)slot->xaData.bytes+view.data_offset length:view.data_length];
+        if([decoded isEqualToString:name]) return i;
+    }
+    return UINT32_MAX;
+}
+
+- (NSString *)morphVectorNameForTrack:(uint32_t)track model:(dc_game_model *)slot frame:(float)frame {
+    if(!slot->xaData || track>=slot->xaInfo.morph_tracks) return nil;
+    dc_xa_morph_track view;
+    if(dc_xa_morph_track_at(slot->xaData.bytes,slot->xaData.length,track,&view)!=DC_OK) return nil;
+    uint32_t selected=UINT32_MAX,selectedFrame=0;
+    for(uint32_t keyIndex=0;keyIndex<view.key_count;++keyIndex) {
+        dc_xa_morph_key key;
+        if(dc_xa_morph_key_at(slot->xaData.bytes,slot->xaData.length,track,keyIndex,&key)!=DC_OK)return nil;
+        uint32_t keyFrame=0;memcpy(&keyFrame,key.raw,sizeof(keyFrame));
+        if(selected==UINT32_MAX || ((float)keyFrame<=frame && keyFrame>=selectedFrame)) {
+            if((float)keyFrame<=frame || selected==UINT32_MAX) { selected=keyIndex;selectedFrame=keyFrame; }
+        }
+    }
+    if(selected==UINT32_MAX)return nil;
+    dc_xa_morph_key key;
+    if(dc_xa_morph_key_at(slot->xaData.bytes,slot->xaData.length,track,selected,&key)!=DC_OK)return nil;
+    return [self decodedName:(const uint8_t *)slot->xaData.bytes+key.value_offset length:key.value_length];
+}
+
+- (BOOL)applyMorphsToModel:(dc_game_model *)slot frame:(float)frame
+    buffers:(dc_mesh_vertex **)buffers counts:(const uint32_t *)counts error:(NSString **)error {
+    if(!slot->xaData || !slot->xaInfo.morph_tracks)return YES;
+    for(uint32_t track=0;track<slot->xaInfo.morph_tracks;++track) {
+        dc_xa_morph_track trackView;
+        if(dc_xa_morph_track_at(slot->xaData.bytes,slot->xaData.length,track,&trackView)!=DC_OK) {
+            if(error)*error=@"Game morph track metadata failed";return NO;
+        }
+        NSString *target=[self decodedName:(const uint8_t *)slot->xaData.bytes+trackView.target_offset length:trackView.target_length];
+        NSString *vectorName=[self morphVectorNameForTrack:track model:slot frame:frame];
+        if(!target || !vectorName) { if(error)*error=@"Game morph key target is unavailable";return NO; }
+        uint32_t vectorIndex=[self morphVectorNamed:vectorName model:slot];
+        if(vectorIndex==UINT32_MAX) { if(error)*error=@"Game morph vector target is unavailable";return NO; }
+        NSRange marker=[vectorName rangeOfString:@"_n" options:NSBackwardsSearch];
+        if(marker.location==NSNotFound || marker.location==0) { if(error)*error=@"Game morph vector name is malformed";return NO; }
+        NSString *nodeName=[vectorName substringToIndex:marker.location];
+        uint32_t meshIndex=UINT32_MAX;
+        for(uint32_t mesh=0;mesh<slot->info.submeshes;++mesh) {
+            dc_xx_submesh meshView;if(dc_model_mesh(slot->model,mesh,&meshView)!=DC_OK)continue;
+            dc_xx_node node;if(dc_xx_node_at(slot->xx,meshView.node,&node)!=DC_OK)continue;
+            NSString *meshNode=[self decodedName:(const uint8_t *)slot->xxData.bytes+node.name.offset length:node.name.length];
+            if([meshNode isEqualToString:nodeName]) { meshIndex=mesh;break; }
+        }
+        uint32_t indexSet=[self morphIndexSetNamed:target model:slot];
+        if(meshIndex==UINT32_MAX || indexSet==UINT32_MAX) { if(error)*error=@"Game morph mesh binding is unavailable";return NO; }
+        dc_xa_morph_vector_set vectorView;dc_xa_morph_index_set indexView;
+        if(dc_xa_morph_vector_set_at(slot->xaData.bytes,slot->xaData.length,vectorIndex,&vectorView)!=DC_OK ||
+           dc_xa_morph_index_set_at(slot->xaData.bytes,slot->xaData.length,indexSet,&indexView)!=DC_OK) {
+            if(error)*error=@"Game morph set metadata failed";return NO;
+        }
+        if(!buffers[meshIndex] || counts[meshIndex]!=vectorView.count) { if(error)*error=@"Game morph vertex count mismatch";return NO; }
+        uint32_t *indices=calloc(indexView.count?indexView.count:1,sizeof(*indices));
+        if(!indices || dc_xa_load_morph_indices(slot->xaData.bytes,slot->xaData.length,indexSet,indices,indexView.count)!=DC_OK) {
+            free(indices);if(error)*error=@"Game morph index data failed";return NO;
+        }
+        const uint8_t *source=(const uint8_t *)slot->xaData.bytes+vectorView.vectors_offset;
+        size_t positionBytes=(size_t)vectorView.count*3*sizeof(float);
+        for(uint32_t i=0;i<indexView.count;++i) {
+            uint32_t packed=indices[i];uint32_t ids[2]={packed>>16,packed&0xffffu};
+            for(uint32_t side=0;side<2;++side) {
+                uint32_t vertex=ids[side];if(vertex>=vectorView.count) { free(indices);if(error)*error=@"Game morph vertex index is out of range";return NO; }
+                memcpy(buffers[meshIndex][vertex].position,source+(size_t)vertex*3*sizeof(float),3*sizeof(float));
+                memcpy(buffers[meshIndex][vertex].normal,source+positionBytes+(size_t)vertex*3*sizeof(float),3*sizeof(float));
+            }
+        }
+        free(indices);
+    }
+    return YES;
+}
 - (NSString *)append:(dc_game_model *)slot delta:(uint32_t)delta tick:(uint32_t)tick camera:(const dc_camera_matrices *)camera
     viewport:(const dc_viewport *)viewport draws:(dc_vk_geometry_item *)draws count:(size_t *)count storage:(NSMutableArray *)storage triangles:(uint32_t *)triangles {
     dc_matrix world=slot->world;dc_status status=dc_model_tick(slot->model,delta,tick,&world);if(status!=DC_OK)return @"Game model tick failed";
+    dc_mesh_vertex **morphVertices=NULL;uint32_t *morphCounts=NULL;
+    if(slot->xaInfo.morph_tracks) {
+        morphVertices=calloc(slot->info.submeshes?slot->info.submeshes:1,sizeof(*morphVertices));
+        morphCounts=calloc(slot->info.submeshes?slot->info.submeshes:1,sizeof(*morphCounts));
+        if(!morphVertices||!morphCounts){free(morphVertices);free(morphCounts);return @"Game morph buffer allocation failed";}
+        for(uint32_t mesh=0;mesh<slot->info.submeshes;++mesh) {
+            dc_xx_submesh meshView;if(dc_model_mesh(slot->model,mesh,&meshView)!=DC_OK) { free(morphVertices);free(morphCounts);return @"Game morph mesh metadata failed"; }
+            morphCounts[mesh]=meshView.vertex_count;
+            morphVertices[mesh]=calloc(meshView.vertex_count?meshView.vertex_count:1,sizeof(*morphVertices[mesh]));
+            if(!morphVertices[mesh] || dc_model_load_vertices(slot->model,mesh,morphVertices[mesh],meshView.vertex_count)!=DC_OK) {
+                for(uint32_t j=0;j<=mesh;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph vertex load failed";
+            }
+        }
+        dc_animation_state actorAnimation;float morphFrame=0;
+        if(dc_model_get_animation(_actor.model,&actorAnimation)==DC_OK) morphFrame=actorAnimation.frame*256.0f;
+        NSString *morphError=nil;
+        if(![self applyMorphsToModel:slot frame:morphFrame buffers:morphVertices counts:morphCounts error:&morphError]) {
+            for(uint32_t mesh=0;mesh<slot->info.submeshes;++mesh)free(morphVertices[mesh]);free(morphVertices);free(morphCounts);return morphError ?: @"Game morph application failed";
+        }
+    }
     for(uint32_t i=0;i<slot->info.submeshes;++i) {
-        uint32_t visible;if(dc_model_mesh_visible(slot->model,i,&visible)!=DC_OK)return @"Game mesh visibility failed";if(!visible)continue;
-        dc_xx_submesh mesh;dc_material_value material;if(dc_model_mesh(slot->model,i,&mesh)!=DC_OK||dc_model_material(slot->model,mesh.material,&material)!=DC_OK)return @"Game mesh metadata failed";
-        if(material.components[3]<=0)continue;uint32_t texture=[self textureFor:slot mesh:&mesh];if(texture==UINT32_MAX)return @"Game material texture not found";
-        size_t vertexCount=0;status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK)return @"Game mesh clip query failed";if(!vertexCount)continue;
+        uint32_t visible;if(dc_model_mesh_visible(slot->model,i,&visible)!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices?morphVertices[j]:NULL);free(morphVertices);free(morphCounts);return @"Game mesh visibility failed";}if(!visible)continue;
+        dc_xx_submesh mesh;dc_material_value material;if(dc_model_mesh(slot->model,i,&mesh)!=DC_OK||dc_model_material(slot->model,mesh.material,&material)!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices?morphVertices[j]:NULL);free(morphVertices);free(morphCounts);return @"Game mesh metadata failed";}
+        if(material.components[3]<=0)continue;uint32_t texture=[self textureFor:slot mesh:&mesh];if(texture==UINT32_MAX){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices?morphVertices[j]:NULL);free(morphVertices);free(morphCounts);return @"Game material texture not found";}
+        size_t vertexCount=0;
+        if(morphVertices) {
+            uint16_t *indices=calloc(mesh.index_count?mesh.index_count:1,sizeof(*indices));dc_matrix mvp=camera->view_projection;uint32_t space=0;
+            if(!indices || dc_xx_load_mesh_indices(slot->xx,i,indices,mesh.index_count)!=DC_OK || dc_model_vertex_space(slot->model,i,&space)!=DC_OK) { free(indices);for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh projection setup failed"; }
+            if(space==DC_MODEL_SPACE_LOCAL) { dc_matrix global;if(dc_model_global(slot->model,mesh.node,&global)!=DC_OK || dc_matrix_multiply(&global,&camera->view_projection,&mvp)!=DC_OK) { free(indices);for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph node transform failed"; } }
+            status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){free(indices);for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh clip query failed";}
+            if(!vertexCount){free(indices);continue;}
+            NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);free(indices);if(status!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh projection failed";}
+            [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE};*triangles+=(uint32_t)(vertexCount/3);continue;
+        }
+        status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){return @"Game mesh clip query failed";}if(!vertexCount)continue;
         NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);if(status!=DC_OK)return @"Game mesh projection failed";
         [storage addObject:vertices];
         draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE};
         *triangles+=(uint32_t)(vertexCount/3);
     }
+    if(morphVertices){for(uint32_t i=0;i<slot->info.submeshes;++i)free(morphVertices[i]);free(morphVertices);free(morphCounts);}
     return nil;
 }
 - (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching
@@ -285,8 +446,14 @@ static uint32_t gameColor(const dc_material_value *value) {
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
-    size_t capacity=_map.info.submeshes+_actor.info.submeshes;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
-    NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
+    size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
+    NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
+    if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
+    if(!failure && _face.model) {
+        if(_actorHeadNode!=UINT32_MAX && dc_model_global(_actor.model,_actorHeadNode,&_face.world)!=DC_OK)
+            failure=@"Game face anchor lookup failed";
+        if(!failure)failure=[self append:&_face delta:0 tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
+    }
     if(!failure) { uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f)),right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f)),bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));dc_vk_clip_rect clip={left,top,right-left,bottom-top};uint8_t clear[4]={0,0,0,255};if(dc_vk_geometry_render_region(_renderer,draws,count,clear,NULL,0,&clip)!=DC_OK)failure=@"Game Vulkan draw failed";}
     free(draws);return failure;
 }

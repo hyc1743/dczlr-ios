@@ -11,7 +11,8 @@ typedef NS_ENUM(NSInteger, DCVulkanSpriteScene) {
     DCVulkanSpriteSceneGameplay = 6,
     DCVulkanSpriteSceneGameComplete = 7
 };
-/* Native sprite integration scene. This view does not run the game. */
+/* Native sprite integration scene. Startup, title, intro and the local
+ * chapter-3 gameplay path are driven by the native renderer. */
 @interface DCVulkanSpriteView : UIView
 @property(nonatomic, readonly) NSString *deviceName;
 @property(nonatomic, readonly) uint64_t presentedFrames;

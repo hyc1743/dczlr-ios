@@ -2,9 +2,9 @@
 #include "dc_vk_sprite.h"
 
 NS_ASSUME_NONNULL_BEGIN
-/* First real chapter-3 scene: local RPP_10 map, RPP_08 actor and native
- * camera/model/clip path. It deliberately reports unsupported later systems
- * instead of substituting generated content. */
+/* First real chapter-3 scene: local RPP_10 map, RPP_08 actor, RPP_09 face
+ * model/morph data, and the native camera/model/clip path. Unsupported later
+ * systems still fail explicitly instead of substituting generated content. */
 @interface DCGameScene : NSObject
 @property(nonatomic,readonly) BOOL loaded;
 @property(nonatomic,readonly) uint32_t visibleMapTriangles;

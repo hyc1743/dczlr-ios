@@ -139,5 +139,17 @@ sets, morph target names and per-key value blocks. The local `RPP_09/an00_01.xa`
 profile contains 10 index sets, 181 vector sets and 10 tracks, including
 encoded targets such as `a_face_me`, `a_face_kuti`, `a_mayu` and `a_yodare`.
 These APIs preserve offsets, encoded bytes and six-byte key headers after full
-framing validation. They do not yet assign those sets to XX vertices or apply
-face deformation; model morph integration remains outstanding.
+framing validation. The native view layer remains framing-only; the iOS scene
+owns the resource-specific binding described below.
+
+The chapter-3 face resource now has a bounded local binding path. In
+`RPP_09/ak00_00.xx` plus `an00_01.xa`, each vector set has one position array
+followed by one normal array for the named XX node; the packed 16-bit pairs in
+an index set form the affected-vertex mask, and a morph key's first four raw
+bytes select a vector-set name in the actor's 1/256-frame time units. The iOS
+scene loads the auxiliary face model, attaches it to the animated neck node,
+selects the ten real tracks by target name, applies the masked position/normal
+updates, and projects the result through the same clipped geometry path. The
+local binding audit covers all 10 tracks, 181 vector sets and 50 sampled
+track/frame selections. This is resource-level evidence; original facial
+controller blending and physical-device presentation remain unverified.

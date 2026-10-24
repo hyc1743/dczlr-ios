@@ -116,7 +116,7 @@ final class SpritePresenter: NSObject {
                         self.model.record("Vulkan / MoltenVK 已显示标题画面（\(device)）；后续游戏逻辑尚未接入", event: "PORTLAB_SCENE_PRESENTED=title")
                     case .intro:
                         if self.testIntroTime == nil { self.testIntroTime = CACurrentMediaTime() }
-                        self.model.record("New-game intro record presented; later gameplay remains unfinished", event: "PORTLAB_SCENE_PRESENTED=intro")
+                        self.model.record("New-game intro record presented; local chapter 3 scene follows", event: "PORTLAB_SCENE_PRESENTED=intro")
                     case .gameplay:
                         self.model.record("Chapter 3 map and actor scene presented from local game resources", event: "PORTLAB_SCENE_PRESENTED=gameplay")
                     case .gameComplete:

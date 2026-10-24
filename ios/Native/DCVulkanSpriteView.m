@@ -40,6 +40,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     BOOL _titleStateInitialized;
     dc_menu_state _titleMenu;
     BOOL _titleMenuInitialized,_previousTitleTouch;
+    BOOL _previousGameplayTouch;
     BOOL _titleUnlocksLoaded,_editUnlocked,_extraUnlocked;
     uintptr_t _titleTextures[9];
     uint32_t _width, _height;
@@ -88,6 +89,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         [self->_gameAudio pause];
         [self->_introScene pause];
         self->_previousTitleTouch=NO;
+        self->_previousGameplayTouch=NO;
         [self destroyRenderer];
     });
 }
@@ -150,6 +152,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     memset(_titleHeights, 0, sizeof(_titleHeights));
     _titleSceneLoaded = NO;
     _gameScene = nil;
+    _previousGameplayTouch = NO;
     _lastTitleScan = 0;
     _presentedScene = DCVulkanSpriteSceneDiagnostic;
     _diagnosticTickInitialized = NO;
@@ -237,19 +240,36 @@ static void dc_write_float_le(uint8_t *out, float value) {
     uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
     if(_introScene) {
         if(_introScene.completed) {
-            if(!_gameScene) {
-                NSString *gameError=nil;
-                _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
-                if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
+            if(_gameScene.gameFinished && touching && !_previousGameplayTouch){
+                [_gameScene detachRenderer];
+                _gameScene=nil;
+                [_introScene detachRenderer];
+                _introScene=nil;
+                _titleStateInitialized=NO;
+                _titleMenuInitialized=NO;
+                _previousTitleTouch=NO;
+                _previousGameplayTouch=NO;
             }
-            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
-            if(gameFailure)return gameFailure;
-            _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;++_presentedFrames;return nil;
+            if(_introScene) {
+                if(!_gameScene) {
+                    NSString *gameError=nil;
+                    _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer error:&gameError];
+                    if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
+                }
+                NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:touching width:_width height:_height];
+                if(gameFailure)return gameFailure;
+                _previousGameplayTouch=touching;
+                _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
+                ++_presentedFrames;
+                return nil;
+            }
         }
+        if(_introScene) {
         NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
             touching:touching width:_width height:_height];
         if(failure)return failure;
         _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
+        }
     }
     dc_vk_sprite_item draws[5] = {0};
     size_t drawCount = 0;

@@ -43,7 +43,7 @@ class NativeXATests(unittest.TestCase):
         self.assertEqual(self.lib.dc_xa_morph_index_set_at(data,len(data),0,C.byref(index)),0)
         self.assertEqual((index.count,index.selector,index.data_length), (2,1,9))
         self.assertEqual(self.lib.dc_xa_morph_vector_set_at(data,len(data),0,C.byref(vector)),0)
-        self.assertEqual(vector.count,2)
+        self.assertEqual((vector.count, vector.data_length),(2,8))
         self.assertEqual(self.lib.dc_xa_morph_track_at(data,len(data),0,C.byref(track)),0)
         self.assertEqual((track.name_length,track.target_length,track.key_count),(6,9,1))
         self.assertEqual(self.lib.dc_xa_morph_key_at(data,len(data),0,0,C.byref(key)),0)

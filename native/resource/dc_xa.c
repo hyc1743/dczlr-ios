@@ -251,7 +251,7 @@ dc_status dc_xa_morph_vector_set_at(const void *bytes,size_t length,uint32_t ind
     if (index>=nv) return DC_NOT_FOUND;
     for(uint32_t i=0;i<ni;++i){uint32_t n;c.position++;if(!integer(&c,&n)||!skip(&c,(size_t)n*4)||!block(&c))return DC_FORMAT;}
     uint32_t set_count;if(!integer(&c,&set_count)||set_count!=nv)return DC_FORMAT;
-    for(uint32_t i=0;i<=index;++i){dc_xa_morph_vector_set v={0};if(!integer(&c,&v.count))return DC_FORMAT;v.vectors_offset=c.position;if(!array(&c,v.count,24))return DC_FORMAT;uint32_t n;if(!integer(&c,&n)||!skip(&c,n))return DC_FORMAT;if(i==index){*out=v;return DC_OK;}}
+    for(uint32_t i=0;i<=index;++i){dc_xa_morph_vector_set v={0};if(!integer(&c,&v.count))return DC_FORMAT;v.vectors_offset=c.position;if(!array(&c,v.count,24))return DC_FORMAT;uint32_t n;if(!integer(&c,&n))return DC_FORMAT;v.data_offset=c.position;v.data_length=n;if(!skip(&c,n))return DC_FORMAT;if(i==index){*out=v;return DC_OK;}}
     return DC_NOT_FOUND;
 }
 
