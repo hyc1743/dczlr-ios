@@ -1,6 +1,7 @@
 #import "DCGameAudio.h"
 #import "DCArchive.h"
 #import <AVFoundation/AVFoundation.h>
+#import <dispatch/dispatch.h>
 
 static NSArray<NSString *> *DCGameplaySlotNames(void) {
     static NSArray<NSString *> *names;
