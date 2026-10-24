@@ -13,15 +13,22 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from native_core import (  # noqa: E402
+    CameraLens,
+    CameraMatrices,
     CameraOrbit,
     GameInteractionInput,
     GameInteractionResult,
     GameInteractionState,
     GamePlayer,
+    Matrix,
+    SpriteVertex,
     PPArchive,
     XAInfo,
     XAMorphVectorSet,
     XXInfo,
+    XXModel,
+    XXSubmesh,
+    Viewport,
     library,
 )
 
@@ -80,14 +87,77 @@ def main():
     actor_handle = C.c_void_p()
     if lib.dc_model_open(actor, len(actor), actor_xa, len(actor_xa), C.byref(actor_handle)):
         raise RuntimeError("actor admission failed")
-    lib.dc_model_close(actor_handle)
+    identity = Matrix((C.c_float * 16)(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1))
+    if lib.dc_model_request(actor_handle, 1, 0) or lib.dc_model_tick(actor_handle, 0, 0, C.byref(identity)):
+        lib.dc_model_close(actor_handle)
+        raise RuntimeError("actor initial tick failed")
 
     face = entry(ROOT / "Data/RPP_09.pp", "ak00_00.xx")
     morph = entry(ROOT / "Data/RPP_09.pp", "an00_01.xa")
     face_handle = C.c_void_p()
     if lib.dc_model_open_static(face, len(face), C.byref(face_handle)):
+        lib.dc_model_close(actor_handle)
         raise RuntimeError("face admission failed")
+    with XXModel(actor) as actor_xx, XXModel(face) as face_xx:
+        head_node = None
+        for node_index in range(actor_xx.info().nodes):
+            node = actor_xx.at("node", node_index)
+            name = bytes(value ^ 255 for value in actor_xx.span(node.name)).split(b"\0", 1)[0]
+            if name == b"a_Kp_kubi2":
+                head_node = node_index
+                break
+        if head_node is None:
+            lib.dc_model_close(face_handle)
+            lib.dc_model_close(actor_handle)
+            raise RuntimeError("actor head node unavailable")
+        head = Matrix()
+        if lib.dc_model_global(actor_handle, head_node, C.byref(head)) or lib.dc_model_tick(face_handle, 0, 0, C.byref(head)):
+            lib.dc_model_close(face_handle)
+            lib.dc_model_close(actor_handle)
+            raise RuntimeError("face attachment tick failed")
+        orbit = CameraOrbit()
+        camera_data = entry(ROOT / "Data/RPP_03.pp", CAMERAS[0])
+        if lib.dc_camera_read_preset(camera_data, len(camera_data), 0, C.byref(orbit)):
+            lib.dc_model_close(face_handle)
+            lib.dc_model_close(actor_handle)
+            raise RuntimeError("initial camera read failed")
+        lens = CameraLens(0.3, 0.5, 10000, 1024, 768)
+        camera = CameraMatrices()
+        viewport = Viewport(0, 0, 1024, 768, 0, 1)
+        if lib.dc_camera_build(C.byref(orbit), C.byref(lens), C.byref(camera)):
+            lib.dc_model_close(face_handle)
+            lib.dc_model_close(actor_handle)
+            raise RuntimeError("initial camera build failed")
+
+        def projected(handle, info):
+            meshes = vertices = 0
+            for mesh_index in range(info.submeshes):
+                mesh = XXSubmesh()
+                visible = C.c_uint32()
+                if lib.dc_model_mesh(handle, mesh_index, C.byref(mesh)) or lib.dc_model_mesh_visible(handle, mesh_index, C.byref(visible)):
+                    raise RuntimeError("mesh metadata failed")
+                if not visible.value:
+                    continue
+                written = C.c_size_t()
+                if lib.dc_model_project_clipped(handle, mesh_index, C.byref(camera.view_projection), C.byref(viewport), 0xffffffff, None, 0, C.byref(written)):
+                    raise RuntimeError("projection query failed")
+                if not written.value:
+                    continue
+                output = (SpriteVertex * written.value)()
+                if lib.dc_model_project_clipped(handle, mesh_index, C.byref(camera.view_projection), C.byref(viewport), 0xffffffff, output, written.value, C.byref(written)):
+                    raise RuntimeError("projection failed")
+                if any(not all(__import__("math").isfinite(value) for value in (v.x, v.y, v.z, v.rhw, v.u, v.v)) for v in output):
+                    raise RuntimeError("projection produced nonfinite vertex")
+                meshes += 1
+                vertices += written.value
+            return {"meshes": meshes, "vertices": vertices, "triangles": vertices // 3}
+
+        actor_info = XXInfo(); face_info = XXInfo()
+        if lib.dc_model_get_info(actor_handle, C.byref(actor_info)) or lib.dc_model_get_info(face_handle, C.byref(face_info)):
+            lib.dc_model_close(face_handle);lib.dc_model_close(actor_handle);raise RuntimeError("attached model info failed")
+        projection = {"actor": projected(actor_handle, actor_info), "face": projected(face_handle, face_info), "head_node": head_node}
     lib.dc_model_close(face_handle)
+    lib.dc_model_close(actor_handle)
     morph_info = XAInfo()
     if lib.dc_xa_probe(morph, len(morph), C.byref(morph_info)):
         raise RuntimeError("morph XA probe failed")
@@ -150,6 +220,7 @@ def main():
             "morph_tracks": morph_info.morph_tracks,
             "vector_views": len(vectors),
         },
+        "projection": projection,
         "interaction_rows": interaction_rows,
         "verified": True,
         "rendered": False,
