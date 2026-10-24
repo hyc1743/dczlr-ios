@@ -52,7 +52,9 @@ sorting and automatic camera inference are separate work.
 
 The Vulkan backend accepts explicit preprojected triangle lists through
 `dc_vk_geometry_render`. It uses an unlit single-texture diffuse modulation
-profile and explicit standard/additive/modulation blend selection. Dedicated
+profile and explicit standard/additive/modulation blend selection. Geometry can
+select disabled, read-only or write-enabled D32 depth testing with LESS_OR_EQUAL;
+ordinary sprite/overlay draws leave depth disabled. Dedicated
 triangle-list pipelines share the existing textures, filtering and surface
 presentation. The shader reconstructs clip W from RHW for perspective-correct
 UV interpolation; existing sprite vertices keep RHW=1. The pixel gate checks
@@ -65,7 +67,8 @@ all draws establish a fresh dynamic scissor, and default geometry/sprite calls
 restore the full target. The Apple game scene clips to the pixel centers of
 its letterboxed 4:3 viewport. This fixes the generated weighted surface
 spilling into black bars; the exact skin-image gate also checks the bars stay
-black. It does not replace perspective/frustum clipping or a depth renderer.
+black. It does not replace perspective/frustum clipping. The depth attachment and per-draw modes now
+provide map/actor occlusion; original culling and material state remain separate.
 
 These generic primitives do not by themselves prove the original transition's
 camera, draw sorting, lighting, texture stage state or final image. Original
