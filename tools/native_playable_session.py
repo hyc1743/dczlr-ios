@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from native_core import (  # noqa: E402
     GameInput, GameInteractionInput, GameInteractionResult,
     GameInteractionState, GamePlayer, PPArchive, library,
+    XXInfo,
 )
 
 SEQUENCE = (0, 1, 3, 4, 5, 6, 7, 8)
@@ -31,9 +32,12 @@ def entry(root: Path, name: str, archive_name: str = "RPP_10.pp") -> bytes:
     raise ValueError(f"missing resource {name}")
 
 
-def admit(root: Path, selector: int) -> None:
+def admit(root: Path, selector: int, lib=None) -> None:
     data = entry(root, f"mm00_{selector:02d}.xx")
-    if not data:
+    info = XXInfo()
+    if lib is None:
+        lib = library()
+    if not data or lib.dc_xx_probe(data, len(data), C.byref(info)) != 0:
         raise RuntimeError(f"empty map {selector}")
 
 
@@ -72,9 +76,11 @@ def main() -> int:
         restored.min_x, restored.max_x = state.min_x, state.max_x
         restored.min_z, restored.max_z = state.min_z, state.max_z
         state = restored
-        admit(root, state.map_selector)
+        admit(root, state.map_selector, lib)
         interaction = GameInteractionState(state.interaction_count, 0, 0, 0)
         print(f"loaded map {state.map_selector}")
+    else:
+        admit(root, 0, lib)
     print("native session ready; commands: m dx dz | i | s | l | q")
     if not args.load:
         print("map 0 admitted")
@@ -144,7 +150,7 @@ def main() -> int:
             if terminal.value:
                 print("chapter complete")
                 continue
-            admit(root, next_selector.value)
+            admit(root, next_selector.value, lib)
             state.map_selector = next_selector.value
             interaction = GameInteractionState(state.interaction_count, 0, 0, 0)
             print(f"map {state.map_selector} admitted")
