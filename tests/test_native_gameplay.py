@@ -49,6 +49,20 @@ class NativeGameplayTests(unittest.TestCase):
         self.assertEqual(self.lib.dc_game_next_map_selector(2,C.byref(next_selector),C.byref(finished)),4)
         self.assertEqual((next_selector.value,finished.value),(0xa5a5a5a5,0xa5a5a5a5))
 
+    def test_recovered_story_state_map_table_is_bounded_and_atomic(self):
+        expected={3:0,5:1,7:3,10:0,12:1,14:6,17:0,19:1,21:4}
+        for story,selector in expected.items():
+            out=C.c_uint32(0xa5a5a5a5)
+            self.assertEqual(self.lib.dc_game_story_map_selector(story,C.byref(out)),0)
+            self.assertEqual(out.value,selector)
+        for story in (0,1,2,4,6,8,9,11,13,15,16,18,20):
+            out=C.c_uint32(0xa5a5a5a5)
+            self.assertEqual(self.lib.dc_game_story_map_selector(story,C.byref(out)),6)
+            self.assertEqual(out.value,0xa5a5a5a5)
+        out=C.c_uint32(0xa5a5a5a5)
+        self.assertEqual(self.lib.dc_game_story_map_selector(22,C.byref(out)),4)
+        self.assertEqual(out.value,0xa5a5a5a5)
+
     def test_observed_gameplay_menu_profile_is_stable_and_bounded(self):
         buttons=(MenuButton*6)()
         self.assertEqual(self.lib.dc_game_menu_profile(buttons,6),0)

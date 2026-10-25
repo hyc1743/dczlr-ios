@@ -23,6 +23,16 @@ dc_status dc_game_next_map_selector(uint32_t current,uint32_t *next,uint32_t *fi
     *finished=index+1==DC_GAME_MAP_SEQUENCE_COUNT;
     return DC_OK;
 }
+dc_status dc_game_story_map_selector(uint32_t story_state,uint32_t *selector){
+    static const uint8_t table[DC_GAME_STORY_MAP_TABLE_COUNT]={
+        0xff,0xff,0xff,0,0xff,1,0xff,3,0xff,0xff,0,0xff,
+        1,0xff,6,0xff,0xff,0,0xff,1,0xff,4
+    };
+    if(!selector)return DC_ARGUMENT;
+    if(story_state>=DC_GAME_STORY_MAP_TABLE_COUNT)return DC_RANGE;
+    if(table[story_state]==0xff)return DC_NOT_FOUND;
+    *selector=table[story_state];return DC_OK;
+}
 dc_status dc_game_menu_profile(dc_menu_button *buttons,size_t capacity){
     if(!buttons)return DC_ARGUMENT;
     if(capacity<DC_GAME_MENU_COUNT)return DC_RANGE;

@@ -585,11 +585,77 @@ function hookGameFunctions() {
           } catch (_) {}
         }
         if (count <= 3 || elapsed() >= 49) {
-          emit('GameplayCallback', {address: '0x' + address.toString(16), count: count});
+          const argPointers=[];
+          for (let index=0; index<4; ++index) argPointers.push(pointerKey(args[index]));
+          emit('GameplayCallback', {address: '0x' + address.toString(16), count: count,
+                                    return_address: pointerKey(this.returnAddress),
+                                    args: argPointers});
         }
       },
       onLeave: function () {}
     });
+  });
+  const mapTransitionFn = relative(0x00598a50);
+  installOnce(mapTransitionFn, 'FUN_00598a50', {
+    onEnter: function (args) {
+      this.main = args[0];
+      this.before = {};
+      try {
+        if (validPointer(this.main)) {
+          this.before.map_selector = this.main.add(0x13533).readU8();
+          this.before.story_state = this.main.add(0x13535).readU8();
+          this.before.character = this.main.add(0x13530).readU8();
+        }
+        const controller = base.add(0x44dc28).readPointer();
+        if (validPointer(controller)) {
+          this.before.context305c = controller.add(0x305c).readU8();
+          this.before.context3064 = controller.add(0x3064).readU8();
+        }
+      } catch (_) {}
+    },
+    onLeave: function () {
+      const after = {};
+      try {
+        if (validPointer(this.main)) {
+          after.map_selector = this.main.add(0x13533).readU8();
+          after.story_state = this.main.add(0x13535).readU8();
+          after.character = this.main.add(0x13530).readU8();
+        }
+        const controller = base.add(0x44dc28).readPointer();
+        if (validPointer(controller)) {
+          after.context305c = controller.add(0x305c).readU8();
+          after.context3064 = controller.add(0x3064).readU8();
+        }
+      } catch (_) {}
+      emit('MapTransitionTick', {return_address: pointerKey(this.returnAddress), before: this.before, after: after});
+    }
+  });
+  const mapTransitionGateFn = relative(0x005f9561);
+  installOnce(mapTransitionGateFn, 'FUN_005f9561', {
+    onEnter: function (args) {
+      this.main = args[0];
+      this.before = {};
+      try {
+        if (validPointer(this.main)) {
+          this.before.map_selector = this.main.add(0x13533).readU8();
+          this.before.story_state = this.main.add(0x13535).readU8();
+          this.before.callback = pointerKey(this.main.add(0x21f78).readPointer());
+          this.before.mode = this.main.add(0x278).readU8();
+        }
+      } catch (_) {}
+    },
+    onLeave: function () {
+      const after = {};
+      try {
+        if (validPointer(this.main)) {
+          after.map_selector = this.main.add(0x13533).readU8();
+          after.story_state = this.main.add(0x13535).readU8();
+          after.callback = pointerKey(this.main.add(0x21f78).readPointer());
+          after.mode = this.main.add(0x278).readU8();
+        }
+      } catch (_) {}
+      emit('MapTransitionGate', {return_address: pointerKey(this.returnAddress), before: this.before, after: after});
+    }
   });
   gameHooksInstalled = true;
   emit('GameHooksInstalled', {base: pointerKey(base)});

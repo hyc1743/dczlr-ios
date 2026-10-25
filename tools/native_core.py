@@ -563,6 +563,8 @@ def library():
     lib.dc_game_player_load.restype=C.c_int
     lib.dc_game_next_map_selector.argtypes=[C.c_uint32,C.POINTER(C.c_uint32),C.POINTER(C.c_uint32)]
     lib.dc_game_next_map_selector.restype=C.c_int
+    lib.dc_game_story_map_selector.argtypes=[C.c_uint32,C.POINTER(C.c_uint32)]
+    lib.dc_game_story_map_selector.restype=C.c_int
     lib.dc_game_menu_profile.argtypes=[C.POINTER(MenuButton),C.c_size_t]
     lib.dc_game_menu_profile.restype=C.c_int
     lib.dc_game_interaction_step.argtypes=[C.POINTER(GameInteractionState),C.POINTER(GameInteractionInput),C.POINTER(GameInteractionState),C.POINTER(GameInteractionResult)]

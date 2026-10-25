@@ -21,6 +21,7 @@ typedef struct dc_game_interaction_result {
 #define DC_GAME_MAP_SEQUENCE_COUNT 8u
 #define DC_GAME_INTERACTION_DELAY_MS 800u
 #define DC_GAME_MENU_COUNT 6u
+#define DC_GAME_STORY_MAP_TABLE_COUNT 22u
 DC_API dc_status dc_game_player_step(const dc_game_player *state,const dc_game_input *input,
     float delta_seconds,dc_game_player *out);
 DC_API dc_status dc_game_player_save(const dc_game_player *state,void *bytes,size_t length);
@@ -28,6 +29,9 @@ DC_API dc_status dc_game_player_load(const void *bytes,size_t length,dc_game_pla
 /* Real chapter-3 map chain observed by the local resource audit. The final
  * selector returns itself with finished=1; invalid selectors leave outputs. */
 DC_API dc_status dc_game_next_map_selector(uint32_t current,uint32_t *next,uint32_t *finished);
+/* Static table recovered from 0x0052bcf0/0x00598a50. Story states without a
+ * map use 0xff and return DC_NOT_FOUND without modifying selector. */
+DC_API dc_status dc_game_story_map_selector(uint32_t story_state,uint32_t *selector);
 /* Six-row chapter-3 gameplay menu captured from the original runtime. The
  * coordinates are logical 1024x768 values; callers pass the observed window
  * scale to dc_menu_step. Row 2 is disabled in the admitted state. */
