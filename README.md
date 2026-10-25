@@ -77,6 +77,12 @@ see [Windows native validation](docs/windows-native-validation.md). This uses
 the same native module boundary as the iOS host and keeps the original `Data`
 directory outside the repository.
 
+For a manual local session, run `python tools/native_playable_session.py --data
+Data`; enter `i` to complete an interaction and advance, `m dx dz` to move, and
+`s`/`l` to save or restore `Data/save/player.state`. Add `--load` to start from
+that saved map. The runner validates the real actor, face, animation, eyes/neck,
+map and first voice-chain resources before accepting input.
+
 ## Previous interpreter experiment
 
 The manually dispatched `runtime-ios-app.yml` workflow now builds `PortLab-interpreter-unsigned.ipa` with the genuine 32-bit interpreter, launch bridge and frontend. Build `39877459414` succeeded, and its IPA was inspected as an iOS-device ARM64 executable with the interpreter entry point linked. JIT is not required by that build. Wine's runtime ZIP must still be supplied separately, original game files are not bundled, and iOS guest boot and target-device playability remain unverified.
