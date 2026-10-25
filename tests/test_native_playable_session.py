@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class NativePlayableSessionTests(unittest.TestCase):
     def test_user_facing_runner_completes_real_map_sequence(self):
+        if not (ROOT / "Data" / "RPP_10.pp").is_file():
+            self.skipTest("local original Data is not supplied")
         commands = "\n".join(["i"] * 8 + ["q", ""])
         result = subprocess.run(
             [sys.executable, str(ROOT / "tools/native_playable_session.py"),
