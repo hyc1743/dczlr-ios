@@ -110,3 +110,12 @@ macOS job verifies each download, concatenates ordered chunks, decrypts each
 AES-GCM record into its temporary runner directory, stages the parts into the
 simulator, and runs the `gameComplete` gameplay check. The decrypted files are
 removed with the runner workspace.
+
+To create uploadable chunks locally after encryption:
+
+```powershell
+python tools/split_encrypted_resource_bundle.py `
+  --input out/dczlr-resources.dczenc `
+  --output out/dczlr-resource-chunks `
+  --part-bytes 950000000
+```
