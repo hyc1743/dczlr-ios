@@ -60,21 +60,19 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
     return self;
 }
 - (NSString *)prepareGameplayAudio {
-    if(_gameplayEffects)return nil;
-    NSArray<NSString *> *slotNames=DCGameplaySlotNames();
-    NSMutableDictionary<NSString *,AVAudioPlayer *> *prepared=[NSMutableDictionary dictionaryWithCapacity:slotNames.count];
-    for(NSString *name in slotNames) {
-        NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_14.pp" directory:_directory error:&error];
-        if(!data)return error ?: [NSString stringWithFormat:@"Gameplay audio resource unavailable: %@",name];
-        NSError *reason=nil;AVAudioPlayer *player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
-        if(!player || ![player prepareToPlay])return reason.localizedDescription ?: [NSString stringWithFormat:@"Gameplay audio decoder failed: %@",name];
-        prepared[name]=player;
-    }
-    _gameplayEffects=prepared;
+    if(!_gameplayEffects)_gameplayEffects=[NSMutableDictionary dictionary];
     return nil;
 }
 - (BOOL)playGameplayEffectNamed:(NSString *)name {
-    AVAudioPlayer *player=_gameplayEffects[name];if(!player)return NO;
+    if(!_gameplayEffects)_gameplayEffects=[NSMutableDictionary dictionary];
+    AVAudioPlayer *player=_gameplayEffects[name];
+    if(!player) {
+        NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_14.pp" directory:_directory error:&error];
+        if(!data)return NO;
+        NSError *reason=nil;player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
+        if(!player || ![player prepareToPlay])return NO;
+        _gameplayEffects[name]=player;
+    }
     NSError *reason=nil;AVAudioSession *session=AVAudioSession.sharedInstance;
     if(![session setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&reason] ||
        ![session setActive:YES error:&reason]) return NO;
