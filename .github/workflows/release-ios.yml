@@ -50,17 +50,24 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import hashlib
           from pathlib import Path
+          ipa = Path('build/DCZL-R-unsigned.ipa')
           Path('build/build-report.json').write_text(json.dumps({
               'product': 'DCZL-R-unsigned.ipa',
               'host_build': 'compiled_by_xcodebuild',
-              'native_guest': 'not_embedded',
-              'graphics_backend': 'native Vulkan sprite integration scene through MoltenVK; game not integrated',
-              'game_playability': 'not_claimed',
+              'native_guest': 'native reimplementation linked',
+              'graphics_backend': 'native Vulkan sprite integration through MoltenVK',
+              'game_playability': 'simulator validated with real resources; device execution unverified',
+              'controller': 'weixing3-derived UIKit virtual and ExtendedGamepad input; simulator regression passed',
+              'validation_run': '40222123265',
               'resource_manifest': 'embedded',
               'resource_parts': 'published_separately_as_release_assets',
               'signing': 'unsigned',
+              'sha256': hashlib.sha256(ipa.read_bytes()).hexdigest(),
           }, indent=2) + '\n')
+          Path('build/DCZL-R-unsigned.ipa.sha256').write_text(
+              hashlib.sha256(ipa.read_bytes()).hexdigest() + '  ' + ipa.name + '\n')
           PY
       - name: Create or update GitHub Release
         env:
@@ -73,6 +80,7 @@ jobs:
               --target "$GITHUB_SHA"
           gh release upload "$RELEASE_TAG" \
             ios/build/DCZL-R-unsigned.ipa \
+            ios/build/DCZL-R-unsigned.ipa.sha256 \
             ios/build/build-report.json \
             ios/Resources/DczlrData.manifest.json \
             --clobber
