@@ -47,8 +47,8 @@ final class PortGamepad: ObservableObject {
     }
 
     private func sample(_ pad: GCExtendedGamepad) {
-        state.leftX = pad.leftThumbstick.x
-        state.leftY = pad.leftThumbstick.y
+        state.leftX = pad.leftThumbstick.xAxis.value
+        state.leftY = pad.leftThumbstick.yAxis.value
         state.dpadX = pad.dpad.xAxis.value
         state.dpadY = pad.dpad.yAxis.value
         // Match weixing3's positional diamond: bottom A, right B, left X, top Y.
