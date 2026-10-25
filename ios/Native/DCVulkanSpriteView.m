@@ -50,6 +50,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     BOOL _titleSceneLoaded;
     DCVulkanSpriteScene _presentedScene;
     NSInteger _selectedTitleOption;
+    int32_t _controllerTitleRow;
     CFTimeInterval _lastStartupScan;
     CFTimeInterval _lastTitleScan;
     NSString *_deviceName;
@@ -194,7 +195,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
 }
 - (NSString *)drawAtX:(float)x y:(float)y time:(double)time
                 layer:(CAMetalLayer *)layer width:(uint32_t)width height:(uint32_t)height
-         dataDirectory:(NSString *)directory touching:(BOOL)touching {
+         dataDirectory:(NSString *)directory touching:(BOOL)touching controller:(dc_pad_frame)controller {
     if (!width || !height) return @"CAMetalLayer has empty drawable size";
     if (_renderer && (_width != width || _height != height)) [self destroyRenderer];
     if (!_renderer) {
@@ -244,7 +245,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         double milliseconds = time * 1000.0;
         if (!isfinite(milliseconds) || milliseconds < 0) return @"Invalid startup animation time";
         uint32_t tick = (uint32_t)fmod(milliseconds, 4294967296.0);
-        NSString *error = [_startupScene drawAtTick:tick touching:touching width:_width height:_height];
+        NSString *error = [_startupScene drawAtTick:tick touching:(touching || (controller.buttons&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
         if (error) return error;
         if (_startupScene.cardReady)
             _presentedScene = _startupScene.card == 1 ? DCVulkanSpriteSceneStartupWarning : DCVulkanSpriteSceneStartupCard;
@@ -258,7 +259,14 @@ static void dc_write_float_le(uint8_t *out, float value) {
     double sceneMilliseconds=time*1000.0;
     if(!isfinite(sceneMilliseconds) || sceneMilliseconds<0)return @"Invalid scene animation time";
     uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
-    if(_gameScene.gameFinished && touching && !_previousGameplayTouch){
+    if(_gameScene && (controller.pressed&DC_PAD_MINUS)) {
+        [_gameScene detachRenderer];_gameScene=nil;
+        [_introScene detachRenderer];_introScene=nil;
+        _titleStateInitialized=NO;_titleMenuInitialized=NO;
+        _previousTitleTouch=NO;_previousGameplayTouch=NO;
+        showTitle=titleReady;
+    }
+    if(_gameScene.gameFinished && ((touching && !_previousGameplayTouch) || (controller.pressed&DC_PAD_A))){
         [_gameScene detachRenderer];
         _gameScene=nil;
         [_introScene detachRenderer];
@@ -273,10 +281,12 @@ static void dc_write_float_le(uint8_t *out, float value) {
             if(_introScene) {
                 NSString *gameError=[self startGameSceneFromDirectory:directory];
                 if(gameError)return gameError;
-                BOOL gameTouch=touching;
+                dc_pad_frame gameController=controller;
+                if(_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch) gameController=(dc_pad_frame){0};
+            BOOL gameTouch=touching;
                 if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
                 if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
-                NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
+                NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController width:_width height:_height];
                 if(gameFailure)return gameFailure;
                 NSString *voiceFailure=[self playPendingGameplayVoice];
                 if(voiceFailure)return voiceFailure;
@@ -288,7 +298,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         }
         if(_introScene) {
         NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
-            touching:touching width:_width height:_height];
+            touching:(touching || (controller.buttons&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
         if(failure)return failure;
         _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
         }
@@ -358,6 +368,17 @@ static void dc_write_float_le(uint8_t *out, float value) {
             _selectedTitleOption=_titleMenu.active ? _titleMenu.hover+2 : -1;
             menuResult=result;menuRow=_titleMenu.hover;
         }
+        uint64_t up=DC_PAD_UP|(UINT64_C(1)<<17),down=DC_PAD_DOWN|(UINT64_C(1)<<19);
+        if(acceptsInput && (controller.pressed&(up|down|DC_PAD_A|DC_PAD_PLUS))) {
+            int step=(controller.pressed&up)?-1:(controller.pressed&down)?1:0;
+            if(step) {
+                do { _controllerTitleRow=(_controllerTitleRow+step+5)%5; }
+                while((_controllerTitleRow==2&&!_editUnlocked)||(_controllerTitleRow==3&&!_extraUnlocked));
+            }
+            menuRow=_controllerTitleRow;
+            menuResult=(controller.pressed&(DC_PAD_A|DC_PAD_PLUS))?1:3;
+            _selectedTitleOption=menuRow+2;
+        }
         _previousTitleTouch=touching;
         dc_title_input titleInput={.transition_ready=transitionReady,.selection_busy=_gameAudio.selectionBusy,
             .menu_result=menuResult,.menu_row=menuRow};
@@ -401,7 +422,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         _titleState=titlePlan.next;
         if(_introScene) {
             NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
-                touching:touching width:_width height:_height];
+                touching:(touching || (controller.buttons&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
             if(failure)return failure;
             _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
         }
@@ -430,10 +451,12 @@ static void dc_write_float_le(uint8_t *out, float value) {
 #undef ADD_TITLE_LAYER
     } else {
         if(_gameScene) {
+            dc_pad_frame gameController=controller;
+            if(_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch) gameController=(dc_pad_frame){0};
             BOOL gameTouch=touching;
             if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
             if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
-            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch width:_width height:_height];
+            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController width:_width height:_height];
             if(gameFailure)return gameFailure;
             NSString *voiceFailure=[self playPendingGameplayVoice];
             if(voiceFailure)return voiceFailure;
@@ -563,7 +586,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     ++_presentedFrames;
     return nil;
 }
-- (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching
+- (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching controller:(dc_pad_frame)controller
             completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL, BOOL, NSString *, BOOL, BOOL, BOOL))completion {
     if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO, NO, @"", NO, NO, NO); return; }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
@@ -572,7 +595,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     NSString *directory = [self.startupDataDirectory copy] ?: @"";
     dispatch_async(_renderQueue, ^{
         @autoreleasepool {
-            NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching];
+            NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching controller:controller];
             NSString *device = self->_deviceName ?: @"";
             DCVulkanSpriteScene scene = self->_presentedScene;
             BOOL advanced = self->_diagnosticAnimationAdvanced;

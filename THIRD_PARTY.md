@@ -1,5 +1,13 @@
 # Third-Party and Asset Boundary
 
+`ios/Native/DCGamepadView.m` adapts the MIT iOS input frontend from
+`seedds/nxnative` commit `677345b0933f5f8754aeec3125d14df32683ca97`
+(Copyright 2026 jhaizhou), with weixing3's positional A/B/X/Y patch.
+The full upstream notice is retained in `ios/Resources/Nxnative-LICENSE`
+and included in the app. Touch normalization is adapted to this renderer's
+4:3 content; control geometry, ownership, sliding and layout semantics follow
+the reference frontend.
+
 The MIT license in this repository applies only to original PortLab host code, tooling, workflows, tests and documentation created for this repository.
 
 The supplied Windows executable, DLLs, embedded resources, `Data` directory, save files and any generated `.dczdata` resource parts are not relicensed by this repository. Their copyright, distribution and use remain subject to the rights and permission of their respective owners. Do not publish those files unless you have permission to distribute them.

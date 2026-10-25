@@ -42,7 +42,7 @@ struct PortLabApp: App {
             .ignoresSafeArea(edges: model.gameResourcesActive ? .all : [])
             .overlay {
                 if model.gameResourcesActive {
-                    PortVirtualGamepad(input: model.gamepad)
+                    PortVirtualGamepad()
                 }
             }
             .overlay(alignment: .bottom) {

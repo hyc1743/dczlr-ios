@@ -73,18 +73,12 @@ final class SpritePresenter: NSObject {
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
         renderPending = true
-        let pad = model.gamepad.state
-        let padX = abs(pad.leftX) > 0.12 ? pad.leftX : pad.dpadX
-        let padY = abs(pad.leftY) > 0.12 ? pad.leftY : pad.dpadY
-        if abs(padX) > 0.01 || abs(padY) > 0.01 {
-            model.x = min(1, max(-1, model.x + padX * 0.035))
-            model.y = min(1, max(-1, model.y + padY * 0.035))
-        }
+        let pad = model.gamepad.sample()
         var pointerX = model.x, pointerY = model.y
-        var touching = model.touchActive || pad.actionPressed
-        if pad.touchActive {
-            pointerX = pad.touchX * 2 - 1
-            pointerY = 1 - pad.touchY * 2
+        var touching = model.touchActive
+        if pad.touch_count > 0 {
+            pointerX = pad.touch_x * 2 - 1
+            pointerY = 1 - pad.touch_y * 2
             touching = true
         }
         // CI supplies generated resources and exercises the same menu input
@@ -123,7 +117,7 @@ final class SpritePresenter: NSObject {
             touching = elapsed >= 1 && (elapsed - 1).truncatingRemainder(dividingBy: 2.5) < 0.22
         }
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
-            touching: touching) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
+            touching: touching, controller: pad) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
                 guard let self = self else { return }
                 self.renderPending = false
                 if let error = error {

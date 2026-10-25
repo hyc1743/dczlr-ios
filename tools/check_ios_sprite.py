@@ -279,6 +279,9 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             if not has_session(candidate,session):
                 time.sleep(1);continue
             log=candidate
+            if 'PORTLAB_GAMEPAD_TEST_FAILED' in log:
+                (output/'app.log').write_text(log,encoding='utf-8')
+                raise RuntimeError('UIKit gamepad regression failed: '+log[-2000:])
             if startup_fixture:
                 for scene in presented_scenes(log):
                     if scene not in captured:
@@ -356,7 +359,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             raise RuntimeError("Simulator did not report a Vulkan frame; unified log query failed: " + unified_log[-1500:])
         raise RuntimeError("Simulator did not report a submitted Vulkan sprite frame; launch_timed_out=" +
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
-    report = {"simulator": phone["name"], "runtime": phone["runtime"], "udid": device,"launch_command":launch_state,
+    if 'PORTLAB_GAMEPAD_TEST_PASSED' not in log:
+        raise RuntimeError('Missing UIKit gamepad regression evidence')
+    report = {"gamepad_regression": "UIKit touch ownership and GameController snapshot passed",
+              "simulator": phone["name"], "runtime": phone["runtime"], "udid": device,"launch_command":launch_state,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)

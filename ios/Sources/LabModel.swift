@@ -47,6 +47,14 @@ final class LabModel: ObservableObject {
             status = "日志初始化失败：\(error.localizedDescription)"
         }
         importResourcePacksIfPresent()
+        #if DEBUG
+        if let failure = DCGamepadView.verifyControls() {
+            gameError = failure
+            record(failure, event: "PORTLAB_GAMEPAD_TEST_FAILED")
+        } else {
+            record("UIKit and GameController input regression passed", event: "PORTLAB_GAMEPAD_TEST_PASSED")
+        }
+        #endif
     }
 
     private func importResourcePacksIfPresent() {
@@ -161,6 +169,8 @@ final class LabModel: ObservableObject {
     }
 
     func setActive(_ value: Bool) {
+        gamepad.setActive(value)
+        touchActive = false
         active = value
         if !value {
             player?.stop()

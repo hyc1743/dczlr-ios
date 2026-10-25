@@ -68,6 +68,8 @@ targets:
       - sdk: AVFoundation.framework
       - sdk: ImageIO.framework
       - sdk: GameController.framework
+      - sdk: CoreMotion.framework
+      - sdk: CoreText.framework
 schemes:
   PortLab:
     build:
