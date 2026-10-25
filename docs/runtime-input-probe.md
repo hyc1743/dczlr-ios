@@ -77,7 +77,8 @@ Static recovery narrows that caller: `0x00598a50` reads a context field at
 route is now exposed and tested as `dc_game_story_map_selector`; dynamic
 evidence still does not show which user action sets the required context field.
 The Frida agent now observes `0x005f9561`, `0x00598a50` and the context getter
-`0x005ffd90`; the natural voice probe did not enter any of these gates.
+`0x005ffd90`, plus the context setter `0x005feeb0`; the natural voice probe
+did not enter any of these gates or write the map-context value.
 
 The simulator resource check is optional and can run in the public macOS workflow; it is not required for the Windows native validation path. When a built simulator app is available, local resource packs can be staged without putting them in the repository:
 

@@ -672,6 +672,23 @@ function hookGameFunctions() {
       } catch (_) {}
     }
   });
+  const setMapContextFn = relative(0x005feeb0);
+  installOnce(setMapContextFn, 'FUN_005feeb0', {
+    onEnter: function (args) {
+      const fields = {value: safeArgU32(args[1]), argument: pointerKey(args[0])};
+      try {
+        const context = base.add(0x47ac60);
+        fields.before = context.add(0x305c).readU8();
+        fields.counter = context.add(0x3058).readU8();
+        const main = args[0];
+        if (validPointer(main)) {
+          fields.map_selector = main.add(0x13533).readU8();
+          fields.story_state = main.add(0x13535).readU8();
+        }
+      } catch (_) {}
+      emit('MapContextSet', fields);
+    }
+  });
   gameHooksInstalled = true;
   emit('GameHooksInstalled', {base: pointerKey(base)});
 }
