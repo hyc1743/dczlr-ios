@@ -51,7 +51,7 @@ def validate(root: Path) -> dict:
     if covered_total != manifest["total_bytes"] or part_index != len(parts) or part_offset != 0:
         raise ValueError("file segments do not cover all release parts")
     workflow = (root / ".github" / "workflows" / "release-ios.yml").read_text(encoding="utf-8")
-    for required in ("PortLab-unsigned.ipa", "DczlrData.manifest.json", "gh release upload"):
+    for required in ("DCZL-R-unsigned.ipa", "DczlrData.manifest.json", "gh release upload"):
         if required not in workflow:
             raise ValueError(f"release workflow missing {required}")
     return {"parts": len(parts), "total_bytes": expected_total, "max_part_bytes": max(p["size"] for p in parts), "release_workflow": True}
