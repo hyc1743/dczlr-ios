@@ -93,6 +93,11 @@ final class SpritePresenter: NSObject {
                 (elapsed >= 5 && elapsed < 5.2)
         }
         if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
+           let introTime = testIntroTime, lastReportedScene == .intro {
+            let elapsed = CACurrentMediaTime() - introTime
+            touching = elapsed >= 2 && elapsed.truncatingRemainder(dividingBy: 1.0) < 0.2
+        }
+        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
            lastReportedScene == .gameplay {
             if testGameplayTime == nil { testGameplayTime = CACurrentMediaTime() }
             let elapsed = CACurrentMediaTime() - (testGameplayTime ?? CACurrentMediaTime())
