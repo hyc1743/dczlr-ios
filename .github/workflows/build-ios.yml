@@ -28,6 +28,21 @@ on:
         required: false
         default: ""
         type: string
+      resource_repo:
+        description: "Private repository owner/name containing verified DczlrData parts"
+        required: false
+        default: ""
+        type: string
+      resource_ref:
+        description: "Branch, tag or commit of resource_repo"
+        required: false
+        default: "main"
+        type: string
+      resource_path:
+        description: "Path inside resource_repo containing manifest and dczdata parts"
+        required: false
+        default: "."
+        type: string
 
 permissions:
   contents: read
@@ -87,8 +102,30 @@ jobs:
           xcodebuild -project PortLab.xcodeproj -scheme PortLab -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO build
+      - name: Checkout private resource repository
+        if: inputs.resource_repo != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.resource_repo }}
+          ref: ${{ inputs.resource_ref }}
+          token: ${{ secrets.DCZLR_RESOURCE_REPO_TOKEN }}
+          path: private-resources
+          sparse-checkout: |
+            ${{ inputs.resource_path }}
+          sparse-checkout-cone-mode: false
+      - name: Prepare plaintext private resource parts
+        if: inputs.resource_repo != ''
+        env:
+          RESOURCE_PATH: ${{ inputs.resource_path }}
+        run: |
+          PARTS="$GITHUB_WORKSPACE/private-resources/$RESOURCE_PATH"
+          test -f "$PARTS/DczlrData.manifest.json"
+          test -f "$PARTS/DczlrData.part001.dczdata"
+          test -f "$PARTS/DczlrData.part002.dczdata"
+          test -f "$PARTS/DczlrData.part003.dczdata"
+          echo "DCZLR_RESOURCE_PARTS=$PARTS" >> "$GITHUB_ENV"
       - name: Download and decrypt private resource bundle
-        if: inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
+        if: inputs.resource_repo == '' && (inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '')
         env:
           DCZLR_RESOURCE_KEY: ${{ secrets.DCZLR_RESOURCE_KEY }}
           RESOURCE_BUNDLE_URL: ${{ inputs.resource_bundle_url }}
@@ -133,14 +170,14 @@ jobs:
         run: |
           python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene intro --startup-fixture --exercise-new-game --output out/ios-startup
       - name: Exercise real resource gameplay on simulator
-        if: inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
+        if: inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
         timeout-minutes: 12
         run: |
           python3 tools/check_ios_sprite.py \
             --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app \
             --runtime iOS-18-5 --expected-scene gameComplete \
             --exercise-real-gameplay \
-            --resource-parts "$RUNNER_TEMP/dczlr-resource-parts" \
+            --resource-parts "${DCZLR_RESOURCE_PARTS:-$RUNNER_TEMP/dczlr-resource-parts}" \
             --output out/ios-real-gameplay
       - name: Upload simulator Vulkan execution evidence
         if: always()
@@ -155,7 +192,7 @@ jobs:
           name: PortLab-simulator-startup
           path: out/ios-startup/
       - name: Upload real gameplay evidence
-        if: always() && (inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '')
+        if: always() && (inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '')
         uses: actions/upload-artifact@v4
         with:
           name: PortLab-simulator-real-gameplay

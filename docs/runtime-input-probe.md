@@ -111,6 +111,15 @@ AES-GCM record into its temporary runner directory, stages the parts into the
 simulator, and runs the `gameComplete` gameplay check. The decrypted files are
 removed with the runner workspace.
 
+When the resources are kept in a private GitHub repository, use the plaintext
+route instead. The private repository must contain
+`DczlrData.manifest.json` and all three `DczlrData.part*.dczdata` files. Add a
+read token as the `DCZLR_RESOURCE_REPO_TOKEN` Actions secret, then dispatch the
+workflow with `resource_repo`, `resource_ref`, and `resource_path` (for example
+`out/resource-packs`). The macOS job checks out that repository into a temporary
+workspace, verifies the manifest through `check_ios_sprite.py`, and removes it
+with the runner after the simulator test.
+
 To create uploadable chunks locally after encryption:
 
 ```powershell

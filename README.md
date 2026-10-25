@@ -113,6 +113,12 @@ ordered sub-1-GB URLs and hashes. Keep the 32-byte key in the
 `DCZLR_RESOURCE_KEY` Actions secret. The macOS job decrypts only into its
 temporary workspace, stages the parts, and records simulator gameplay evidence.
 
+The same workflow accepts a private resource repository through
+`resource_repo`, `resource_ref` and `resource_path`. Store a read token in the
+`DCZLR_RESOURCE_REPO_TOKEN` Actions secret. The macOS job checks out the
+plaintext parts only into its temporary workspace, verifies all three parts,
+and runs the simulator gameplay check without publishing the resources.
+
 Pushing a tag such as `v0.1.0` runs `release-ios.yml`, creates or updates a GitHub
 Release, and uploads `PortLab-unsigned.ipa` plus the resource manifest. The three
 `.dczdata` files stay local under the current delivery arrangement.
