@@ -386,16 +386,18 @@ static void freeMorphCaches(dc_game_model *slot) {
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
      DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:&reason];
      DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
-     if(!mapArchive || !actorArchive || !faceArchive || !auxiliaryArchive) { if(error)*error=reason.localizedDescription;return nil; }
+     if(!mapArchive || !actorArchive || !faceArchive) { if(error)*error=reason.localizedDescription;return nil; }
     _map.xxData=[self entry:@"mm00_00.xx" archive:mapArchive error:error];
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
     NSData *actorPlacement=[self entry:@"am00_01.plst" archive:actorArchive error:nil];
     _face.xxData=[self entry:@"ak00_00.xx" archive:faceArchive error:error];
     _face.xaData=[self entry:@"an00_01.xa" archive:faceArchive error:error];
-     _eyesData=[self entry:@"ak00_00.eyes" archive:auxiliaryArchive error:error];
-     _neckData=[self entry:@"am00_01.neck" archive:auxiliaryArchive error:error];
-     if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData || !_eyesData || !_neckData)return nil;
+     if(auxiliaryArchive) {
+         _eyesData=[self entry:@"ak00_00.eyes" archive:auxiliaryArchive error:nil];
+         _neckData=[self entry:@"am00_01.neck" archive:auxiliaryArchive error:nil];
+     }
+     if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData)return nil;
     if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error] ||
        ![self openModel:&_face staticOnly:YES error:error])return nil;
     NSString *morphError=nil;
@@ -405,7 +407,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
     dc_eyeneck_info eyesInfo,neckInfo;dc_eyeneck_span eyesRight,eyesLeft,neckHead;
-    if(dc_eyeneck_probe(_eyesData.bytes,_eyesData.length,&eyesInfo)!=DC_OK ||
+    if(_eyesData && _neckData && (dc_eyeneck_probe(_eyesData.bytes,_eyesData.length,&eyesInfo)!=DC_OK ||
        dc_eyeneck_probe(_neckData.bytes,_neckData.length,&neckInfo)!=DC_OK ||
        eyesInfo.kind!=DC_EYENECK_EYES || eyesInfo.targets!=2 || eyesInfo.records!=5 ||
        neckInfo.kind!=DC_EYENECK_NECK || neckInfo.targets!=1 || neckInfo.records!=3 ||
@@ -417,7 +419,7 @@ static void freeMorphCaches(dc_game_model *slot) {
        ![self encodedSpan:neckHead matchesName:@"a_Kp_kubi2" data:_neckData] ||
         [self findNode:&_face name:@"a_Np_me_R"]==UINT32_MAX ||
         [self findNode:&_face name:@"a_Np_me_L"]==UINT32_MAX ||
-        [self findNode:&_actor name:@"a_Kp_kubi2"]==UINT32_MAX) {
+        [self findNode:&_actor name:@"a_Kp_kubi2"]==UINT32_MAX)) {
          if(error)*error=@"Eyes/neck auxiliary binding failed";return nil;
      }
     [self loadMapVariantLightForSelector:0 archive:mapArchive error:nil];
