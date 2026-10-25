@@ -347,7 +347,7 @@ function hookGameFunctions() {
   const menuFn = relative(0x0045f7c0);
   installOnce(menuFn, 'FUN_0045f7c0', {
     onEnter: function (args) {
-      if (forceMenu && forceMenuRemaining > 0) {
+      if (forceMenu && forceMenuRemaining > 0 && elapsed() < 49) {
         args[1] = ptr(forceMenu.x | 0);
         args[2] = ptr(forceMenu.y | 0);
         args[4] = ptr((forceMenu.input === undefined ? 3 : forceMenu.input) & 0xff);
