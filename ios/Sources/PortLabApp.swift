@@ -40,6 +40,11 @@ struct PortLabApp: App {
             .padding(model.gameResourcesActive ? 0 : 16)
             .background(model.gameResourcesActive ? Color.black : Color(.systemBackground))
             .ignoresSafeArea(edges: model.gameResourcesActive ? .all : [])
+            .overlay {
+                if model.gameResourcesActive {
+                    PortVirtualGamepad(input: model.gamepad)
+                }
+            }
             .overlay(alignment: .bottom) {
                 if model.gameResourcesActive, let error = model.gameError {
                     Text(error).font(.caption).padding().foregroundStyle(.white)

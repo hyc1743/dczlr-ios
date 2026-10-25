@@ -32,6 +32,9 @@ targets:
         UILaunchScreen: {}
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        GCSupportsControllerUserInteraction: true
+        GCSupportedGameControllers:
+          - ProfileName: ExtendedGamepad
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -61,6 +64,7 @@ targets:
       - sdk: CoreGraphics.framework
       - sdk: AVFoundation.framework
       - sdk: ImageIO.framework
+      - sdk: GameController.framework
 schemes:
   PortLab:
     build:

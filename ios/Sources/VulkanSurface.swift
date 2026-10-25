@@ -73,7 +73,15 @@ final class SpritePresenter: NSObject {
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
         renderPending = true
-        var pointerX = model.x, pointerY = model.y, touching = model.touchActive
+        let pad = model.gamepad.state
+        let padX = abs(pad.leftX) > 0.12 ? pad.leftX : pad.dpadX
+        let padY = abs(pad.leftY) > 0.12 ? pad.leftY : pad.dpadY
+        if abs(padX) > 0.01 || abs(padY) > 0.01 {
+            model.x = min(1, max(-1, model.x + padX * 0.035))
+            model.y = min(1, max(-1, model.y + padY * 0.035))
+        }
+        var pointerX = model.x, pointerY = model.y
+        var touching = model.touchActive || pad.actionPressed
         // CI supplies generated resources and exercises the same menu input
         // adapter. Normal launches continue to use the user's pointer state.
         if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",

@@ -3,6 +3,7 @@ import Combine
 import Foundation
 
 final class LabModel: ObservableObject {
+    let gamepad = PortGamepad()
     @Published var x: Float = 0
     @Published var y: Float = 0
     @Published var touchActive = false
