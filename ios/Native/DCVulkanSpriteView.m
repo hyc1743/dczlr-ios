@@ -372,15 +372,22 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 [_gameAudio stopTitleMusic];
             } else if(command.kind==DC_TITLE_BACKUP || command.kind==DC_TITLE_HIDE) {
                 /* Load-slot and hide callbacks are represented by the native
-                 * planner. The local port resumes the persisted player slot
-                 * directly when ENTER=2 arrives. */
+                 * planner. ENTER=1 and ENTER=2 both enter the scene adapter;
+                 * the initializer decides whether a saved state is present. */
             } else if(command.kind==DC_TITLE_ENTER) {
                 if(command.value==2) {
                     NSString *gameError=[self startGameSceneFromDirectory:directory];
                     if(gameError)return gameError;
                     [_introScene detachRenderer];
                     _introScene=nil;
-                } else if(command.value!=1) {
+                } else if(command.value==1) {
+                    /* Load-game uses the same scene initializer; it restores
+                     * player.state and walks the map chain to the saved map. */
+                    NSString *gameError=[self startGameSceneFromDirectory:directory];
+                    if(gameError)return gameError;
+                    [_introScene detachRenderer];
+                    _introScene=nil;
+                } else {
                     return [NSString stringWithFormat:@"Title destination %u is not implemented",command.value];
                 }
             } else if(command.kind==DC_TITLE_INIT_GAME) {
