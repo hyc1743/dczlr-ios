@@ -211,9 +211,20 @@ final class PortGamepadView: UIView {
             if full { locked += [(PortGameButton.leftStick,CGPoint(x:safe.minX+102*u,y:safe.minY+40*u),24*u),(PortGameButton.rightStick,CGPoint(x:safe.maxX-102*u,y:safe.minY+40*u),24*u)] }
             if let hit=locked.first(where:{dist(p,$0.1)<=$0.2}) { owners[id]=Owner(kind:.button,index:Int(hit.0)); setBit(hit.0,true); continue }
             if full && dist(p,CGPoint(x:safe.midX,y:safe.minY+22*u)) <= 24*u { owners[id]=Owner(kind:.swap,index:0); continue }
-            var best=1.0, kind=Kind.game, index=0; let f=dist(p,faceCentre)/(faceGap+faceRadius*1.6); if f <= best {best=f;kind=.face}; if full {let d=dist(p,dpadCentre)/(dpadRadius*1.3);if d<best{best=d;kind=.dpad}}
-            if sticks[0] == nil {let s=dist(p,stickHome)/(stickRadius*1.4);if s<best{best=s;kind=.stick;index=0}}
-            if kind == .game && full && sticks[1] == nil && p.x >= bounds.maxX-bounds.width/3 { kind=.stick;index=1;rightCentre=p }
+            var best = 1.0, kind = Kind.game, index = 0
+            let f = dist(p, faceCentre) / (faceGap + faceRadius * 1.6)
+            if f <= best { best = f; kind = .face }
+            if full {
+                let d = dist(p, dpadCentre) / (dpadRadius * 1.3)
+                if d < best { best = d; kind = .dpad }
+            }
+            if sticks[0] == nil {
+                let s = dist(p, stickHome) / (stickRadius * 1.4)
+                if s < best { best = s; kind = .stick; index = 0 }
+            }
+            if kind == .game && full && sticks[1] == nil && p.x >= bounds.maxX - bounds.width / 3 {
+                kind = .stick; index = 1; rightCentre = p
+            }
             if kind == .face {owners[id]=Owner(kind:.face,index:0);faces[id]=faceAt(p)} else if kind == .dpad {owners[id]=Owner(kind:.dpad,index:0)} else if kind == .stick {owners[id]=Owner(kind:.stick,index:index);sticks[index]=t;stickNow[index]=p} else if let i=gameTouches.firstIndex(where:{$0 == nil}) {gameTouches[i]=t;owners[id]=Owner(kind:.game,index:i);hasGame=true}
         }
         if hasGame { gameUpdate() }; recompute(); setNeedsDisplay()
