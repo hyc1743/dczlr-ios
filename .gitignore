@@ -25,6 +25,7 @@ tools/__pycache__/
 /tmp*/
 /*.url
 /*.txt
+!/requirements.txt
 /public-files.json
 /research/
 /.tools/

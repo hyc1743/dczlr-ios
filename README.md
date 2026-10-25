@@ -106,6 +106,12 @@ The `Build PortLab iOS IPA` workflow runs portable Python checks on Ubuntu, then
 The workflow does not download or embed the local game data. Keep generated
 resource parts local and copy them into the installed app when needed.
 
+For simulator gameplay on GitHub Actions, local parts can be packed into an
+AES-GCM encrypted bundle with `tools/encrypted_resource_parts.py`. Supply its
+HTTPS URL and SHA-256 through the workflow inputs, and keep the 32-byte key in
+the `DCZLR_RESOURCE_KEY` Actions secret. The macOS job decrypts only into its
+temporary workspace, stages the parts, and records simulator gameplay evidence.
+
 Pushing a tag such as `v0.1.0` runs `release-ios.yml`, creates or updates a GitHub
 Release, and uploads `PortLab-unsigned.ipa` plus the resource manifest. The three
 `.dczdata` files stay local under the current delivery arrangement.

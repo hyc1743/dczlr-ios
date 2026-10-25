@@ -91,3 +91,20 @@ python tools/check_ios_sprite.py --app <PortLab.app> --runtime iOS-18-5 \
 The tool verifies every part against `DczlrData.manifest.json`, copies them to
 the simulator's `Documents/ResourcePacks`, sends touch pulses through the
 normal input adapter, and records the staging manifest plus gameplay markers.
+
+For a GitHub macOS run, the same parts can be supplied as an encrypted bundle
+without committing plaintext resources. Create it locally with:
+
+```powershell
+python tools/encrypted_resource_parts.py pack `
+  --parts out/resource-packs `
+  --output out/dczlr-resources.dczenc `
+  --key-env DCZLR_RESOURCE_KEY
+```
+
+Store the 32-byte key in the Actions secret `DCZLR_RESOURCE_KEY`, publish the
+encrypted file at a controlled HTTPS URL, and start `Build PortLab iOS IPA`
+with `resource_bundle_url` and `resource_bundle_sha256`. The macOS job verifies
+the bundle hash, decrypts each AES-GCM chunk into its temporary runner directory,
+stages the parts into the simulator, and runs the `gameComplete` gameplay check.
+The decrypted files are removed with the runner workspace.

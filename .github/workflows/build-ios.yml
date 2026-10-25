@@ -8,6 +8,16 @@ on:
         required: false
         default: false
         type: boolean
+      resource_bundle_url:
+        description: "HTTPS URL of the AES-GCM encrypted resource bundle for simulator gameplay"
+        required: false
+        default: ""
+        type: string
+      resource_bundle_sha256:
+        description: "SHA-256 of resource_bundle_url"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -20,6 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install portable Python dependencies
+        run: python -m pip install -r requirements.txt
       - name: Validate resource manifest and packer
         shell: bash
         run: |
@@ -43,6 +55,11 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install simulator test dependencies
+        run: python3 -m pip install -r requirements.txt
       - name: Install XcodeGen
         run: brew install xcodegen glslang spirv-tools
       - name: Prepare pinned MoltenVK and self-authored shaders
@@ -60,6 +77,21 @@ jobs:
           xcodebuild -project PortLab.xcodeproj -scheme PortLab -configuration Debug \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO build
+      - name: Download and decrypt private resource bundle
+        if: inputs.resource_bundle_url != ''
+        env:
+          DCZLR_RESOURCE_KEY: ${{ secrets.DCZLR_RESOURCE_KEY }}
+          RESOURCE_BUNDLE_URL: ${{ inputs.resource_bundle_url }}
+          RESOURCE_BUNDLE_SHA256: ${{ inputs.resource_bundle_sha256 }}
+        run: |
+          test -n "$DCZLR_RESOURCE_KEY"
+          test -n "$RESOURCE_BUNDLE_SHA256"
+          curl --fail --location --retry 3 "$RESOURCE_BUNDLE_URL" -o "$RUNNER_TEMP/dczlr-resources.dczenc"
+          echo "$RESOURCE_BUNDLE_SHA256  $RUNNER_TEMP/dczlr-resources.dczenc" | shasum -a 256 -c -
+          python3 tools/encrypted_resource_parts.py unpack \
+            --input "$RUNNER_TEMP/dczlr-resources.dczenc" \
+            --output "$RUNNER_TEMP/dczlr-resource-parts" \
+            --key-env DCZLR_RESOURCE_KEY
       - name: Upload simulator app and manifest
         uses: actions/upload-artifact@v4
         with:
@@ -75,6 +107,16 @@ jobs:
         timeout-minutes: 8
         run: |
           python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene intro --startup-fixture --exercise-new-game --output out/ios-startup
+      - name: Exercise real resource gameplay on simulator
+        if: inputs.resource_bundle_url != ''
+        timeout-minutes: 12
+        run: |
+          python3 tools/check_ios_sprite.py \
+            --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app \
+            --runtime iOS-18-5 --expected-scene gameComplete \
+            --exercise-real-gameplay \
+            --resource-parts "$RUNNER_TEMP/dczlr-resource-parts" \
+            --output out/ios-real-gameplay
       - name: Upload simulator Vulkan execution evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,6 +129,13 @@ jobs:
         with:
           name: PortLab-simulator-startup
           path: out/ios-startup/
+      - name: Upload real gameplay evidence
+        if: always() && inputs.resource_bundle_url != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-simulator-real-gameplay
+          path: out/ios-real-gameplay/
+          if-no-files-found: ignore
 
   unsigned-ipa:
     if: inputs.build_ipa == true
