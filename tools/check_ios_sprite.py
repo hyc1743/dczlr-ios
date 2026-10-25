@@ -163,7 +163,7 @@ def select_device(output, runtime):
     return phone
 
 
-def stage_resource_parts(parts_root, container, output):
+def stage_resource_parts(parts_root, container, output, restore=False):
     """Copy verified local dczdata parts into the simulator Documents tree."""
     parts_root = Path(parts_root).resolve(strict=True)
     manifest_path = parts_root / "DczlrData.manifest.json"
@@ -190,10 +190,11 @@ def stage_resource_parts(parts_root, container, output):
         "source": str(parts_root), "destination": str(destination),
         "parts": staged, "manifest_total_bytes": manifest.get("total_bytes")
     }, indent=2) + "\n", encoding="utf-8")
-    restored = container / "Documents" / "game" / "Data"
-    subprocess.run([sys.executable, "tools/pack_resources.py", "restore",
-                    "--parts", str(parts_root), "--manifest", str(manifest_path),
-                    "--out", str(restored)], check=True, timeout=600)
+    if restore:
+        restored = container / "Documents" / "game" / "Data"
+        subprocess.run([sys.executable, "tools/pack_resources.py", "restore",
+                        "--parts", str(parts_root), "--manifest", str(manifest_path),
+                        "--out", str(restored)], check=True, timeout=600)
     return staged
 
 
@@ -254,7 +255,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if resource_parts:
         if container is None:
             raise ValueError('resource-parts requires a resolved simulator app container')
-        stage_resource_parts(resource_parts, container, output)
+        stage_resource_parts(resource_parts, container, output, restore=exercise_real_gameplay)
     launch_environment=dict(os.environ)
     session=uuid.uuid4().hex
     launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
