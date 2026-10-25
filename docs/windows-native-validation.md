@@ -13,6 +13,15 @@ python tools/audit_playable_loop.py `
   --output "out\windows-playable-loop.json"
 ```
 
+需要手动逐步体验状态机时，可运行：
+
+```powershell
+python tools/native_playable_session.py --data "C:\path\to\dczlr\Data"
+```
+
+输入 `i` 完成交互并进入下一张地图，`m dx dz` 移动玩家，`s`/`l` 做原生存档往返，
+`q` 退出。该 runner 使用真实 `Data` 和同一套原生状态机，但不渲染画面、不导出资源。
+
 ## 原版 Windows 测试前置条件
 
 如果要启动目录中的原版 Windows 程序，先按根目录说明文件的要求为该程序启用
