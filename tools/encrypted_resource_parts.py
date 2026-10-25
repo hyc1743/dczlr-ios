@@ -160,13 +160,15 @@ def unpack_bundle(bundle: Path, output: Path, key: bytes) -> dict:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--key-env", default="DCZLR_RESOURCE_KEY")
-    parser.add_argument("--key-hex")
     sub = parser.add_subparsers(dest="command", required=True)
     pack = sub.add_parser("pack")
+    pack.add_argument("--key-env", default="DCZLR_RESOURCE_KEY")
+    pack.add_argument("--key-hex")
     pack.add_argument("--parts", type=Path, required=True)
     pack.add_argument("--output", type=Path, required=True)
     unpack = sub.add_parser("unpack")
+    unpack.add_argument("--key-env", default="DCZLR_RESOURCE_KEY")
+    unpack.add_argument("--key-hex")
     unpack.add_argument("--input", type=Path, required=True)
     unpack.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
