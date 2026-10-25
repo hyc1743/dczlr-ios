@@ -54,10 +54,10 @@ final class LabModel: ObservableObject {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
         let hasParts = names.contains { $0.hasPrefix("DczlrData.part") && $0.hasSuffix(".dczdata") }
             || ((try? FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("ResourcePacks").path)) ?? []).contains { $0.hasSuffix(".dczdata") }
-        guard hasParts else { resourcesReady = true; return }
+        guard hasParts else { resourcesReady = true; record("未找到资源分卷：(root.path)"); return }
         importingResources = true
         resourcesReady = false
-        record("发现资源分卷，开始校验与解包")
+        record("发现资源分卷，开始校验与解包：(root.path)")
         let destination = root.appendingPathComponent("game/Data", isDirectory: true)
         let documentsRoot = root
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
