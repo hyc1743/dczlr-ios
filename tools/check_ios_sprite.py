@@ -222,6 +222,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     phone = select_device(output, runtime)
     device = phone["udid"]
     run("xcrun", "simctl", "bootstatus", device, "-b", timeout=240)
+    # Every probe owns a fresh container. This prevents generated-fixture runs
+    # and real-resource runs in the same workflow from sharing partial Data.
+    subprocess.run(["xcrun", "simctl", "uninstall", device, "org.example.portlab"],
+                   capture_output=True, text=True, timeout=60)
     run("xcrun", "simctl", "install", device, str(app))
     # Resolve the app container before launch. A graphics-service crash can
     # wedge subsequent simctl queries, but the Documents path remains usable.
