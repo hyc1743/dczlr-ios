@@ -198,7 +198,17 @@ final class PortGamepadView: UIView {
     private func gameUpdate() { for (i,t) in gameTouches.enumerated() { if let t { gamePoint(t.location(in: self)); if i == 0 { return } } }; onTouch?(false, 0, 0) }
 
     private func faceAt(_ p: CGPoint) -> UInt64 { var m: UInt64 = 0; for b in [PortGameButton.a, PortGameButton.b, PortGameButton.x, PortGameButton.y] where dist(p, facePoint(b)) <= faceRadius * 1.25 { m |= b }; return m }
-    private func dpadAt(_ p: CGPoint) -> UInt64 { let dx=p.x-dpadCentre.x, dy=p.y-dpadCentre.y; guard hypot(dx,dy) >= dpadRadius*0.25 else { return 0 }; let a=atan2(-dy,dx)*180/.pi; var m: UInt64=0; if a > -67.5 && a < 67.5 {m |= PortGameButton.dpadRight}; if a > 22.5 && a < 157.5 {m |= PortGameButton.dpadUp}; if a > 112.5 || a < -112.5 {m |= PortGameButton.dpadLeft}; if a < -22.5 && a > -157.5 {m |= PortGameButton.dpadDown}; return m }
+    private func dpadAt(_ p: CGPoint) -> UInt64 {
+        let dx = p.x - dpadCentre.x, dy = p.y - dpadCentre.y
+        guard hypot(dx, dy) >= dpadRadius * 0.25 else { return 0 }
+        let a = atan2(-dy, dx) * 180 / .pi
+        var m: UInt64 = 0
+        if a > -67.5 && a < 67.5 { m |= PortGameButton.dpadRight }
+        if a > 22.5 && a < 157.5 { m |= PortGameButton.dpadUp }
+        if a > 112.5 || a < -112.5 { m |= PortGameButton.dpadLeft }
+        if a < -22.5 && a > -157.5 { m |= PortGameButton.dpadDown }
+        return m
+    }
     private func reset() { owners.removeAll(); locations.removeAll(); faces.removeAll(); sticks=[nil,nil]; gameTouches=Array(repeating:nil,count:16); held=0; axes=(0,0,0,0); emit(); onTouch?(false,0,0); setNeedsDisplay() }
     private func setBit(_ bit: UInt64, _ value: Bool) { if value { held |= bit } else { held &= ~bit } }
 
