@@ -24,7 +24,7 @@ class NativePlayableSessionTests(unittest.TestCase):
     def test_runner_requires_proximity_before_interaction(self):
         if not (ROOT / "Data" / "RPP_10.pp").is_file():
             self.skipTest("local original Data is not supplied")
-        commands = ["m 100 0"] * 20 + ["i"] + ["m -100 0"] * 20 + ["i", "q"]
+        commands = ["m 1 0"] * 20 + ["i"] + ["m -1 0"] * 20 + ["i", "q"]
         result = subprocess.run(
             [sys.executable, str(ROOT / "tools/native_playable_session.py"),
              "--data", str(ROOT / "Data")],
