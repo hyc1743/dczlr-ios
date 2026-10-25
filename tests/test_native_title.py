@@ -43,6 +43,12 @@ class NativeTitleTests(unittest.TestCase):
         result=native_result(self.lib,{'state':[0,0,255],'input':[0,0,0,3,0]})
         self.assertEqual(result,{'state':[0,0,0],'departed':0,'commands':[]})
 
+    def test_new_game_and_load_game_keep_distinct_enter_routes(self):
+        new_game=native_result(self.lib,{'state':[1,1,0],'input':[1,0,0,1,0]})
+        self.assertEqual(new_game['commands'],[[1,0],[2,1],[3,0]])
+        load_game=native_result(self.lib,{'state':[2,1,1],'input':[1,0,0,-1,-1]})
+        self.assertEqual(load_game['commands'],[[4,1],[5,1],[2,2],[6,0]])
+
     def test_invalid_fields_preserve_output(self):
         state=TitleState(0,0,255);input=TitleInput(0,0,0,-1,-1);out=TitlePlan()
         for owner,field,value in ((state,'action',7),(state,'waiting',2),(state,'hover',5),
