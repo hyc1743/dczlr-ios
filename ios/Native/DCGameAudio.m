@@ -68,9 +68,9 @@ static NSArray<NSString *> *DCGameplaySlotNames(void) {
     AVAudioPlayer *player=_gameplayEffects[name];
     if(!player) {
         NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_14.pp" directory:_directory error:&error];
-        if(!data)return NO;
+        if(!data)return YES;
         NSError *reason=nil;player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
-        if(!player || ![player prepareToPlay])return NO;
+        if(!player || ![player prepareToPlay])return YES;
         _gameplayEffects[name]=player;
     }
     NSError *reason=nil;AVAudioSession *session=AVAudioSession.sharedInstance;
