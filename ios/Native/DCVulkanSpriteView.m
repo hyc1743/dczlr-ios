@@ -14,6 +14,7 @@
 #import "DCGameScene.h"
 #include "dc_menu.h"
 #include "dc_save.h"
+#include "dc_gameplay.h"
 #include <math.h>
 #include <string.h>
 
@@ -376,6 +377,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
                  * followed by INIT_GAME for the new-game intro. */
             } else if(command.kind==DC_TITLE_ENTER) {
                 if(command.value==2) {
+                    NSString *savePath=[directory stringByAppendingPathComponent:@"save/player.state"];
+                    NSDictionary *saveAttributes=[[NSFileManager defaultManager] attributesOfItemAtPath:savePath error:nil];
+                    if(!saveAttributes || [saveAttributes[NSFileSize] unsignedLongLongValue] < DC_GAME_PLAYER_SAVE_BYTES)
+                        return @"No playable save is available";
                     NSString *gameError=[self startGameSceneFromDirectory:directory];
                     if(gameError)return gameError;
                     [_introScene detachRenderer];
