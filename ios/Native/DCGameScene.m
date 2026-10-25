@@ -270,6 +270,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSData *data=[NSData dataWithContentsOfFile:path];if(data.length<DC_GAME_PLAYER_SAVE_BYTES)return;
     dc_game_player loaded;if(dc_game_player_load(data.bytes,data.length,&loaded)!=DC_OK)return;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,loaded.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,loaded.z));
+    float loadedFloor=0;
+    if(![self surfaceYAtX:_player.x z:_player.z nearY:_actor.world.values[13] result:&loadedFloor])return;
     if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_player.map_selector=loaded.map_selector;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_interactionState=(dc_game_interaction_state){.interaction_count=loaded.interaction_count,.completed=loaded.interaction_count>0};_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
 }
 - (void)savePlayerState {
@@ -705,7 +707,8 @@ static void freeMorphCaches(dc_game_model *slot) {
             float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
             dc_game_player next;
             dc_game_input input={.axis_x=dx/.15f,.axis_z=-dz/.15f,.touching=1};
-            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK){_player=next;_playerSaveDirty=YES;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;float floorY;if([self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY])_actor.world.values[13]=floorY;}
+            float floorY=0;
+            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK && [self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY]){_player=next;_playerSaveDirty=YES;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;_actor.world.values[13]=floorY;}
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else { _inputInitialized=NO; }
@@ -721,11 +724,12 @@ static void freeMorphCaches(dc_game_model *slot) {
         dc_game_player next;
         dc_game_input movement={.axis_x=moveX,.axis_z=moveZ,.touching=1};
         float speed=(controller.buttons&DC_PAD_L3)?2.f:1.f;
-        if(dc_game_player_step(&_player,&movement,padDelta*speed,&next)==DC_OK) {
+        float floorY=0;
+        if(dc_game_player_step(&_player,&movement,padDelta*speed,&next)==DC_OK && [self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY]) {
             if(next.x!=_player.x || next.z!=_player.z)_controllerMovementAdvanced=YES;
             _player=next;_playerSaveDirty=YES;
             _actor.world.values[12]=next.x;_actor.world.values[14]=next.z;
-            float floorY;if([self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY])_actor.world.values[13]=floorY;
+            _actor.world.values[13]=floorY;
         }
     } else if(!touching) { [self savePlayerState]; }
     if((requestNextMap || (!_naturalGameplayRoute&&_interactionCompleted&&!_mapAdvanced))){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
@@ -737,7 +741,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(padDelta>0 && (cameraX!=0 || cameraY!=0))_controllerCameraAdvanced=YES;
     if(controller.buttons&DC_PAD_L)cameraX-=1;
     if(controller.buttons&DC_PAD_R)cameraX+=1;
-    _padCameraYaw=remainderf(_padCameraYaw+cameraX*padDelta*1.5f,6.2831853f);
+    _padCameraYaw=fmaxf(-1.45f,fminf(1.45f,_padCameraYaw+cameraX*padDelta*1.5f));
     _padCameraPitch=fmaxf(-.7f,fminf(.7f,_padCameraPitch+cameraY*padDelta));
     float zoom=((controller.buttons&DC_PAD_ZR)?1.f:0.f)-((controller.buttons&DC_PAD_ZL)?1.f:0.f);
     _padCameraZoom=fmaxf(-.7f,fminf(1.f,_padCameraZoom+zoom*padDelta));
