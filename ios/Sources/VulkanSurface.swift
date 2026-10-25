@@ -82,6 +82,11 @@ final class SpritePresenter: NSObject {
         }
         var pointerX = model.x, pointerY = model.y
         var touching = model.touchActive || pad.actionPressed
+        if pad.touchActive {
+            pointerX = pad.touchX * 2 - 1
+            pointerY = 1 - pad.touchY * 2
+            touching = true
+        }
         // CI supplies generated resources and exercises the same menu input
         // adapter. Normal launches continue to use the user's pointer state.
         if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
