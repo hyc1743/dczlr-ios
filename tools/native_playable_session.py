@@ -50,6 +50,7 @@ def admit_shared_gameplay_resources(root: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=ROOT / "Data")
+    parser.add_argument("--load", action="store_true", help="restore Data/save/player.state before starting")
     args = parser.parse_args()
     root = args.data.resolve()
     if not root.is_dir():
@@ -60,8 +61,23 @@ def main() -> int:
     save_path = save_dir / "player.state"
     state = GamePlayer(0, 0, -100, 100, -100, 100, 8, 0, 0)
     interaction = GameInteractionState()
+    if args.load:
+        if not save_path.is_file():
+            parser.error(f"missing save file: {save_path}")
+        raw = C.create_string_buffer(save_path.read_bytes()[:32], 32)
+        restored = GamePlayer()
+        status = lib.dc_game_player_load(raw, 32, C.byref(restored))
+        if status != 0:
+            parser.error(f"invalid save file: status {status}")
+        restored.min_x, restored.max_x = state.min_x, state.max_x
+        restored.min_z, restored.max_z = state.min_z, state.max_z
+        state = restored
+        admit(root, state.map_selector)
+        interaction = GameInteractionState(state.interaction_count, 0, 0, 0)
+        print(f"loaded map {state.map_selector}")
     print("native session ready; commands: m dx dz | i | s | l | q")
-    print("map 0 admitted")
+    if not args.load:
+        print("map 0 admitted")
     while True:
         try:
             command = input(f"map={state.map_selector} pos=({state.x:.1f},{state.z:.1f})> ").strip().lower()

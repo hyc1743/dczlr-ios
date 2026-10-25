@@ -19,6 +19,12 @@ python tools/audit_playable_loop.py `
 python tools/native_playable_session.py --data "C:\path\to\dczlr\Data"
 ```
 
+已有 `save/player.state` 时加 `--load` 可从存档地图开始：
+
+```powershell
+python tools/native_playable_session.py --data "C:\path\to\dczlr\Data" --load
+```
+
 输入 `i` 完成交互并进入下一张地图，`m dx dz` 移动玩家，`s`/`l` 做原生存档往返，
 `q` 退出。该 runner 使用真实 `Data` 和同一套原生状态机，但不渲染画面、不导出资源。
 
