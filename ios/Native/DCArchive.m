@@ -62,11 +62,11 @@ static void report_context_error(NSError **error, NSInteger code, NSString *cont
     _file = fopen(url.fileSystemRepresentation, "rb");
     struct stat info;
     if (!_file || fstat(fileno(_file), &info) || !S_ISREG(info.st_mode) || info.st_size < 0) {
-        report_error(error, DC_IO); return nil;
+        report_context_error(error, DC_IO, [NSString stringWithFormat:@"open %@", _path]); return nil;
     }
     dc_source source = {_file, (uint64_t)info.st_size, read_at};
     dc_status status = dc_pp_open(&source, &_archive);
-    if (status != DC_OK) { report_error(error, status); return nil; }
+    if (status != DC_OK) { report_context_error(error, status, [NSString stringWithFormat:@"open %@", _path]); return nil; }
     return self;
 }
 - (void)dealloc {
