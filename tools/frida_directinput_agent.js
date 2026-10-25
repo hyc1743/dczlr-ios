@@ -546,6 +546,9 @@ function hookGameFunctions() {
               main261: validPointer(input) ? input.add(0x261).readU8() : -1,
               main26c: validPointer(input) ? input.add(0x26c).readU32() : 0
             };
+            const controller = base.add(0x44dc28);
+            extra.controller305c = controller.add(0x305c).readU8();
+            extra.controller3064 = controller.add(0x3064).readU8();
             const fingerprint = JSON.stringify({bytes: bytes, extra: extra});
             if (fingerprint !== gameplayStateSnapshot) {
               gameplayStateSnapshot = fingerprint;
@@ -606,11 +609,9 @@ function hookGameFunctions() {
           this.before.story_state = this.main.add(0x13535).readU8();
           this.before.character = this.main.add(0x13530).readU8();
         }
-        const controller = base.add(0x44dc28).readPointer();
-        if (validPointer(controller)) {
-          this.before.context305c = controller.add(0x305c).readU8();
-          this.before.context3064 = controller.add(0x3064).readU8();
-        }
+        const controller = base.add(0x44dc28);
+        this.before.context305c = controller.add(0x305c).readU8();
+        this.before.context3064 = controller.add(0x3064).readU8();
       } catch (_) {}
     },
     onLeave: function () {
@@ -621,11 +622,9 @@ function hookGameFunctions() {
           after.story_state = this.main.add(0x13535).readU8();
           after.character = this.main.add(0x13530).readU8();
         }
-        const controller = base.add(0x44dc28).readPointer();
-        if (validPointer(controller)) {
-          after.context305c = controller.add(0x305c).readU8();
-          after.context3064 = controller.add(0x3064).readU8();
-        }
+        const controller = base.add(0x44dc28);
+        after.context305c = controller.add(0x305c).readU8();
+        after.context3064 = controller.add(0x3064).readU8();
       } catch (_) {}
       emit('MapTransitionTick', {return_address: pointerKey(this.returnAddress), before: this.before, after: after});
     }
@@ -655,6 +654,22 @@ function hookGameFunctions() {
         }
       } catch (_) {}
       emit('MapTransitionGate', {return_address: pointerKey(this.returnAddress), before: this.before, after: after});
+    }
+  });
+  const mapContextFn = relative(0x005ffd90);
+  installOnce(mapContextFn, 'FUN_005ffd90', {
+    onLeave: function (retval) {
+      const context = retval;
+      if (!validPointer(context)) return;
+      try {
+        emit('MapContextSnapshot', {
+          return_address: pointerKey(this.returnAddress),
+          context: pointerKey(context),
+          context305c: context.add(0x305c).readU8(),
+          context3064: context.add(0x3064).readU8(),
+          context3044: context.add(0x3044).readU16()
+        });
+      } catch (_) {}
     }
   });
   gameHooksInstalled = true;
