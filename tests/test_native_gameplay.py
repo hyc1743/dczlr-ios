@@ -49,6 +49,19 @@ class NativeGameplayTests(unittest.TestCase):
         self.assertEqual(self.lib.dc_game_next_map_selector(2,C.byref(next_selector),C.byref(finished)),4)
         self.assertEqual((next_selector.value,finished.value),(0xa5a5a5a5,0xa5a5a5a5))
 
+    def test_save_roundtrip_across_complete_playable_sequence(self):
+        sequence=(0,1,3,4,5,6,7,8)
+        for count,current in enumerate(sequence,1):
+            state=GamePlayer(float(count),-float(count),-100,100,-100,100,8,count,current)
+            record=C.create_string_buffer(32)
+            self.assertEqual(self.lib.dc_game_player_save(C.byref(state),record,32),0)
+            restored=GamePlayer()
+            self.assertEqual(self.lib.dc_game_player_load(record,32,C.byref(restored)),0)
+            self.assertEqual((restored.interaction_count,restored.map_selector),(count,current))
+            next_selector=C.c_uint32();finished=C.c_uint32()
+            self.assertEqual(self.lib.dc_game_next_map_selector(current,C.byref(next_selector),C.byref(finished)),0)
+            self.assertEqual(finished.value,current==8)
+
     def test_recovered_story_state_map_table_is_bounded_and_atomic(self):
         expected={3:0,5:1,7:3,10:0,12:1,14:6,17:0,19:1,21:4}
         for story,selector in expected.items():
