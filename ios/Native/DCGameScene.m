@@ -86,6 +86,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     BOOL _naturalGameplayRoute;
     uint32_t _actorSkinMeshCount;
     BOOL _actorSkinAdvanced;
+    BOOL _controllerMovementAdvanced,_controllerCameraAdvanced;
     dc_walk_surface *_surfaces;size_t _surfaceCount,_surfaceCapacity;
     BOOL _loaded;
     uint32_t _visibleMapTriangles,_visibleActorTriangles;
@@ -97,6 +98,8 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (BOOL)interactionCompleted { return _interactionCompleted; }
 - (BOOL)gameFinished { return _gameFinished; }
 - (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
+- (BOOL)controllerMovementAdvanced { return _controllerMovementAdvanced; }
+- (BOOL)controllerCameraAdvanced { return _controllerCameraAdvanced; }
 - (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
 
 - (NSString *)decodedName:(const uint8_t *)raw length:(size_t)length {
@@ -719,6 +722,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         dc_game_input movement={.axis_x=moveX,.axis_z=moveZ,.touching=1};
         float speed=(controller.buttons&DC_PAD_L3)?2.f:1.f;
         if(dc_game_player_step(&_player,&movement,padDelta*speed,&next)==DC_OK) {
+            if(next.x!=_player.x || next.z!=_player.z)_controllerMovementAdvanced=YES;
             _player=next;_playerSaveDirty=YES;
             _actor.world.values[12]=next.x;_actor.world.values[14]=next.z;
             float floorY;if([self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY])_actor.world.values[13]=floorY;
@@ -730,6 +734,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};
     if(controller.pressed&DC_PAD_R3){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
     float cameraX=controller.rx/32767.f,cameraY=controller.ry/32767.f;
+    if(padDelta>0 && (cameraX!=0 || cameraY!=0))_controllerCameraAdvanced=YES;
     if(controller.buttons&DC_PAD_L)cameraX-=1;
     if(controller.buttons&DC_PAD_R)cameraX+=1;
     _padCameraYaw=remainderf(_padCameraYaw+cameraX*padDelta*1.5f,6.2831853f);

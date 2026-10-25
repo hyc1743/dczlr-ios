@@ -15,6 +15,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL interactionCompleted;
 @property(nonatomic,readonly) BOOL gameFinished;
 @property(nonatomic,readonly) BOOL actorSkinAdvanced;
+@property(nonatomic,readonly) BOOL controllerMovementAdvanced;
+@property(nonatomic,readonly) BOOL controllerCameraAdvanced;
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer error:(NSString **)error;
 - (void)detachRenderer;

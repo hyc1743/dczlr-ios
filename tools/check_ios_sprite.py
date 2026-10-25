@@ -389,6 +389,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             'gameplay_evidence': 'validated by expected scene and gameplay markers'
         }
     if exercise_real_gameplay and resource_parts:
+        if not all(event in log for event in ('PORTLAB_GAMEPAD_MOVEMENT_ADVANCED', 'PORTLAB_GAMEPAD_CAMERA_ADVANCED')):
+            raise RuntimeError('Controller input did not advance both native movement and camera')
         report['real_resource_gameplay'] = {
             'resources': 'local dczdata parts staged and imported',
             'interaction_input': 'automated touch pulses through the normal input adapter',

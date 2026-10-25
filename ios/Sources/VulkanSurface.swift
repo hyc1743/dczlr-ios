@@ -39,6 +39,9 @@ final class SpritePresenter: NSObject {
     private var testTitleTime: CFTimeInterval?
     private var testIntroTime: CFTimeInterval?
     private var testGameplayTime: CFTimeInterval?
+    private var testPadHeld = false
+    private var reportedControllerMovement = false
+    private var reportedControllerCamera = false
     private var introChapter = 0
     private var lastIntroRecord: String?
     private var reportedTextFade = false
@@ -73,7 +76,7 @@ final class SpritePresenter: NSObject {
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
         renderPending = true
-        let pad = model.gamepad.sample()
+        var pad = model.gamepad.sample()
         var pointerX = model.x, pointerY = model.y
         var touching = model.touchActive
         if pad.touch_count > 0 {
@@ -114,12 +117,31 @@ final class SpritePresenter: NSObject {
             let py = view.bounds.midY
             pointerX = Float(2 * px / view.bounds.width - 1)
             pointerY = Float(1 - 2 * py / view.bounds.height)
-            touching = elapsed >= 1 && (elapsed - 1).truncatingRemainder(dividingBy: 2.5) < 0.22
+            // Exercise the actual controller boundary, independently of pointer
+            // drags. UIKit ownership is covered by the launch regression.
+            touching = false
+            let held = elapsed >= 1 && (elapsed - 1).truncatingRemainder(dividingBy: 2.5) < 0.22
+            pad.buttons = held ? 1 : 0
+            pad.pressed = held && !testPadHeld ? 1 : 0
+            pad.released = !held && testPadHeld ? 1 : 0
+            testPadHeld = held
+            if elapsed >= 0.25 && elapsed < 0.65 {
+                pad.lx = 12000
+                pad.rx = 10000
+            }
         }
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
             touching: touching, controller: pad) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
                 guard let self = self else { return }
                 self.renderPending = false
+                if self.view?.controllerMovementAdvanced == true, !self.reportedControllerMovement {
+                    self.reportedControllerMovement = true
+                    self.model.record("Controller axes moved the native player", event: "PORTLAB_GAMEPAD_MOVEMENT_ADVANCED")
+                }
+                if self.view?.controllerCameraAdvanced == true, !self.reportedControllerCamera {
+                    self.reportedControllerCamera = true
+                    self.model.record("Controller right stick changed the native camera", event: "PORTLAB_GAMEPAD_CAMERA_ADVANCED")
+                }
                 if let error = error {
                     self.failed = true
                     self.displayLink?.isPaused = true
