@@ -180,6 +180,10 @@ def stage_resource_parts(parts_root, container, output):
         if digest != part.get("sha256") or source.stat().st_size != part.get("size"):
             raise ValueError("resource part checksum/size mismatch: " + source.name)
         shutil.copy2(source, destination / source.name)
+        # Keep a root-level copy too. Older app containers and the native
+        # importer accept both layouts; staging both removes container-path
+        # ambiguity across simulator launches.
+        shutil.copy2(source, container / source.name)
         staged.append({"name": source.name, "size": source.stat().st_size, "sha256": digest})
     (output / "resource-staging.json").write_text(json.dumps({
         "source": str(parts_root), "destination": str(destination),
