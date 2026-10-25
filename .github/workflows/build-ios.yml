@@ -110,6 +110,7 @@ jobs:
           ref: ${{ inputs.resource_ref }}
           token: ${{ secrets.DCZLR_RESOURCE_REPO_TOKEN }}
           path: private-resources
+          lfs: true
           sparse-checkout: |
             ${{ inputs.resource_path }}
           sparse-checkout-cone-mode: false
