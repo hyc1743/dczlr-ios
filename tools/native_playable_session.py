@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from native_core import (  # noqa: E402
     GameInput, GameInteractionInput, GameInteractionResult,
     GameInteractionState, GamePlayer, PPArchive, library,
-    XXInfo,
+    EyeNeckInfo, XAInfo, XXInfo,
 )
 
 SEQUENCE = (0, 1, 3, 4, 5, 6, 7, 8)
@@ -41,14 +41,26 @@ def admit(root: Path, selector: int, lib=None) -> None:
         raise RuntimeError(f"empty map {selector}")
 
 
-def admit_shared_gameplay_resources(root: Path) -> None:
+def admit_shared_gameplay_resources(root: Path, lib) -> None:
     for archive, name in (
         ("RPP_08.pp", "am00_01.xx"), ("RPP_08.pp", "an00_02.xa"),
         ("RPP_09.pp", "ak00_00.xx"), ("RPP_09.pp", "an00_01.xa"),
         ("RPP_04.pp", "ak00_00.eyes"), ("RPP_04.pp", "am00_01.neck"),
     ):
-        if not entry(root, name, archive):
+        data = entry(root, name, archive)
+        if not data:
             raise RuntimeError(f"empty resource {archive}/{name}")
+        if name.endswith(".xx"):
+            info = XXInfo()
+            status = lib.dc_xx_probe(data, len(data), C.byref(info))
+        elif name.endswith(".xa"):
+            info = XAInfo()
+            status = lib.dc_xa_probe(data, len(data), C.byref(info))
+        else:
+            info = EyeNeckInfo()
+            status = lib.dc_eyeneck_probe(data, len(data), C.byref(info))
+        if status != 0:
+            raise RuntimeError(f"resource probe failed: {archive}/{name}")
 
 
 def main() -> int:
@@ -60,7 +72,7 @@ def main() -> int:
     if not root.is_dir():
         parser.error(f"missing Data directory: {root}")
     lib = library()
-    admit_shared_gameplay_resources(root)
+    admit_shared_gameplay_resources(root, lib)
     save_dir = root / "save"
     save_path = save_dir / "player.state"
     state = GamePlayer(0, 0, -100, 100, -100, 100, 8, 0, 0)
