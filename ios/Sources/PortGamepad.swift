@@ -42,7 +42,7 @@ final class PortGamepad: ObservableObject {
         physical.connected = true
         physical.leftX = pad.leftThumbstick.xAxis.value; physical.leftY = pad.leftThumbstick.yAxis.value
         physical.dpadX = pad.dpad.xAxis.value; physical.dpadY = pad.dpad.yAxis.value
-        physical.rightX = pad.rightThumbstick?.xAxis.value ?? 0; physical.rightY = pad.rightThumbstick?.yAxis.value ?? 0
+        physical.rightX = pad.rightThumbstick.xAxis.value; physical.rightY = pad.rightThumbstick.yAxis.value
         physical.buttonA = pad.buttonA.isPressed; physical.buttonB = pad.buttonB.isPressed
         physical.buttonX = pad.buttonX.isPressed; physical.buttonY = pad.buttonY.isPressed
         physical.leftShoulder = pad.leftShoulder.isPressed; physical.rightShoulder = pad.rightShoulder.isPressed
