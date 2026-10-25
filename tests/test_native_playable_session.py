@@ -21,6 +21,19 @@ class NativePlayableSessionTests(unittest.TestCase):
             self.assertIn(f"map {selector} admitted", output)
         self.assertIn("chapter complete", output)
 
+    def test_runner_requires_proximity_before_interaction(self):
+        if not (ROOT / "Data" / "RPP_10.pp").is_file():
+            self.skipTest("local original Data is not supplied")
+        commands = ["m 100 0"] * 20 + ["i"] + ["m -100 0"] * 20 + ["i", "q"]
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "tools/native_playable_session.py"),
+             "--data", str(ROOT / "Data")],
+            input="\n".join(commands) + "\n", text=True,
+            capture_output=True, check=True,
+        )
+        self.assertIn("interaction unavailable", result.stdout)
+        self.assertIn("map 1 admitted", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
