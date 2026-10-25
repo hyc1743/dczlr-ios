@@ -29,6 +29,13 @@ typedef dc_pad_touch dm_touch;
 static pthread_mutex_t bridge_mu = PTHREAD_MUTEX_INITIALIZER;
 static dc_pad_latch bridge_state;
 static BOOL bridge_active = YES;
+// The mutable controller used by the Debug regression registers with the
+// simulator's controller service. Keep its identity so it never hides the real
+// on-screen controls or supplies player input after the regression finishes.
+static GCController *verification_controller;
+static BOOL physical_controller(GCController *c) {
+    return c.extendedGamepad && !c.isSnapshot && c!=verification_controller;
+}
 static void dm_input_set(uint64_t buttons,int32_t lx,int32_t ly,int32_t rx,int32_t ry) {
     pthread_mutex_lock(&bridge_mu);
     if (bridge_active) dc_pad_publish(&bridge_state,(dc_pad_raw){buttons,lx,ly,rx,ry});
@@ -186,7 +193,7 @@ static BOOL fullOnly(int b) { return b == B_LS || b == B_RS || b >= B_LEFT; }   
 - (void)becomeActive { dc_gamepad_set_active(YES); }
 - (NSString *)presentationState {
     NSUInteger physical=0;
-    for(GCController *c in GCController.controllers)if(c.extendedGamepad&&!c.isSnapshot)physical++;
+    for(GCController *c in GCController.controllers)if(physical_controller(c))physical++;
     return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%lu paths=%d",
         self.bounds.size.width,self.bounds.size.height,self.window!=nil,_controls.hidden,
         (unsigned long)physical,_ring.path!=NULL];
@@ -448,8 +455,8 @@ static void read_pad(GCExtendedGamepad *g) {
 }
 - (void)padsChanged {
     BOOL any = NO;
-    for (GCController *c in GCController.controllers) if (c.extendedGamepad && !c.isSnapshot) {
-        any = YES; c.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *g, GCControllerElement *el) { (void)el; BOOL present=NO; for (GCController *live in GCController.controllers) if (live.extendedGamepad==g) { present=YES; break; } if (present) read_pad(g); };
+    for (GCController *c in GCController.controllers) if (physical_controller(c)) {
+        any = YES; c.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *g, GCControllerElement *el) { (void)el; BOOL present=NO; for (GCController *live in GCController.controllers) if (physical_controller(live)&&live.extendedGamepad==g) { present=YES; break; } if (present) read_pad(g); };
         read_pad(c.extendedGamepad);
     }
     pthread_mutex_lock(&bridge_mu); bridge_state.connected=any; pthread_mutex_unlock(&bridge_mu);
@@ -532,6 +539,7 @@ void dc_gamepad_set_active(BOOL active) {
     // Apple's mutable controller snapshot exercises the same read_pad function
     // used by a connected ExtendedGamepad, including A/B/X/Y positional mapping.
     GCController *snapshot=[GCController controllerWithExtendedGamepad];
+    verification_controller=snapshot;
     GCExtendedGamepad *pad=snapshot.extendedGamepad;
     NSArray<GCControllerButtonInput *> *buttons=@[pad.buttonA,pad.buttonB,pad.buttonX,pad.buttonY,pad.leftShoulder,pad.rightShoulder,pad.leftTrigger,pad.rightTrigger,pad.buttonMenu];
     const uint64_t masks[]={DC_PAD_A,DC_PAD_B,DC_PAD_X,DC_PAD_Y,DC_PAD_L,DC_PAD_R,DC_PAD_ZL,DC_PAD_ZR,DC_PAD_PLUS};
@@ -539,6 +547,8 @@ void dc_gamepad_set_active(BOOL active) {
         [buttons[i] setValue:1];read_pad(pad);check((dc_gamepad_read().buttons&0xffff)==masks[i],@"Physical button mapping");
         [buttons[i] setValue:0];read_pad(pad);check((dc_gamepad_read().buttons&0xffff)==0,@"Physical button release");
     }
+    pad.valueChangedHandler=nil;
+    [v padsChanged];
     [v reset];
     pthread_mutex_lock(&bridge_mu);dc_pad_clear(&bridge_state);pthread_mutex_unlock(&bridge_mu);
     if(saved)[NSUserDefaults.standardUserDefaults setObject:saved forKey:k_layout_key];
