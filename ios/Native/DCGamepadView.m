@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 #define DM_GAME_PAD_FULL 1
 #define DM_BTN_SHAKE DC_PAD_SHAKE
 #define LOG(...) fprintf(stderr, __VA_ARGS__)
@@ -33,8 +34,16 @@ static BOOL bridge_active = YES;
 // simulator's controller service. Keep its identity so it never hides the real
 // on-screen controls or supplies player input after the regression finishes.
 static GCController *verification_controller;
+static BOOL virtual_controls_test(void) {
+#if DEBUG
+    const char *value=getenv("PORTLAB_TEST_VIRTUAL_CONTROLS");
+    return value&&strcmp(value,"1")==0;
+#else
+    return NO;
+#endif
+}
 static BOOL physical_controller(GCController *c) {
-    return c.extendedGamepad && !c.isSnapshot && c!=verification_controller;
+    return !virtual_controls_test()&&c.extendedGamepad&&!c.isSnapshot&&c!=verification_controller;
 }
 static void dm_input_set(uint64_t buttons,int32_t lx,int32_t ly,int32_t rx,int32_t ry) {
     pthread_mutex_lock(&bridge_mu);
@@ -194,9 +203,13 @@ static BOOL fullOnly(int b) { return b == B_LS || b == B_RS || b >= B_LEFT; }   
 - (NSString *)presentationState {
     NSUInteger physical=0;
     for(GCController *c in GCController.controllers)if(physical_controller(c))physical++;
-    return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%lu paths=%d",
+    NSMutableArray *devices=[NSMutableArray array];
+    for(GCController *c in GCController.controllers) {
+        [devices addObject:[NSString stringWithFormat:@"%@/%@/fixture=%d",c.vendorName?:@"unknown",c.productCategory,c==verification_controller]];
+    }
+    return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%lu paths=%d test_virtual=%d detected=%@",
         self.bounds.size.width,self.bounds.size.height,self.window!=nil,_controls.hidden,
-        (unsigned long)physical,_ring.path!=NULL];
+        (unsigned long)physical,_ring.path!=NULL,virtual_controls_test(),devices];
 }
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; [g_motion stopAccelerometerUpdates]; g_motion=nil; }
 - (void)applyLayout {   // show / hide the controls for the current layout

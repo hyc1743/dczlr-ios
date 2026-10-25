@@ -54,5 +54,10 @@ press/release pairs, lifetime reset and multitouch slots. Debug simulator
 launches also exercise the actual UIKit ownership handlers and a mutable
 GameController snapshot. The simulator probe requires
 `PORTLAB_GAMEPAD_TEST_PASSED`; compilation alone does not pass this check.
+The window probe also requires a visible, nonzero-size control layer. Debug
+simulator probes set `PORTLAB_TEST_VIRTUAL_CONTROLS=1` to isolate their display
+from any host gamepad exposed by the runner. This override is compiled out
+of the device Release build. Controller device names and presentation state
+are retained in the probe log.
 Bluetooth hardware latency, real device multitouch and sensor behavior
 still require device testing.

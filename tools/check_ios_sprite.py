@@ -257,6 +257,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             raise ValueError('resource-parts requires a resolved simulator app container')
         stage_resource_parts(resource_parts, container, output, restore=exercise_real_gameplay)
     launch_environment=dict(os.environ)
+    # Hosted simulators can expose a host/virtual gamepad. Isolate this display
+    # probe from that device so virtual controls are actually rendered. The
+    # override is compiled out of Release; physical mapping has its own test.
+    launch_environment['SIMCTL_CHILD_PORTLAB_TEST_VIRTUAL_CONTROLS']='1'
     session=uuid.uuid4().hex
     launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
     if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
