@@ -202,7 +202,7 @@ jobs:
 
   unsigned-ipa:
     if: inputs.build_ipa == true
-    needs: portable
+    needs: ios
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
