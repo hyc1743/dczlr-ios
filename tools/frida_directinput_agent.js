@@ -689,6 +689,18 @@ function hookGameFunctions() {
       emit('MapContextSet', fields);
     }
   });
+  const gameplayActionFn = relative(0x005fef30);
+  installOnce(gameplayActionFn, 'FUN_005fef30', {
+    onEnter: function (args) {
+      const fields = {argument: pointerKey(args[0]), mode: safeArgU32(args[1]), value: safeArgU32(args[2])};
+      try {
+        const context = base.add(0x47ac60);
+        fields.context305c = context.add(0x305c).readU8();
+        fields.context3058 = context.add(0x3058).readU8();
+      } catch (_) {}
+      emit('GameplayActionDispatch', fields);
+    }
+  });
   gameHooksInstalled = true;
   emit('GameHooksInstalled', {base: pointerKey(base)});
 }
