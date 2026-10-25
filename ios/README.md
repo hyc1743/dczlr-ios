@@ -23,7 +23,7 @@ bash ios/build.sh simulator
 bash ios/build.sh device
 ```
 
-输出是 `ios/build/PortLab-unsigned.ipa`，需要使用自己的签名才能安装。也可在 Xcode 的 Signing & Capabilities 中选择自己的 Team、修改唯一 Bundle Identifier，再直接运行到设备。
+输出是 `ios/build/DCZL-R-unsigned.ipa`，应用显示名为 `DCZL R`，需要使用自己的签名才能安装。也可在 Xcode 的 Signing & Capabilities 中选择自己的 Team、修改唯一 Bundle Identifier，再直接运行到设备。
 
 脚本只写入 `ios/Generated`、`ios/PortLab.xcodeproj` 和 `ios/build`，不会上传文件或修改全局配置。
 

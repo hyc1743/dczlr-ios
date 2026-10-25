@@ -23,6 +23,6 @@ if [ "$mode" = device ]; then
   package_dir="$(mktemp -d "$PWD/build/package.XXXXXX")"
   mkdir -p "$package_dir/Payload"
   ditto build/device/Build/Products/Debug-iphoneos/PortLab.app "$package_dir/Payload/PortLab.app"
-  ditto -c -k --keepParent "$package_dir/Payload" build/PortLab-unsigned.ipa
-  echo "Unsigned device package: $PWD/build/PortLab-unsigned.ipa"
+  ditto -c -k --keepParent "$package_dir/Payload" build/DCZL-R-unsigned.ipa
+  echo "Unsigned device package: $PWD/build/DCZL-R-unsigned.ipa"
 fi

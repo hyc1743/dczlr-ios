@@ -95,7 +95,7 @@ The app with the bundled check and persistent-report viewer built successfully i
 
 The persistent-report variant also passed the real no-JIT Wine gate in run `39881581198`: all four subsystem markers, the final guest-output marker and the guest-written report's six lines were verified. The Win32 run's elapsed time was 36.82 seconds including harness cleanup; this is not a phone performance result. Normal host shutdown, device execution, D3D9 and playability remain unverified.
 
-The default `build-ios.yml` and `release-ios.yml` workflows produce the native development-stage `PortLab-unsigned.ipa`. They do not produce the earlier interpreter experiment or certify a playable release.
+The default `build-ios.yml` and `release-ios.yml` workflows produce the native development-stage `DCZL-R-unsigned.ipa` (display name `DCZL R`). They do not produce the earlier interpreter experiment or certify a playable release.
 
 The host already has the resource import contract needed for a future port. A bundled manifest describes 132 local `Data` files split into three release assets, each no larger than 1 GB. The assets are intentionally outside Git history and the IPA.
 
@@ -120,7 +120,7 @@ plaintext parts only into its temporary workspace, verifies all three parts,
 and runs the simulator gameplay check without publishing the resources.
 
 Pushing a tag such as `v0.1.0` runs `release-ios.yml`, creates or updates a GitHub
-Release, and uploads `PortLab-unsigned.ipa` plus the resource manifest. The three
+Release, and uploads `DCZL-R-unsigned.ipa` plus the resource manifest. The three
 `.dczdata` files stay local under the current delivery arrangement.
 
 The repository intentionally ignores the local `Data/` directory, original Windows binaries, local `research/` outputs, generated IPA files and `.dczdata` parts. Only the small resource manifest is committed to the app bundle. Research commands regenerate their local reports from separately supplied inputs.

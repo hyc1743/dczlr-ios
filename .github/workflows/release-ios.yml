@@ -44,7 +44,7 @@ jobs:
         run: |
           rm -rf build/release-ipa && mkdir -p build/release-ipa/Payload
           cp -R build/release/Build/Products/Release-iphoneos/PortLab.app build/release-ipa/Payload/
-          (cd build/release-ipa && zip -qry ../PortLab-unsigned.ipa Payload)
+          (cd build/release-ipa && zip -qry "../DCZL-R-unsigned.ipa" Payload)
       - name: Write build status report
         working-directory: ios
         run: |
@@ -52,7 +52,7 @@ jobs:
           import json
           from pathlib import Path
           Path('build/build-report.json').write_text(json.dumps({
-              'product': 'PortLab-unsigned.ipa',
+              'product': 'DCZL-R-unsigned.ipa',
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'not_embedded',
               'graphics_backend': 'native Vulkan sprite integration scene through MoltenVK; game not integrated',
@@ -72,7 +72,7 @@ jobs:
             gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Unsigned iOS build. Sign with your own Apple identity before installation. Resource parts are separate assets." \
               --target "$GITHUB_SHA"
           gh release upload "$RELEASE_TAG" \
-            ios/build/PortLab-unsigned.ipa \
+            ios/build/DCZL-R-unsigned.ipa \
             ios/build/build-report.json \
             ios/Resources/DczlrData.manifest.json \
             --clobber

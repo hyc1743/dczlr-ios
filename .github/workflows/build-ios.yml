@@ -227,7 +227,7 @@ jobs:
         run: |
           rm -rf build/ipa && mkdir -p build/ipa/Payload
           cp -R build/device/Build/Products/Release-iphoneos/PortLab.app build/ipa/Payload/
-          (cd build/ipa && zip -qry ../PortLab-unsigned.ipa Payload)
+          (cd build/ipa && zip -qry "../DCZL-R-unsigned.ipa" Payload)
       - name: Write build status report
         working-directory: ios
         run: |
@@ -235,7 +235,7 @@ jobs:
           import json
           from pathlib import Path
           report = {
-              'product': 'PortLab-unsigned.ipa',
+              'product': 'DCZL-R-unsigned.ipa',
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'native_reimplementation_linked',
               'native_resource_module': 'PP, BMP/TGA/EMA, XA clip/material/node keys, XX readers, map chain, actor/face morphs, collision, save/load and gameplay menu profile linked; device execution unverified',
@@ -250,8 +250,8 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: PortLab-unsigned-ipa
+          name: DCZL-R-unsigned-ipa
           path: |
-            ios/build/PortLab-unsigned.ipa
+            ios/build/DCZL-R-unsigned.ipa
             ios/build/build-report.json
             ios/Resources/DczlrData.manifest.json
