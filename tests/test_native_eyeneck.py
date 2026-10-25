@@ -25,6 +25,8 @@ class NativeEyeNeckTests(unittest.TestCase):
     def setUpClass(cls):
         cls.lib = library()
 
+    @unittest.skipUnless((ROOT / "Data/RPP_04.pp").is_file(),
+                         "local game resources are not present")
     def test_real_rpp04_profiles_and_target_spans(self):
         with PPArchive(ROOT / "Data/RPP_04.pp") as archive:
             for index, expected_kind, expected_targets, expected_records in (
