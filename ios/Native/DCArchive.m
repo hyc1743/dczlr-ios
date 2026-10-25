@@ -26,6 +26,10 @@ static void report_error(NSError **error, NSInteger code) {
     if (error) *error = [NSError errorWithDomain:@"PortLab.NativeArchive" code:code
         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Archive operation failed (%ld)", (long)code]}];
 }
+static void report_context_error(NSError **error, NSInteger code, NSString *context) {
+    if (error) *error = [NSError errorWithDomain:@"PortLab.NativeArchive" code:code
+        userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Archive operation failed (%ld): %@", (long)code, context]}];
+}
 
 @interface DCDecodedImage ()
 - (instancetype)initWithInfo:(dc_image_info)info pixels:(void *)pixels;
@@ -48,11 +52,13 @@ static void report_error(NSError **error, NSInteger code) {
 @implementation DCArchive {
     FILE *_file;
     dc_pp *_archive;
+    NSString *_path;
 }
 - (instancetype)initWithURL:(NSURL *)url error:(NSError **)error {
     self = [super init];
     if (!self) return nil;
     if (!url.isFileURL) { report_error(error, DC_ARGUMENT); return nil; }
+    _path = [url.path copy];
     _file = fopen(url.fileSystemRepresentation, "rb");
     struct stat info;
     if (!_file || fstat(fileno(_file), &info) || !S_ISREG(info.st_mode) || info.st_size < 0) {
@@ -76,11 +82,11 @@ static void report_error(NSError **error, NSInteger code) {
 - (NSData *)readEntryAtIndex:(uint32_t)index limit:(NSUInteger)limit error:(NSError **)error {
     dc_pp_entry entry;
     dc_status status = dc_pp_entry_at(_archive, index, &entry);
-    if (status != DC_OK) { report_error(error, status); return nil; }
+    if (status != DC_OK) { report_context_error(error, status, [NSString stringWithFormat:@"%@ entry=%u metadata", _path, index]); return nil; }
     if (entry.size > limit) { report_error(error, DC_RANGE); return nil; }
     NSMutableData *data = [NSMutableData dataWithLength:entry.size];
     status = dc_pp_read(_archive, index, 0, data.mutableBytes, entry.size);
-    if (status != DC_OK) { report_error(error, status); return nil; }
+    if (status != DC_OK) { report_context_error(error, status, [NSString stringWithFormat:@"%@ entry=%u read size=%llu", _path, index, (unsigned long long)entry.size]); return nil; }
     return data;
 }
 - (NSData *)readPrefixAtIndex:(uint32_t)index length:(NSUInteger)length error:(NSError **)error {
