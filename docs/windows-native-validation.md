@@ -13,6 +13,21 @@ python tools/audit_playable_loop.py `
   --output "out\windows-playable-loop.json"
 ```
 
+## 原版 Windows 测试前置条件
+
+如果要启动目录中的原版 Windows 程序，先按根目录说明文件的要求为该程序启用
+Windows 兼容性模式；该说明文件的原文就是“【需用 [兼容性] 运行 否则游戏卡死】”。
+不满足这个条件时，原版可能在启动阶段卡死，不能把这种现象归因于移植代码。
+
+原版目录还附带一个 `注册表.exe`。对它做过静态 PE 检查：它是加壳的 PE32 x86，导入
+`advapi32!RegSetValueExA` 和 `RegQueryValueExA`，并通过 `GetProcAddress` 延迟解析其余
+API。因此它确实是注册表初始化辅助程序，而不是游戏资源或移植运行时。由于键名和值位于
+加壳后的运行时数据中，静态字符串不能可靠还原具体键路径；测试机应先在隔离的 Windows
+用户环境中运行该辅助程序，再启动原版。不要把注册表状态或该程序生成的导出文件提交到仓库。
+
+这两个前置条件只适用于运行原版 Windows 参考程序。`audit_playable_loop.py` 使用本地
+`Data` 和原生模块，不启动原版 EXE，也不需要 macOS、Xcode 或导入注册表。
+
 脚本会按真实顺序加载地图 `0 → 1 → 3 → 4 → 5 → 6 → 7 → 8`，读取地图、
 角色、脸部 morph、eyes/neck、相机和光照资源，并驱动每张地图的一次交互、
 存档往返和地图切换；同时核对已观察的 map 0 语音链 `ast001_01.wav →
