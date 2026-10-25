@@ -307,26 +307,26 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_viewport viewport={0,0,1024,768,0,1};
     dc_matrix mapWorld=_map.world,actorWorld=_actor.world;
     if(dc_model_tick(_map.model,0,tick,&mapWorld)!=DC_OK||dc_model_tick(_actor.model,0,tick,&actorWorld)!=DC_OK)return @"Camera fallback model tick failed";
-    if(_actorHeadNode!=UINT32_MAX){dc_matrix head;if(dc_model_global(_actor.model,_actorHeadNode,&head)!=DC_OK||dc_model_tick(_face.model,0,tick,&head)!=DC_OK)return @"Camera fallback face tick failed";}
+    if(_face.model && _actorHeadNode!=UINT32_MAX){dc_matrix head;if(dc_model_global(_actor.model,_actorHeadNode,&head)!=DC_OK||dc_model_tick(_face.model,0,tick,&head)!=DC_OK)return @"Camera fallback face tick failed";}
     dc_camera_orbit current={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};dc_camera_matrices currentMatrices;
     if(dc_camera_build(&current,&lens,&currentMatrices)!=DC_OK)return @"Camera fallback build failed";
     uint32_t currentMap=[self projectedTrianglesForModel:_map.model camera:&currentMatrices viewport:&viewport];
     uint32_t currentActor=[self projectedTrianglesForModel:_actor.model camera:&currentMatrices viewport:&viewport];
-    uint32_t currentFace=[self projectedTrianglesForModel:_face.model camera:&currentMatrices viewport:&viewport];
-    if(currentMap&&currentActor&&currentFace){_cameraAutoSelected=YES;return nil;}
+    uint32_t currentFace=_face.model ? [self projectedTrianglesForModel:_face.model camera:&currentMatrices viewport:&viewport] : 0;
+    if(currentMap&&currentActor&&(!_face.model || currentFace)){_cameraAutoSelected=YES;return nil;}
     NSValue *cached=_cameraFallbacks[@(_mapSelector)];
     if(cached){dc_camera_orbit candidate;[cached getValue:&candidate];_cameraBase=candidate.base;_cameraDistance=candidate.stored_distance;_cameraHeight=candidate.height;_cameraPitch=candidate.pitch;_cameraYaw=candidate.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];_cameraAutoSelected=YES;return nil;}
     NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:&reason];
     if(!archive)return reason.localizedDescription ?: @"Camera archive could not be opened";
     uint64_t bestScore=0;dc_camera_orbit best=current;BOOL found=NO;
     NSString *preferred=[self preferredCameraNameForSelector:_mapSelector];
-    if(preferred){for(uint32_t i=0;i<archive.entryCount;++i){if([[archive asciiNameAtIndex:i] caseInsensitiveCompare:preferred]!=NSOrderedSame)continue;NSData *data=[archive readEntryAtIndex:i limit:4096 error:nil];dc_camera_orbit candidate;dc_camera_matrices matrices;if(data&&dc_camera_read_preset(data.bytes,data.length,0,&candidate)==DC_OK&&dc_camera_build(&candidate,&lens,&matrices)==DC_OK&&[self projectedTrianglesForModel:_map.model camera:&matrices viewport:&viewport]&&[self projectedTrianglesForModel:_actor.model camera:&matrices viewport:&viewport]&&[self projectedTrianglesForModel:_face.model camera:&matrices viewport:&viewport]){_cameraBase=candidate.base;_cameraDistance=candidate.stored_distance;_cameraHeight=candidate.height;_cameraPitch=candidate.pitch;_cameraYaw=candidate.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];[_cameraFallbacks setObject:[NSValue valueWithBytes:&candidate objCType:@encode(dc_camera_orbit)] forKey:@(_mapSelector)];_cameraAutoSelected=YES;return nil;}break;}}
+    if(preferred){for(uint32_t i=0;i<archive.entryCount;++i){if([[archive asciiNameAtIndex:i] caseInsensitiveCompare:preferred]!=NSOrderedSame)continue;NSData *data=[archive readEntryAtIndex:i limit:4096 error:nil];dc_camera_orbit candidate;dc_camera_matrices matrices;if(data&&dc_camera_read_preset(data.bytes,data.length,0,&candidate)==DC_OK&&dc_camera_build(&candidate,&lens,&matrices)==DC_OK&&[self projectedTrianglesForModel:_map.model camera:&matrices viewport:&viewport]&&[self projectedTrianglesForModel:_actor.model camera:&matrices viewport:&viewport]&&(!_face.model || [self projectedTrianglesForModel:_face.model camera:&matrices viewport:&viewport])){_cameraBase=candidate.base;_cameraDistance=candidate.stored_distance;_cameraHeight=candidate.height;_cameraPitch=candidate.pitch;_cameraYaw=candidate.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];[_cameraFallbacks setObject:[NSValue valueWithBytes:&candidate objCType:@encode(dc_camera_orbit)] forKey:@(_mapSelector)];_cameraAutoSelected=YES;return nil;}break;}}
     for(uint32_t i=0;i<archive.entryCount;++i) {
         NSString *name=[archive asciiNameAtIndex:i];if(![name.lowercaseString hasSuffix:@".cam"])continue;
         NSData *data=[archive readEntryAtIndex:i limit:4096 error:nil];if(!data)continue;dc_camera_orbit candidate;dc_camera_matrices matrices;
         if(dc_camera_read_preset(data.bytes,data.length,0,&candidate)!=DC_OK||dc_camera_build(&candidate,&lens,&matrices)!=DC_OK)continue;
-        uint32_t mapTriangles=[self projectedTrianglesForModel:_map.model camera:&matrices viewport:&viewport];uint32_t actorTriangles=[self projectedTrianglesForModel:_actor.model camera:&matrices viewport:&viewport];uint32_t faceTriangles=[self projectedTrianglesForModel:_face.model camera:&matrices viewport:&viewport];
-        if(!actorTriangles||!faceTriangles)continue;uint64_t score=(uint64_t)mapTriangles*1000u+(uint64_t)actorTriangles*10u+faceTriangles;if(!found||score>bestScore){found=YES;bestScore=score;best=candidate;}
+        uint32_t mapTriangles=[self projectedTrianglesForModel:_map.model camera:&matrices viewport:&viewport];uint32_t actorTriangles=[self projectedTrianglesForModel:_actor.model camera:&matrices viewport:&viewport];uint32_t faceTriangles=_face.model ? [self projectedTrianglesForModel:_face.model camera:&matrices viewport:&viewport] : 0;
+        if(!actorTriangles||(_face.model && !faceTriangles))continue;uint64_t score=(uint64_t)mapTriangles*1000u+(uint64_t)actorTriangles*10u+faceTriangles;if(!found||score>bestScore){found=YES;bestScore=score;best=candidate;}
     }
     if(found){_cameraBase=best.base;_cameraDistance=best.stored_distance;_cameraHeight=best.height;_cameraPitch=best.pitch;_cameraYaw=best.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];[_cameraFallbacks setObject:[NSValue valueWithBytes:&best objCType:@encode(dc_camera_orbit)] forKey:@(_mapSelector)];}
     _cameraAutoSelected=YES;return found?nil:@"No camera preset projects the actor";
@@ -383,7 +383,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _naturalGameplayRoute=![[[NSProcessInfo processInfo] environment][@"PORTLAB_EXERCISE_REAL_GAMEPLAY"] isEqualToString:@"1"];
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
-    DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
+    DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:nil];
      DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:nil];
      DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
      if(!mapArchive || !actorArchive || !faceArchive) { if(error)*error=reason.localizedDescription;return nil; }
@@ -391,23 +391,25 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
     NSData *actorPlacement=[self entry:@"am00_01.plst" archive:actorArchive error:nil];
-    _face.xxData=[self entry:@"ak00_00.xx" archive:faceArchive error:error];
-    _face.xaData=[self entry:@"an00_01.xa" archive:faceArchive error:error];
+    if(faceArchive) {
+        _face.xxData=[self entry:@"ak00_00.xx" archive:faceArchive error:nil];
+        _face.xaData=[self entry:@"an00_01.xa" archive:faceArchive error:nil];
+    }
      if(auxiliaryArchive) {
          _eyesData=[self entry:@"ak00_00.eyes" archive:auxiliaryArchive error:nil];
          _neckData=[self entry:@"am00_01.neck" archive:auxiliaryArchive error:nil];
      }
-     if(!_map.xxData || !_actor.xxData || !_actor.xaData || !_face.xxData || !_face.xaData)return nil;
-    if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error] ||
-       ![self openModel:&_face staticOnly:YES error:error])return nil;
+    if(!_map.xxData || !_actor.xxData || !_actor.xaData)return nil;
+    if(![self openModel:&_map staticOnly:YES error:error] || ![self openModel:&_actor staticOnly:NO error:error])return nil;
+    if(_face.xxData && _face.xaData && ![self openModel:&_face staticOnly:YES error:error])return nil;
     NSString *morphError=nil;
-    if(![self buildMorphCaches:&_face error:&morphError]) { if(error)*error=morphError ?: @"Game morph cache initialization failed";return nil; }
+    if(_face.model && ![self buildMorphCaches:&_face error:&morphError]) { if(error)*error=morphError ?: @"Game morph cache initialization failed";return nil; }
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
     dc_eyeneck_info eyesInfo,neckInfo;dc_eyeneck_span eyesRight,eyesLeft,neckHead;
-    if(_eyesData && _neckData && (dc_eyeneck_probe(_eyesData.bytes,_eyesData.length,&eyesInfo)!=DC_OK ||
+    if(_face.model && _eyesData && _neckData && (dc_eyeneck_probe(_eyesData.bytes,_eyesData.length,&eyesInfo)!=DC_OK ||
        dc_eyeneck_probe(_neckData.bytes,_neckData.length,&neckInfo)!=DC_OK ||
        eyesInfo.kind!=DC_EYENECK_EYES || eyesInfo.targets!=2 || eyesInfo.records!=5 ||
        neckInfo.kind!=DC_EYENECK_NECK || neckInfo.targets!=1 || neckInfo.records!=3 ||
