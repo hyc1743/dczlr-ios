@@ -741,8 +741,12 @@ static void freeMorphCaches(dc_game_model *slot) {
     _padCameraPitch=fmaxf(-.7f,fminf(.7f,_padCameraPitch+cameraY*padDelta));
     float zoom=((controller.buttons&DC_PAD_ZR)?1.f:0.f)-((controller.buttons&DC_PAD_ZL)?1.f:0.f);
     _padCameraZoom=fmaxf(-.7f,fminf(1.f,_padCameraZoom+zoom*padDelta));
-    orbit.yaw+=_padCameraYaw;orbit.pitch+=_padCameraPitch;
-    orbit.stored_distance*=expf(_padCameraZoom);
+    // _padCamera* are offsets from the map's original camera. Applying the
+    // accumulated offset to the already offset orbit every frame compounds the
+    // rotation and quickly throws the room out of view.
+    orbit.yaw = _cameraYaw + _padCameraYaw;
+    orbit.pitch = fmaxf(-1.45f, fminf(1.45f, _cameraPitch + _padCameraPitch));
+    orbit.stored_distance = _cameraDistance * expf(_padCameraZoom);
     float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
     float followZ=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[14]-_actorOriginZ));
     orbit.base.values[12]=_cameraOriginX+followX*.65f;
