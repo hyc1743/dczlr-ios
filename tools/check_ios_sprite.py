@@ -6,6 +6,7 @@ import plistlib
 import re
 from pathlib import Path
 import subprocess
+import sys
 import time
 import os
 import shutil
@@ -189,6 +190,10 @@ def stage_resource_parts(parts_root, container, output):
         "source": str(parts_root), "destination": str(destination),
         "parts": staged, "manifest_total_bytes": manifest.get("total_bytes")
     }, indent=2) + "\n", encoding="utf-8")
+    restored = container / "Documents" / "game" / "Data"
+    subprocess.run([sys.executable, "tools/pack_resources.py", "restore",
+                    "--parts", str(parts_root), "--manifest", str(manifest_path),
+                    "--out", str(restored)], check=True, timeout=600)
     return staged
 
 
