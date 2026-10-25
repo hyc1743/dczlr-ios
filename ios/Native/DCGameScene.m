@@ -345,16 +345,16 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSData *nextAnimation=[self entry:nextAnimationName archive:archive error:nil];
     NSString *nextMapLightName=[NSString stringWithFormat:@"mp00_%02u.xl",nextSelector];
     NSData *nextMapLightData=[self entry:nextMapLightName archive:archive error:nil];
-    dc_xl_info nextMapLightInfo;dc_xl_light nextMapLight;
-    if(!nextMapLightData || dc_xl_probe(nextMapLightData.bytes,nextMapLightData.length,&nextMapLightInfo)!=DC_OK ||
-       !nextMapLightInfo.lights || dc_xl_light_at(nextMapLightData.bytes,nextMapLightData.length,0,&nextMapLight)!=DC_OK)
-        return @"Next map variant XL light resource is unavailable";
+    dc_xl_info nextMapLightInfo={0};dc_xl_light nextMapLight={0};
+    if(nextMapLightData && dc_xl_probe(nextMapLightData.bytes,nextMapLightData.length,&nextMapLightInfo)==DC_OK &&
+       nextMapLightInfo.lights && dc_xl_light_at(nextMapLightData.bytes,nextMapLightData.length,0,&nextMapLight)!=DC_OK)
+        nextMapLightData=nil;
     DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
     NSData *nextLightData=lightArchive ? [self lightEntryForSelector:nextSelector archive:lightArchive] : nil;
-    dc_xl_info nextLightInfo;dc_xl_light nextLight;
-    if(!nextLightData || dc_xl_probe(nextLightData.bytes,nextLightData.length,&nextLightInfo)!=DC_OK ||
-       !nextLightInfo.lights || dc_xl_light_at(nextLightData.bytes,nextLightData.length,0,&nextLight)!=DC_OK)
-        return @"Next map XL light resource is unavailable";
+    dc_xl_info nextLightInfo={0};dc_xl_light nextLight={0};
+    if(nextLightData && (dc_xl_probe(nextLightData.bytes,nextLightData.length,&nextLightInfo)!=DC_OK ||
+       !nextLightInfo.lights || dc_xl_light_at(nextLightData.bytes,nextLightData.length,0,&nextLight)!=DC_OK))
+        nextLightData=nil;
     dc_game_model nextMap={0};nextMap.xxData=nextData;nextMap.xaData=nextAnimation;nextMap.world=gameIdentity();
     NSString *error=nil;if(![self openModel:&nextMap staticOnly:(nextAnimation==nil) error:&error]){[self detachModel:&nextMap];return error ?: @"Next map could not be loaded";}
     [self detachModel:&_map];_map=nextMap;_lightData=nextLightData;_lightInfo=nextLightInfo;_mapLight=nextLight;
@@ -385,8 +385,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:&reason];
      DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:&reason];
-     DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:&reason];
-     if(!mapArchive || !actorArchive || !faceArchive || !auxiliaryArchive || !lightArchive) { if(error)*error=reason.localizedDescription;return nil; }
+     DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
+     if(!mapArchive || !actorArchive || !faceArchive || !auxiliaryArchive) { if(error)*error=reason.localizedDescription;return nil; }
     _map.xxData=[self entry:@"mm00_00.xx" archive:mapArchive error:error];
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
@@ -420,8 +420,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         [self findNode:&_actor name:@"a_Kp_kubi2"]==UINT32_MAX) {
          if(error)*error=@"Eyes/neck auxiliary binding failed";return nil;
      }
-    if(![self loadMapVariantLightForSelector:0 archive:mapArchive error:error] ||
-       ![self loadLightForSelector:0 archive:lightArchive error:error])return nil;
+    [self loadMapVariantLightForSelector:0 archive:mapArchive error:nil];
+    if(lightArchive) [self loadLightForSelector:0 archive:lightArchive error:nil];
     for(uint32_t mesh=0;mesh<_actor.info.submeshes;++mesh) {
         uint32_t space=DC_MODEL_SPACE_LOCAL;
         if(dc_model_vertex_space(_actor.model,mesh,&space)!=DC_OK) { if(error)*error=@"Actor skin profile query failed";return nil; }
