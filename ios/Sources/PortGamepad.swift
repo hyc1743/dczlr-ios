@@ -18,9 +18,9 @@ final class PortGamepad: ObservableObject {
 
     init() {
         let center = NotificationCenter.default
-        observers.append(center.addObserver(forName: GCController.didConnectNotification,
+        observers.append(center.addObserver(forName: Notification.Name.GCControllerDidConnect,
                                             object: nil, queue: .main) { [weak self] _ in self?.selectController() })
-        observers.append(center.addObserver(forName: GCController.didDisconnectNotification,
+        observers.append(center.addObserver(forName: Notification.Name.GCControllerDidDisconnect,
                                             object: nil, queue: .main) { [weak self] _ in self?.selectController() })
         GCController.startWirelessControllerDiscovery {}
         selectController()
