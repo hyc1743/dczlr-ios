@@ -177,6 +177,7 @@ jobs:
           python3 tools/check_ios_sprite.py \
             --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app \
             --runtime iOS-18-5 --expected-scene gameComplete \
+            --exercise-new-game \
             --exercise-real-gameplay \
             --resource-parts "${DCZLR_RESOURCE_PARTS:-$RUNNER_TEMP/dczlr-resource-parts}" \
             --output out/ios-real-gameplay
