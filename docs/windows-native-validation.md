@@ -66,3 +66,8 @@ ast002_01.wav`。原始资源只从 `--data` 指定的本地目录读取；报�
 这条命令验证的是原生模块和真实本地资源链，不代表 Apple GPU、音频设备或
 物理 iPhone 已经执行。IPA 仍由公共仓库的 iOS workflow 负责构建；本地
 Windows 验证不依赖 Xcode 或 macOS。
+
+Apple 端沿用上级 `weixing3`/`Prototype` 的分工：Ubuntu portable 检查和 Windows
+native gameplay 验证先完成，GitHub Actions 的 macOS job 再负责 XcodeGen、MoltenVK、
+simulator 编译与启动验证。当前 workflow 默认不构建 device IPA；只有手动 dispatch 时把
+`build_ipa` 输入显式设为 `true` 才会执行 IPA job。

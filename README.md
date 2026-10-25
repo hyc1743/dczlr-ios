@@ -101,7 +101,7 @@ The host already has the resource import contract needed for a future port. A bu
 
 ## Build in GitHub Actions
 
-The `Build PortLab iOS IPA` workflow runs portable Python checks on Ubuntu, then prepares pinned MoltenVK, compiles the self-authored sprite shaders and builds the Swift/native Vulkan host on macOS. It uploads an unsigned simulator app and an unsigned device IPA. A developer must sign the device app with their own Apple identity before installation.
+The `Build PortLab iOS IPA` workflow runs portable Python checks on Ubuntu, then prepares pinned MoltenVK, compiles the self-authored sprite shaders and builds the Swift/native Vulkan host on macOS. The default manual run builds and exercises the simulator path only. The unsigned device IPA job is guarded by the `build_ipa` workflow input and remains off until Apple-side gameplay validation is complete. A developer must sign the device app with their own Apple identity before installation.
 
 The workflow does not download or embed the local game data. Keep generated
 resource parts local and copy them into the installed app when needed.

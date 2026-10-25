@@ -2,6 +2,12 @@ name: Build PortLab iOS IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      build_ipa:
+        description: "Build the unsigned device IPA after Apple-side gameplay validation"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -83,6 +89,7 @@ jobs:
           path: out/ios-startup/
 
   unsigned-ipa:
+    if: inputs.build_ipa == true
     needs: portable
     runs-on: macos-latest
     steps:
