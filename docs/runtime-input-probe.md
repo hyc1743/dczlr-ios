@@ -103,8 +103,10 @@ python tools/encrypted_resource_parts.py pack `
 ```
 
 Store the 32-byte key in the Actions secret `DCZLR_RESOURCE_KEY`, publish the
-encrypted file at a controlled HTTPS URL, and start `Build PortLab iOS IPA`
-with `resource_bundle_url` and `resource_bundle_sha256`. The macOS job verifies
-the bundle hash, decrypts each AES-GCM chunk into its temporary runner directory,
-stages the parts into the simulator, and runs the `gameComplete` gameplay check.
-The decrypted files are removed with the runner workspace.
+encrypted file (or ordered sub-1-GB chunks) at controlled HTTPS URLs, and start
+`Build PortLab iOS IPA` with `resource_bundle_url`/`resource_bundle_sha256` or
+the comma-separated `resource_bundle_urls`/`resource_bundle_sha256s` inputs. The
+macOS job verifies each download, concatenates ordered chunks, decrypts each
+AES-GCM record into its temporary runner directory, stages the parts into the
+simulator, and runs the `gameComplete` gameplay check. The decrypted files are
+removed with the runner workspace.

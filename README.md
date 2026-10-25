@@ -108,8 +108,9 @@ resource parts local and copy them into the installed app when needed.
 
 For simulator gameplay on GitHub Actions, local parts can be packed into an
 AES-GCM encrypted bundle with `tools/encrypted_resource_parts.py`. Supply its
-HTTPS URL and SHA-256 through the workflow inputs, and keep the 32-byte key in
-the `DCZLR_RESOURCE_KEY` Actions secret. The macOS job decrypts only into its
+HTTPS URL and SHA-256 through the workflow inputs, or split the bundle into
+ordered sub-1-GB URLs and hashes. Keep the 32-byte key in the
+`DCZLR_RESOURCE_KEY` Actions secret. The macOS job decrypts only into its
 temporary workspace, stages the parts, and records simulator gameplay evidence.
 
 Pushing a tag such as `v0.1.0` runs `release-ios.yml`, creates or updates a GitHub

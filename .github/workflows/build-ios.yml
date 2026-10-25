@@ -18,6 +18,16 @@ on:
         required: false
         default: ""
         type: string
+      resource_bundle_urls:
+        description: "Comma-separated HTTPS URLs for ordered encrypted bundle chunks"
+        required: false
+        default: ""
+        type: string
+      resource_bundle_sha256s:
+        description: "Comma-separated SHA-256 values for resource_bundle_urls"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -78,16 +88,31 @@ jobs:
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build/ci CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO build
       - name: Download and decrypt private resource bundle
-        if: inputs.resource_bundle_url != ''
+        if: inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
         env:
           DCZLR_RESOURCE_KEY: ${{ secrets.DCZLR_RESOURCE_KEY }}
           RESOURCE_BUNDLE_URL: ${{ inputs.resource_bundle_url }}
           RESOURCE_BUNDLE_SHA256: ${{ inputs.resource_bundle_sha256 }}
+          RESOURCE_BUNDLE_URLS: ${{ inputs.resource_bundle_urls }}
+          RESOURCE_BUNDLE_SHA256S: ${{ inputs.resource_bundle_sha256s }}
         run: |
           test -n "$DCZLR_RESOURCE_KEY"
-          test -n "$RESOURCE_BUNDLE_SHA256"
-          curl --fail --location --retry 3 "$RESOURCE_BUNDLE_URL" -o "$RUNNER_TEMP/dczlr-resources.dczenc"
-          echo "$RESOURCE_BUNDLE_SHA256  $RUNNER_TEMP/dczlr-resources.dczenc" | shasum -a 256 -c -
+          if [ -n "$RESOURCE_BUNDLE_URLS" ]; then
+            test -n "$RESOURCE_BUNDLE_SHA256S"
+            IFS=',' read -ra URLS <<< "$RESOURCE_BUNDLE_URLS"
+            IFS=',' read -ra HASHES <<< "$RESOURCE_BUNDLE_SHA256S"
+            test "${#URLS[@]}" -eq "${#HASHES[@]}"
+            : > "$RUNNER_TEMP/dczlr-resources.dczenc"
+            for i in "${!URLS[@]}"; do
+              curl --fail --location --retry 3 "${URLS[$i]}" -o "$RUNNER_TEMP/dczlr-resource.$i.part"
+              echo "${HASHES[$i]}  $RUNNER_TEMP/dczlr-resource.$i.part" | shasum -a 256 -c -
+              cat "$RUNNER_TEMP/dczlr-resource.$i.part" >> "$RUNNER_TEMP/dczlr-resources.dczenc"
+            done
+          else
+            test -n "$RESOURCE_BUNDLE_SHA256"
+            curl --fail --location --retry 3 "$RESOURCE_BUNDLE_URL" -o "$RUNNER_TEMP/dczlr-resources.dczenc"
+            echo "$RESOURCE_BUNDLE_SHA256  $RUNNER_TEMP/dczlr-resources.dczenc" | shasum -a 256 -c -
+          fi
           python3 tools/encrypted_resource_parts.py unpack \
             --input "$RUNNER_TEMP/dczlr-resources.dczenc" \
             --output "$RUNNER_TEMP/dczlr-resource-parts" \
@@ -108,7 +133,7 @@ jobs:
         run: |
           python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene intro --startup-fixture --exercise-new-game --output out/ios-startup
       - name: Exercise real resource gameplay on simulator
-        if: inputs.resource_bundle_url != ''
+        if: inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
         timeout-minutes: 12
         run: |
           python3 tools/check_ios_sprite.py \
@@ -130,7 +155,7 @@ jobs:
           name: PortLab-simulator-startup
           path: out/ios-startup/
       - name: Upload real gameplay evidence
-        if: always() && inputs.resource_bundle_url != ''
+        if: always() && (inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '')
         uses: actions/upload-artifact@v4
         with:
           name: PortLab-simulator-real-gameplay
