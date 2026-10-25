@@ -56,6 +56,8 @@ def main() -> int:
         parser.error(f"missing Data directory: {root}")
     lib = library()
     admit_shared_gameplay_resources(root)
+    save_dir = root / "save"
+    save_path = save_dir / "player.state"
     state = GamePlayer(0, 0, -100, 100, -100, 100, 8, 0, 0)
     interaction = GameInteractionState()
     print("native session ready; commands: m dx dz | i | s | l | q")
@@ -71,16 +73,23 @@ def main() -> int:
         if command == "s":
             raw = C.create_string_buffer(32)
             status = lib.dc_game_player_save(C.byref(state), raw, 32)
-            print("saved" if status == 0 else f"save failed: {status}")
+            if status == 0:
+                save_dir.mkdir(parents=True, exist_ok=True)
+                save_path.write_bytes(raw.raw)
+                print(f"saved {save_path}")
+            else:
+                print(f"save failed: {status}")
             continue
         if command == "l":
-            raw = C.create_string_buffer(32)
-            if lib.dc_game_player_save(C.byref(state), raw, 32) != 0:
-                print("save failed")
+            if not save_path.is_file():
+                print("no save available")
                 continue
+            raw = C.create_string_buffer(save_path.read_bytes()[:32], 32)
             restored = GamePlayer()
             status = lib.dc_game_player_load(raw, 32, C.byref(restored))
             if status == 0:
+                restored.min_x, restored.max_x = state.min_x, state.max_x
+                restored.min_z, restored.max_z = state.min_z, state.max_z
                 state = restored
                 print("loaded")
             else:
