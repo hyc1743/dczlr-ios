@@ -22,8 +22,9 @@ original code and game resources remain separate local analysis inputs.
 
 The Apple title view uses this module for pointer hover/release and selection
 audio, with edit/extra availability read from existing save metadata. New Game
-now dispatches the first intro chapter through the verified planner. The other
-destinations and subsequent gameplay remain unfinished. See `intro-host.md`
+and Load Game now enter the native chapter-3 scene path; Load Game restores the
+saved map and player state. Options and the remaining title destinations still
+fail explicitly. See `intro-host.md`
 for adapter and validation limits. CPU oracle tests do not establish UIKit
 input or complete-game behavior.
 
