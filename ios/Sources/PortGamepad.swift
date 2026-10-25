@@ -185,7 +185,8 @@ final class PortGamepadView: UIView {
         let ctx = UIGraphicsGetCurrentContext()!; ctx.setLineWidth(1.5)
         func circle(_ c: CGPoint, _ r: CGFloat, _ on: Bool, _ label: String? = nil) { ctx.setFillColor(UIColor(white: 1, alpha: on ? 0.45 : 0.14).cgColor); ctx.setStrokeColor(UIColor(white: 1, alpha: 0.38).cgColor); ctx.addEllipse(in: CGRect(x: c.x-r, y: c.y-r, width: 2*r, height: 2*r)); ctx.drawPath(using: .fillStroke); if let label { let a: [NSAttributedString.Key: Any] = [.font: UIFont.boldSystemFont(ofSize: 16*u), .foregroundColor: UIColor(white: on ? 0 : 1, alpha: 0.7)]; NSString(string: label).draw(at: CGPoint(x: c.x - 8*u, y: c.y - 8*u), withAttributes: a) } }
         circle(stickHome, stickRadius, sticks[0] != nil); if let t = sticks[0] { let p = stickPoint(stickNow[0], centre: stickHome, radius: stickRadius); circle(p, 30*u, true) }
-        if full { circle(dpadCentre, dpadRadius, held & (PortGameButton.dpadLeft|PortGameButton.dpadUp|PortGameButton.dpadRight|PortGameButton.dpadDown) != 0); circle(CGPoint(x: safe.midX, y: safe.minY + 22*u), 15*u, false, "3D") }
+        if full { circle(dpadCentre, dpadRadius, held & (PortGameButton.dpadLeft|PortGameButton.dpadUp|PortGameButton.dpadRight|PortGameButton.dpadDown) != 0) }
+        circle(CGPoint(x: safe.midX, y: safe.minY + 22*u), 15*u, false, full ? "3D" : "2D")
         for bit in [PortGameButton.a, PortGameButton.b, PortGameButton.x, PortGameButton.y] { circle(facePoint(bit), faceRadius, held & bit != 0, bit == PortGameButton.a ? "A" : bit == PortGameButton.b ? "B" : bit == PortGameButton.x ? "X" : "Y") }
         let top: [(UInt64, String, CGFloat)] = [(PortGameButton.zl, "ZL", 44), (PortGameButton.left, "L", 44), (PortGameButton.zr, "ZR", bounds.width - 44), (PortGameButton.right, "R", bounds.width - 44), (PortGameButton.minus, "−", bounds.midX - 52*u), (PortGameButton.plus, "+", bounds.midX + 52*u)]
         for (bit, label, x) in top { let y: CGFloat = label == "ZL" || label == "ZR" ? safe.minY + 40*u : label == "L" || label == "R" ? safe.minY + 108*u : safe.minY + 22*u; circle(CGPoint(x: x, y: y), label == "ZL" || label == "ZR" ? 26*u : label == "L" || label == "R" ? 24*u : 14*u, held & bit != 0, label) }
@@ -195,7 +196,10 @@ final class PortGamepadView: UIView {
     private func axis(_ value: CGFloat, radius: CGFloat) -> Int32 { let dx = value / radius, dead: CGFloat = 0.1; guard abs(dx) > dead else { return 0 }; let fullTilt: CGFloat = 0.8; let n = min((abs(dx)-dead)/(fullTilt-dead), 1) * (dx < 0 ? -1 : 1); return Int32((n * 32767).rounded()) }
     private func emit() { onInput?(held, axes.0, axes.1, axes.2, axes.3) }
     private func gamePoint(_ p: CGPoint) { let w0=bounds.width, h0=bounds.height; var w=w0, h=h0; if w/h > 16/9 { w=h*16/9 } else { h=w*9/16 }; let x0=(w0-w)/2, y0=(h0-h)/2; onTouch?(true, Float(max(0,min(0.999,(p.x-x0)/w))), Float(max(0,min(0.999,(p.y-y0)/h)))) }
-    private func gameUpdate() { for (i,t) in gameTouches.enumerated() { if let t { gamePoint(t.location(in: self)); if i == 0 { return } } }; onTouch?(false, 0, 0) }
+    private func gameUpdate() {
+        if let t = gameTouches.compactMap({ $0 }).first { gamePoint(t.location(in: self)) }
+        else { onTouch?(false, 0, 0) }
+    }
 
     private func faceAt(_ p: CGPoint) -> UInt64 { var m: UInt64 = 0; for b in [PortGameButton.a, PortGameButton.b, PortGameButton.x, PortGameButton.y] where dist(p, facePoint(b)) <= faceRadius * 1.25 { m |= b }; return m }
     private func dpadAt(_ p: CGPoint) -> UInt64 {
@@ -220,7 +224,7 @@ final class PortGamepadView: UIView {
             var locked: [(UInt64, CGPoint, CGFloat)] = [(PortGameButton.zl,CGPoint(x:44*u,y:safe.minY+40*u),36*u),(PortGameButton.left,CGPoint(x:44*u,y:safe.minY+108*u),34*u),(PortGameButton.zr,CGPoint(x:bounds.width-44*u,y:safe.minY+40*u),36*u),(PortGameButton.right,CGPoint(x:bounds.width-44*u,y:safe.minY+108*u),34*u),(PortGameButton.minus,CGPoint(x:bounds.midX-52*u,y:safe.minY+22*u),24*u),(PortGameButton.plus,CGPoint(x:bounds.midX+52*u,y:safe.minY+22*u),24*u)]
             if full { locked += [(PortGameButton.leftStick,CGPoint(x:safe.minX+102*u,y:safe.minY+40*u),24*u),(PortGameButton.rightStick,CGPoint(x:safe.maxX-102*u,y:safe.minY+40*u),24*u)] }
             if let hit=locked.first(where:{dist(p,$0.1)<=$0.2}) { owners[id]=Owner(kind:.button,index:Int(hit.0)); setBit(hit.0,true); continue }
-            if full && dist(p,CGPoint(x:safe.midX,y:safe.minY+22*u)) <= 24*u { owners[id]=Owner(kind:.swap,index:0); continue }
+            if dist(p, CGPoint(x: safe.midX, y: safe.minY + 22*u)) <= 24*u { owners[id] = Owner(kind: .swap, index: 0); continue }
             var best = 1.0, kind = Kind.game, index = 0
             let f = dist(p, faceCentre) / (faceGap + faceRadius * 1.6)
             if f <= best { best = f; kind = .face }
