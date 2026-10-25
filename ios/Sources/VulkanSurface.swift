@@ -70,6 +70,8 @@ final class SpritePresenter: NSObject {
 
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
+        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
+           !model.resourcesReady { return }
         renderPending = true
         var pointerX = model.x, pointerY = model.y, touching = model.touchActive
         // CI supplies generated resources and exercises the same menu input
