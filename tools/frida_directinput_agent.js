@@ -547,8 +547,12 @@ function hookGameFunctions() {
               main26c: validPointer(input) ? input.add(0x26c).readU32() : 0
             };
             const controller = base.add(0x44dc28);
+            extra.controller3044 = controller.add(0x3044).readU32();
+            extra.controller3050 = controller.add(0x3050).readU32();
+            extra.controller3054 = controller.add(0x3054).readU32();
+            extra.controller3058 = controller.add(0x3058).readU32();
             extra.controller305c = controller.add(0x305c).readU8();
-            extra.controller3064 = controller.add(0x3064).readU8();
+            extra.controller3064 = controller.add(0x3064).readU32();
             const fingerprint = JSON.stringify({bytes: bytes, extra: extra});
             if (fingerprint !== gameplayStateSnapshot) {
               gameplayStateSnapshot = fingerprint;
