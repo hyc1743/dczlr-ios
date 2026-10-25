@@ -125,10 +125,10 @@ final class SpritePresenter: NSObject {
             pad.pressed = held && !testPadHeld ? 1 : 0
             pad.released = !held && testPadHeld ? 1 : 0
             testPadHeld = held
-            if elapsed >= 0.25 && elapsed < 0.65 {
-                pad.lx = 12000
-                pad.rx = 10000
-            }
+            // Keep each axis active until its native effect is observed, so a
+            // slow first resource frame cannot skip a short timed test window.
+            if !reportedControllerMovement { pad.lx = 12000 }
+            if !reportedControllerCamera { pad.rx = 10000 }
         }
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
             touching: touching, controller: pad) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in

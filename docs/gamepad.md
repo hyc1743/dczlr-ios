@@ -3,6 +3,8 @@
 The input frontend adapts weixing3's staged `DmGamepad.m`, based on
 nxnative `677345b0933f5f8754aeec3125d14df32683ca97`. Its MIT notice ships in
 `ios/Resources/Nxnative-LICENSE`. This replaces the simplified Swift controls.
+The app uses weixing3's landscape/fullscreen policy so the full layout has
+room for both bottom controls and the dpad.
 
 Both virtual and physical buttons use A, B, X, Y, L3, R3, L, R, ZL, ZR,
 Plus, Minus, Left, Up, Right, Down in bits 0–15. A is the bottom face key,

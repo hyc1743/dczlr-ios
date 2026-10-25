@@ -247,7 +247,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         double milliseconds = time * 1000.0;
         if (!isfinite(milliseconds) || milliseconds < 0) return @"Invalid startup animation time";
         uint32_t tick = (uint32_t)fmod(milliseconds, 4294967296.0);
-        NSString *error = [_startupScene drawAtTick:tick touching:(touching || (controller.buttons&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
+        NSString *error = [_startupScene drawAtTick:tick touching:(touching || (controller.pressed&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
         if (error) return error;
         if (_startupScene.cardReady)
             _presentedScene = _startupScene.card == 1 ? DCVulkanSpriteSceneStartupWarning : DCVulkanSpriteSceneStartupCard;
@@ -285,7 +285,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 if(gameError)return gameError;
                 dc_pad_frame gameController=controller;
                 if(_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch) gameController=(dc_pad_frame){0};
-            BOOL gameTouch=touching;
+                BOOL gameTouch=touching;
                 if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
                 if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
                 NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController width:_width height:_height];
@@ -300,7 +300,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         }
         if(_introScene) {
         NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
-            touching:(touching || (controller.buttons&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
+            touching:(touching || (controller.pressed&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
         if(failure)return failure;
         _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
         }
@@ -424,7 +424,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         _titleState=titlePlan.next;
         if(_introScene) {
             NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
-                touching:(touching || (controller.buttons&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
+                touching:(touching || (controller.pressed&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
             if(failure)return failure;
             _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
         }
