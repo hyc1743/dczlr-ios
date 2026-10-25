@@ -63,6 +63,13 @@ def admit_shared_gameplay_resources(root: Path, lib) -> None:
             raise RuntimeError(f"resource probe failed: {archive}/{name}")
 
 
+def admit_voice_chain(root: Path) -> None:
+    for name in ("ast001_01.wav", "ast002_01.wav"):
+        data = entry(root, name, "RPP_11.pp")
+        if len(data) < 12 or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+            raise RuntimeError(f"invalid gameplay voice: RPP_11.pp/{name}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=ROOT / "Data")
@@ -73,6 +80,7 @@ def main() -> int:
         parser.error(f"missing Data directory: {root}")
     lib = library()
     admit_shared_gameplay_resources(root, lib)
+    admit_voice_chain(root)
     save_dir = root / "save"
     save_path = save_dir / "player.state"
     state = GamePlayer(0, 0, -100, 100, -100, 100, 8, 0, 0)
