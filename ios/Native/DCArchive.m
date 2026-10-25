@@ -61,12 +61,15 @@ static void report_context_error(NSError **error, NSInteger code, NSString *cont
     _path = [url.path copy];
     _file = fopen(url.fileSystemRepresentation, "rb");
     struct stat info;
-    if (!_file || fstat(fileno(_file), &info) || !S_ISREG(info.st_mode) || info.st_size < 0) {
-        report_context_error(error, DC_IO, [NSString stringWithFormat:@"open %@", _path]); return nil;
+    if (!_file) {
+        report_context_error(error, DC_IO, [NSString stringWithFormat:@"fopen %@ errno=%d", _path, errno]); return nil;
+    }
+    if (fstat(fileno(_file), &info) || !S_ISREG(info.st_mode) || info.st_size < 0) {
+        report_context_error(error, DC_IO, [NSString stringWithFormat:@"fstat %@ errno=%d size=%lld", _path, errno, (long long)info.st_size]); return nil;
     }
     dc_source source = {_file, (uint64_t)info.st_size, read_at};
     dc_status status = dc_pp_open(&source, &_archive);
-    if (status != DC_OK) { report_context_error(error, status, [NSString stringWithFormat:@"open %@", _path]); return nil; }
+    if (status != DC_OK) { report_context_error(error, status, [NSString stringWithFormat:@"dc_pp_open %@ size=%lld", _path, (long long)info.st_size]); return nil; }
     return self;
 }
 - (void)dealloc {
