@@ -120,6 +120,16 @@ workflow with `resource_repo`, `resource_ref`, and `resource_path` (for example
 workspace, verifies the manifest through `check_ios_sprite.py`, and removes it
 with the runner after the simulator test.
 
+To prepare that repository from verified local parts, use:
+
+```powershell
+python tools/prepare_private_resource_repo.py `
+  --parts out/resource-packs `
+  --output ..\dczlr-private-resources
+```
+
+Commit the generated directory to a private repository with Git LFS enabled.
+
 To create uploadable chunks locally after encryption:
 
 ```powershell
