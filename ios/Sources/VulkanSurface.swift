@@ -42,6 +42,7 @@ final class SpritePresenter: NSObject {
     private var testPadHeld = false
     private var reportedControllerMovement = false
     private var reportedControllerCamera = false
+    private var reportedGamepadPresentation: String?
     private var introChapter = 0
     private var lastIntroRecord: String?
     private var reportedTextFade = false
@@ -75,6 +76,13 @@ final class SpritePresenter: NSObject {
 
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
+        if model.gameResourcesActive {
+            let presentation = dc_gamepad_presentation()
+            if presentation != reportedGamepadPresentation {
+                reportedGamepadPresentation = presentation
+                model.record(presentation, event: "PORTLAB_GAMEPAD_PRESENTATION")
+            }
+        }
         renderPending = true
         var pad = model.gamepad.sample()
         var pointerX = model.x, pointerY = model.y

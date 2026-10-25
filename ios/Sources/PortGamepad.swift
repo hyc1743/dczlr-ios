@@ -13,5 +13,9 @@ struct PortVirtualGamepad: UIViewRepresentable {
         DCGamepadView(frame: .zero)
     }
     func updateUIView(_ view: DCGamepadView, context: Context) {}
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: DCGamepadView, context: Context) -> CGSize? {
+        guard let width = proposal.width, let height = proposal.height else { return nil }
+        return CGSize(width: width, height: height)
+    }
     static func dismantleUIView(_ view: DCGamepadView, coordinator: ()) { view.reset() }
 }

@@ -361,6 +361,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
     if 'PORTLAB_GAMEPAD_TEST_PASSED' not in log:
         raise RuntimeError('Missing UIKit gamepad regression evidence')
+    if expected_scene != 'checker':
+        matches=re.findall(r'PORTLAB_GAMEPAD_PRESENTATION bounds=(\d+)x(\d+) attached=1 hidden=0 physical=0 paths=1',log)
+        if not any(int(w)>0 and int(h)>0 for w,h in matches):
+            raise RuntimeError('Gamepad overlay was not visible in the actual application window: '+log[-2000:])
     report = {"gamepad_regression": "UIKit touch ownership and GameController snapshot passed",
               "simulator": phone["name"], "runtime": phone["runtime"], "udid": device,"launch_command":launch_state,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}

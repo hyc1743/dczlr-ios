@@ -184,6 +184,13 @@ static BOOL fullOnly(int b) { return b == B_LS || b == B_RS || b >= B_LEFT; }   
 }
 - (void)resignActive { dc_gamepad_set_active(NO); }
 - (void)becomeActive { dc_gamepad_set_active(YES); }
+- (NSString *)presentationState {
+    NSUInteger physical=0;
+    for(GCController *c in GCController.controllers)if(c.extendedGamepad&&!c.isSnapshot)physical++;
+    return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%lu paths=%d",
+        self.bounds.size.width,self.bounds.size.height,self.window!=nil,_controls.hidden,
+        (unsigned long)physical,_ring.path!=NULL];
+}
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; [g_motion stopAccelerometerUpdates]; g_motion=nil; }
 - (void)applyLayout {   // show / hide the controls for the current layout
     [CATransaction begin]; [CATransaction setDisableActions:YES];
@@ -441,7 +448,7 @@ static void read_pad(GCExtendedGamepad *g) {
 }
 - (void)padsChanged {
     BOOL any = NO;
-    for (GCController *c in GCController.controllers) if (c.extendedGamepad) {
+    for (GCController *c in GCController.controllers) if (c.extendedGamepad && !c.isSnapshot) {
         any = YES; c.extendedGamepad.valueChangedHandler = ^(GCExtendedGamepad *g, GCControllerElement *el) { (void)el; BOOL present=NO; for (GCController *live in GCController.controllers) if (live.extendedGamepad==g) { present=YES; break; } if (present) read_pad(g); };
         read_pad(c.extendedGamepad);
     }
@@ -453,6 +460,7 @@ static void read_pad(GCExtendedGamepad *g) {
 @end
 
 UIView *dm_gamepad_view(CGRect frame) { DCGamepadView *v = [[DCGamepadView alloc] initWithFrame:frame]; g_view = v; return v; }
+NSString *dc_gamepad_presentation(void) { return g_view?[g_view presentationState]:@"not-created"; }
 void dc_gamepad_set_active(BOOL active) {
     NSCAssert(NSThread.isMainThread,@"Gamepad lifecycle must run on the main thread");
     pthread_mutex_lock(&bridge_mu); bridge_active=active; dc_pad_clear(&bridge_state); pthread_mutex_unlock(&bridge_mu);
