@@ -151,6 +151,9 @@ def main() -> int:
                 print(f"move failed: {status}")
             continue
         if command == "i":
+            if abs(state.x) >= 12 or abs(state.z) >= 12:
+                print("interaction unavailable: move within 12 units of target")
+                continue
             started = GameInteractionState()
             event = GameInteractionResult()
             status = lib.dc_game_interaction_step(C.byref(interaction), C.byref(GameInteractionInput(0, 1, 1)), C.byref(started), C.byref(event))
