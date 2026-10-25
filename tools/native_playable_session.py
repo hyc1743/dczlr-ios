@@ -22,8 +22,8 @@ from native_core import (  # noqa: E402
 SEQUENCE = (0, 1, 3, 4, 5, 6, 7, 8)
 
 
-def entry(root: Path, name: str) -> bytes:
-    with PPArchive(root / "RPP_10.pp") as archive:
+def entry(root: Path, name: str, archive_name: str = "RPP_10.pp") -> bytes:
+    with PPArchive(root / archive_name) as archive:
         wanted = name.encode("ascii")
         for i in range(archive.count):
             if archive.entry(i).name_bytes.lower() == wanted.lower():
@@ -37,6 +37,16 @@ def admit(root: Path, selector: int) -> None:
         raise RuntimeError(f"empty map {selector}")
 
 
+def admit_shared_gameplay_resources(root: Path) -> None:
+    for archive, name in (
+        ("RPP_08.pp", "am00_01.xx"), ("RPP_08.pp", "an00_02.xa"),
+        ("RPP_09.pp", "ak00_00.xx"), ("RPP_09.pp", "an00_01.xa"),
+        ("RPP_04.pp", "ak00_00.eyes"), ("RPP_04.pp", "am00_01.neck"),
+    ):
+        if not entry(root, name, archive):
+            raise RuntimeError(f"empty resource {archive}/{name}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data", type=Path, default=ROOT / "Data")
@@ -45,6 +55,7 @@ def main() -> int:
     if not root.is_dir():
         parser.error(f"missing Data directory: {root}")
     lib = library()
+    admit_shared_gameplay_resources(root)
     state = GamePlayer(0, 0, -100, 100, -100, 100, 8, 0, 0)
     interaction = GameInteractionState()
     print("native session ready; commands: m dx dz | i | s | l | q")
