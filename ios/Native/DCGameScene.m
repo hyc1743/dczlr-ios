@@ -668,6 +668,10 @@ static void freeMorphCaches(dc_game_model *slot) {
         menuActivated=menuResult==1 && _gameMenu.selected==1;
     }
     _previousGameMenuTouch=touching;
+    /* A completed interaction needs an explicit follow-up activation before
+       loading the next map on the normal player route.  The audit route keeps
+       its bounded automatic progression below. */
+    BOOL requestNextMap=menuActivated && _interactionCompleted && !_mapAdvanced;
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
     if (menuActivated && nearInteraction && !_interactionCompleted && _mapSelector==0)
@@ -692,7 +696,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else { _inputInitialized=NO;[self savePlayerState]; }
-    if(!_naturalGameplayRoute&&_interactionCompleted&&!_mapAdvanced){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
+    if((requestNextMap || (!_naturalGameplayRoute&&_interactionCompleted&&!_mapAdvanced))){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     NSString *cameraSelectionError=[self autoSelectCameraAtTick:tick];if(cameraSelectionError)return cameraSelectionError;
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};
