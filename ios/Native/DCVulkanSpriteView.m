@@ -574,7 +574,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
                     _titleStateInitialized=NO;
                     _titleMenuInitialized=NO;
                     _previousTitleTouch=NO;
-                } else {
+                } else if(command.value!=1) {
+                    /* ENTER=1 (New Game) falls through to INIT_GAME. */
                     return [NSString stringWithFormat:@"Title destination %u is not implemented",command.value];
                 }
             } else if(command.kind==DC_TITLE_INIT_GAME) {
