@@ -122,7 +122,13 @@ final class SpritePresenter: NSObject {
                     ok = hold(DC_TOUCH_SAVE, pulse)
                 } else {
                     _ = hold(DC_TOUCH_SAVE, false)
-                    ok = hold(DC_TOUCH_PRIMARY, pulse)
+                    /* Drive the real six-row scene menu through its pointer
+                     * hit test. A generic A/Plus shortcut would skip the
+                     * original row dispatch and hide scene/menu regressions. */
+                    let elapsed = now.truncatingRemainder(dividingBy: 9.0)
+                    let rowY: Float = elapsed < 3.0 ? 488.0/768.0 :
+                        elapsed < 6.0 ? 712.0/768.0 : 376.0/768.0
+                    ok = hold(DC_TOUCH_POINTER, pulse, 968.0/1024.0, rowY)
                 }
             }
         default: return true
