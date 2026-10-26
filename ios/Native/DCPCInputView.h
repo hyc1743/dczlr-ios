@@ -1,10 +1,15 @@
 #import <UIKit/UIKit.h>
 #include "dc_pc_input.h"
+#include "dc_pc_touch.h"
 
 NS_ASSUME_NONNULL_BEGIN
 /* Main-thread producer, value-only render-thread consumer. */
 dc_pc_frame dc_pc_input_read(void);
 void dc_pc_input_set_active(BOOL active);
+dc_status dc_pc_touch_input_begin(dc_pc_touch *state,uint64_t id,float x,float y);
+dc_status dc_pc_touch_input_move(dc_pc_touch *state,uint64_t id,float x,float y);
+void dc_pc_touch_input_end(dc_pc_touch *state,uint64_t id);
+void dc_pc_touch_input_reset(dc_pc_touch *state);
 
 @interface DCPCInputView : UIView
 - (void)reset;

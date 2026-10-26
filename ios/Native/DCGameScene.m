@@ -93,6 +93,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     uint32_t _interactionCount;BOOL _interactionCompleted;
     uint32_t _storyChapter,_storyStage,_storyPhase,_mapSelector;
     uint32_t _sceneKind,_sceneType;
+    char _characterPrefix;
+    uint32_t _acceptedMenuEvents,_lastAcceptedMenuRow;
     uint32_t _stageOutcomeA,_stageOutcomeB,_chapterEndAction;
     BOOL _editMode;
     BOOL _gameFinished;
@@ -127,8 +129,8 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSDictionary *)lastRenderCapture { return _lastRenderCapture; }
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u anchor=%@ camera=%@ resumed=%d",
-        _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_anchorName,_cameraSource,_resumedPlayer];
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u",
+        _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
@@ -136,6 +138,9 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
 - (void)consumeChapterEndAction { _chapterEndAction=0; }
+- (NSString *)characterNode:(NSString *)name {
+    return [name hasPrefix:@"a_"]?[NSString stringWithFormat:@"%c%@",_characterPrefix,[name substringFromIndex:1]]:name;
+}
 - (void)applyOutfitVariant:(uint32_t)variant {
     /* Original 0x5181f0-style outfit selection through hidden alternate
      * outfit meshes. Variant 1 shows the skirt set instead of the dress,
@@ -146,10 +151,10 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSArray<NSString *> *skirt=@[@"a_On_skartHF",@"a_On_skartHB",@"a_On_skartHA"];
     NSArray<NSString *> *bra=@[@"a_On_buraH"];
     NSArray<NSString *> *panty=@[@"a_On_pantuH",@"a_On_pantuH3",@"a_On_pantuH2"];
-    for(NSString *name in dress){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?1:0);}
-    for(NSString *name in skirt){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?0:1);}
-    for(NSString *name in bra){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==2?1:0);}
-    for(NSString *name in panty){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==3?1:0);}
+    for(NSString *name in dress){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?1:0);}
+    for(NSString *name in skirt){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?0:1);}
+    for(NSString *name in bra){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==2?1:0);}
+    for(NSString *name in panty){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==3?1:0);}
     _storyPhase=0;_interactionCompleted=NO;_chapterEndAction=0;
 }
 - (void)setEditMode:(BOOL)editMode {
@@ -197,8 +202,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         @"a_On_neko_vive",@"a_On_tori_vive"];
     NSArray<NSString *> *faceNames=@[@"a_On_nekomimi",@"a_On_kuchsiru_F",@"a_On_kuchsiru_ita",
         @"a_On_kuchsiru_o",@"a_On_namida"];
-    for(NSString *name in actorNames){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
-    for(NSString *name in faceNames){uint32_t node=[self findNode:&_face name:name];if(node!=UINT32_MAX)dc_model_hide_node(_face.model,node,1);}
+    for(NSString *name in actorNames){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+    for(NSString *name in faceNames){uint32_t node=[self findNode:&_face name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_face.model,node,1);}
 }
 
 - (void)computeActorFloorOffset {
@@ -462,6 +467,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _mapSelector=profile.map>=0 ? (uint32_t)profile.map : (mapSelector<=8 ? mapSelector : 0);
     _sceneKind=profile.scene;_sceneType=profile.scene_type;
     _storyStage=profile.stage>=0 ? (uint32_t)profile.stage : (stage<=2 ? stage : 0);
+    if(dc_game_actor_prefix(_storyStage,&_characterPrefix)!=DC_OK){if(error)*error=@"Actor stage profile rejected";return nil;}
 #if DEBUG
     _captureGameplayFrame=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_GAMEPLAY"] isEqualToString:@"1"];
 #endif
@@ -477,16 +483,16 @@ static void freeMorphCaches(dc_game_model *slot) {
      if(!mapArchive || !actorArchive || !faceArchive) { if(error)*error=reason.localizedDescription;return nil; }
     _map.xxData=[self entry:[NSString stringWithFormat:@"mm00_%02u.xx",_mapSelector] archive:mapArchive error:error];
     _map.xaData=[self entry:[NSString stringWithFormat:@"mn00_%02u.xa",_mapSelector] archive:mapArchive error:nil];
-    _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
-    _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
-    NSData *actorPlacement=[self entry:@"am00_01.plst" archive:actorArchive error:nil];
+    _actor.xxData=[self entry:[NSString stringWithFormat:@"%cm00_01.xx",_characterPrefix] archive:actorArchive error:error];
+    _actor.xaData=[self entry:[NSString stringWithFormat:@"%cn00_02.xa",_characterPrefix] archive:actorArchive error:error];
+    NSData *actorPlacement=[self entry:[NSString stringWithFormat:@"%cm00_01.plst",_characterPrefix] archive:actorArchive error:nil];
     if(faceArchive) {
-        _face.xxData=[self entry:@"ak00_00.xx" archive:faceArchive error:nil];
-        _face.xaData=[self entry:@"an00_01.xa" archive:faceArchive error:nil];
+        _face.xxData=[self entry:[NSString stringWithFormat:@"%ck00_00.xx",_characterPrefix] archive:faceArchive error:nil];
+        _face.xaData=[self entry:[NSString stringWithFormat:@"%cn00_01.xa",_characterPrefix] archive:faceArchive error:nil];
     }
      if(auxiliaryArchive) {
-         _eyesData=[self entry:@"ak00_00.eyes" archive:auxiliaryArchive error:nil];
-         _neckData=[self entry:@"am00_01.neck" archive:auxiliaryArchive error:nil];
+         _eyesData=[self entry:[NSString stringWithFormat:@"%ck00_00.eyes",_characterPrefix] archive:auxiliaryArchive error:nil];
+         _neckData=[self entry:[NSString stringWithFormat:@"%cm00_01.neck",_characterPrefix] archive:auxiliaryArchive error:nil];
      }
     if(!_map.xxData || !_actor.xxData || !_actor.xaData)return nil;
     if(![self openModel:&_map staticOnly:(_map.xaData==nil) error:error] || ![self openModel:&_actor staticOnly:NO error:error])return nil;
@@ -495,8 +501,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(_face.model && ![self buildMorphCaches:&_face error:&morphError]) { if(error)*error=morphError ?: @"Game morph cache initialization failed";return nil; }
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
-    if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
-    if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
+    if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:[self characterNode:@"a_Nz_kubi2"]];
+    if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:[self characterNode:@"a_Kp_kubi2"]];
     // PLST attaches sourceBind * inverse(targetBind) to targetAnimatedWorld.
     // All face meshes descend from the source node, so compensate its model
     // world with the full actor target bind inverse before applying animation.
@@ -516,12 +522,12 @@ static void freeMorphCaches(dc_game_model *slot) {
        dc_eyeneck_target_at(_eyesData.bytes,_eyesData.length,0,&eyesRight)!=DC_OK ||
        dc_eyeneck_target_at(_eyesData.bytes,_eyesData.length,1,&eyesLeft)!=DC_OK ||
        dc_eyeneck_target_at(_neckData.bytes,_neckData.length,0,&neckHead)!=DC_OK ||
-       ![self encodedSpan:eyesRight matchesName:@"a_Np_me_R" data:_eyesData] ||
-       ![self encodedSpan:eyesLeft matchesName:@"a_Np_me_L" data:_eyesData] ||
-       ![self encodedSpan:neckHead matchesName:@"a_Kp_kubi2" data:_neckData] ||
-        [self findNode:&_face name:@"a_Np_me_R"]==UINT32_MAX ||
-        [self findNode:&_face name:@"a_Np_me_L"]==UINT32_MAX ||
-        [self findNode:&_actor name:@"a_Kp_kubi2"]==UINT32_MAX)) {
+       ![self encodedSpan:eyesRight matchesName:[self characterNode:@"a_Np_me_R"] data:_eyesData] ||
+       ![self encodedSpan:eyesLeft matchesName:[self characterNode:@"a_Np_me_L"] data:_eyesData] ||
+       ![self encodedSpan:neckHead matchesName:[self characterNode:@"a_Kp_kubi2"] data:_neckData] ||
+        [self findNode:&_face name:[self characterNode:@"a_Np_me_R"]]==UINT32_MAX ||
+        [self findNode:&_face name:[self characterNode:@"a_Np_me_L"]]==UINT32_MAX ||
+        [self findNode:&_actor name:[self characterNode:@"a_Kp_kubi2"]]==UINT32_MAX)) {
          if(error)*error=@"Eyes/neck auxiliary binding failed";return nil;
      }
     [self loadMapVariantLightForSelector:_mapSelector archive:mapArchive error:nil];
@@ -804,15 +810,10 @@ static void freeMorphCaches(dc_game_model *slot) {
         _storyPhase=0;_interactionCompleted=NO;_interactionState.completed=0;
         _chapterEndAction=0;
     }
-    if(!gameplayScene && _chapterEndAction==0 &&
-       (touching || (controller.pressed&(DC_PAD_A|DC_PAD_PLUS)))) {
-        /* The non-gameplay callbacks are tap-to-continue scene handlers in
-         * the original dispatcher. Keep their input separate from the
-         * gameplay row menu, but preserve the same chapter advance action. */
-        _chapterEndAction=2;
-    }
+    /* Non-gameplay callbacks have separate state machines. Do not invent
+     * tap-to-skip behavior for watch/night/ending chapters. */
     BOOL menuActivated=NO;
-    if (gameplayScene && (pcInput.active || (_gameMenuInitialized && touching) || _previousGameMenuTouch)) {
+    if (gameplayScene && (pcInput.pointer_active || pcInput.mouse[0] || (_gameMenuInitialized && touching) || _previousGameMenuTouch)) {
         float menuScale=fminf((float)width/1024.0f,(float)height/768.0f);
         float menuOffsetX=((float)width-1024.0f*menuScale)*.5f;
         float menuOffsetY=((float)height-768.0f*menuScale)*.5f;
@@ -822,7 +823,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         if (dc_game_menu_profile(buttons,DC_GAME_MENU_COUNT)!=DC_OK)
             return @"Game menu profile unavailable";
         int32_t menuResult=-1;
-        uint8_t menuInput=pcInput.active?pcInput.mouse[0]:(touching?(_previousGameMenuTouch?1:3):(_previousGameMenuTouch?2:0));
+        uint8_t menuInput=(pcInput.pointer_active||pcInput.mouse[0])?pcInput.mouse[0]:(touching?(_previousGameMenuTouch?1:3):(_previousGameMenuTouch?2:0));
         if (menuInput==3) {
             int32_t hoverResult=-1;
             if(dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(screenX-menuOffsetX),
@@ -834,13 +835,14 @@ static void freeMorphCaches(dc_game_model *slot) {
                          &menuResult)!=DC_OK)
             return @"Game menu input update failed";
         menuActivated=menuResult==1 && _gameMenu.selected>=1 && _gameMenu.selected<=5;
+        if(menuActivated){++_acceptedMenuEvents;_lastAcceptedMenuRow=(uint32_t)_gameMenu.selected;}
     }
     /* Original shared menu activation dispatch (0x00532240, chapter type 4).
        Row 2 starts a touch interaction, row 4 finishes the scene, rows 1/3/5
        trigger alternate events; a row-1 activation only keeps the scene when
        the interaction counter exceeds one. */
-    BOOL pressEdge=(touching&&!_previousGameMenuTouch)||(pcInput.active&&pcInput.mouse[0]==3);
-    BOOL releaseEdge=(!touching&&_previousGameMenuTouch)||(pcInput.active&&pcInput.mouse[0]==2);
+    BOOL pressEdge=pcInput.pointer_active||pcInput.mouse[0]?pcInput.mouse[0]==3:(touching&&!_previousGameMenuTouch);
+    BOOL releaseEdge=pcInput.pointer_active||pcInput.mouse[0]?pcInput.mouse[0]==2:(!touching&&_previousGameMenuTouch);
     _previousGameMenuTouch=touching;
     dc_game_menu_activate_input activateInput={
         .scene_type=_sceneType,
@@ -849,7 +851,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         .press_edge=pressEdge,
         .release_edge=releaseEdge
     };
-    dc_game_menu_activate_result activateResult;
+    dc_game_menu_activate_result activateResult={0};
     if(gameplayScene && dc_game_menu_activate(&activateInput,&_activateState,&activateResult)!=DC_OK)
         return @"Game menu activation update failed";
     if(gameplayScene && _editMode) {
@@ -891,8 +893,14 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    if(gameplayScene && !_editMode) {
-        dc_game_interaction_input interactionInput={.tick=tick,.new_touch=menuActivated,.near_target=nearInteraction};
+    BOOL renderCheckpoint=NO;
+#if DEBUG
+    renderCheckpoint=[NSProcessInfo.processInfo.environment[@"PORTLAB_RENDER_PROBE"] isEqualToString:@"1"];
+#endif
+    /* The old 800ms completion was a test harness, not a recovered gameplay
+     * state machine. Keep it confined to independent DEBUG GPU checkpoints. */
+    if(renderCheckpoint) {
+        dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(controller.pressed&DC_PAD_A)!=0,.near_target=nearInteraction};
         dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
         if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
         if(interactionResult.begin) {
@@ -955,10 +963,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
     size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
     NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
-    /* The HScene textures are loaded and validated with the original archive
-     * path, but are presented by the screen compositor in a later pass. Keep
-     * them out of the depth-tested geometry submission until that compositor
-     * path is active; mixing sprite quads into this pass can stall MoltenVK. */
     size_t mapDrawCount=count;
     if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;

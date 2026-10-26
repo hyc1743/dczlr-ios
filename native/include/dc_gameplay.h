@@ -50,6 +50,8 @@ typedef struct dc_game_map_presentation {
 /* Existing floor-placement names and local camera candidates per admitted
  * map. No identity-origin fallback is an admitted actor placement. */
 DC_API dc_status dc_game_map_presentation_profile(uint32_t selector,dc_game_map_presentation *out);
+/* FUN_00517b30 selects s_bcade[stage] for body, clip, face and PLST names. */
+DC_API dc_status dc_game_actor_prefix(uint32_t stage,char *out);
 DC_API dc_status dc_game_player_step(const dc_game_player *state,const dc_game_input *input,
     float delta_seconds,dc_game_player *out);
 DC_API dc_status dc_game_player_save(const dc_game_player *state,void *bytes,size_t length);

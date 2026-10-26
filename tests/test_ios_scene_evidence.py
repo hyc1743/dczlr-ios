@@ -7,10 +7,21 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts,story_evidence,preserve_gameplay_capture,touch_route_evidence
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts,story_evidence,preserve_gameplay_capture,touch_route_evidence,mouse_input_evidence
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_mouse_delivery_cannot_certify_complete_original_gameplay(self):
+        events=('PORTLAB_TOUCH_INPUT_STARTED','PORTLAB_INTRO_RECORD=0:0','PORTLAB_INTRO_RECORD=1:0',
+            'PORTLAB_INTRO_RECORD=2:0','PORTLAB_SCENE_PRESENTED=gameplay','PORTLAB_GAMEPLAY_SKIN_ADVANCED',
+            'PORTLAB_MOUSE_MOVE_DELIVERED','PORTLAB_MOUSE_LEFT_DELIVERED','PORTLAB_MOUSE_RIGHT_DELIVERED',
+            'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_INPUT_PASSED')
+        def log(rows):return '\n'.join('2026-10-27T00:00:00Z '+e+' submitted' for e in rows)
+        report=mouse_input_evidence(log(events));self.assertEqual(report['complete_story'],'not tested')
+        self.assertTrue(scene_ready(log(events),'mouseInput'));self.assertFalse(scene_ready(log(events),'story'))
+        for i in range(len(events)):
+            with self.assertRaises(ValueError):mouse_input_evidence(log(events[:i]+events[i+1:]))
+        with self.assertRaises(ValueError):mouse_input_evidence(log(events+('PORTLAB_TOUCH_ROUTE_FAILED',)))
     def test_touch_route_requires_visible_input_camera_save_and_next_chapter(self):
         events=('PORTLAB_TOUCH_INPUT_STARTED','PORTLAB_INTRO_RECORD=0:0',
                 'PORTLAB_INTRO_RECORD=1:0','PORTLAB_INTRO_RECORD=2:0',

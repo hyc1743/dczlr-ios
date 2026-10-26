@@ -8,6 +8,25 @@ from native_core import library,GamePlayer,GameInput,GameInteractionState,GameIn
 class NativeGameplayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.lib=library()
+    def test_each_original_stage_selects_its_own_actor_prefix_and_resources(self):
+        from native_core import PPArchive,XXModel
+        self.lib.dc_game_actor_prefix.argtypes=[C.c_uint32,C.POINTER(C.c_char)]
+        for stage,expected in enumerate(b'bca'):
+            prefix=C.c_char(b'?');self.assertEqual(self.lib.dc_game_actor_prefix(stage,C.byref(prefix)),0)
+            self.assertEqual(prefix.value,bytes([expected]))
+            if not (ROOT/'Data').is_dir():continue
+            name=prefix.value.decode()
+            for archive,files in [('RPP_08.pp',[f'{name}m00_01.xx',f'{name}n00_02.xa',f'{name}m00_01.plst']),
+                ('RPP_09.pp',[f'{name}k00_00.xx',f'{name}n00_01.xa']),
+                ('RPP_04.pp',[f'{name}k00_00.eyes',f'{name}m00_01.neck'])]:
+                with PPArchive(ROOT/'Data'/archive) as pp:
+                    names={pp.entry(i).name_bytes.decode():i for i in range(pp.count)}
+                    for file in files:self.assertIn(file,names)
+                    if archive=='RPP_08.pp':
+                        with XXModel(pp.read(names[files[0]])) as model:
+                            query=bytes(v^255 for v in f'{name}_Kp_kubi2\0'.encode());node=C.c_uint32()
+                            self.assertEqual(self.lib.dc_xx_find_node_encoded(model.handle,query,len(query),C.byref(node)),0)
+        prefix=C.c_char(b'?');self.assertEqual(self.lib.dc_game_actor_prefix(3,C.byref(prefix)),4);self.assertEqual(prefix.value,b'?')
     def test_map_placement_profiles_resolve_actual_anchors_and_cameras(self):
         from native_core import XXModel,Matrix,PPArchive
         from audit_playable_loop import entry

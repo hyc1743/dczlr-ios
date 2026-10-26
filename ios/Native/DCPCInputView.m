@@ -24,6 +24,22 @@ dc_pc_frame dc_pc_input_read(void) {
     dc_pc_frame frame = {0}; dc_pc_input_poll(&pcState, &frame);
     pthread_mutex_unlock(&pcMutex); return frame;
 }
+dc_status dc_pc_touch_input_begin(dc_pc_touch *state,uint64_t id,float x,float y) {
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    dc_status status=pcActive?dc_pc_touch_begin(state,&pcState,id,x,y):DC_RANGE;
+    pthread_mutex_unlock(&pcMutex);return status;
+}
+dc_status dc_pc_touch_input_move(dc_pc_touch *state,uint64_t id,float x,float y) {
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    dc_status status=pcActive?dc_pc_touch_move(state,&pcState,id,x,y):DC_RANGE;
+    pthread_mutex_unlock(&pcMutex);return status;
+}
+void dc_pc_touch_input_end(dc_pc_touch *state,uint64_t id) {
+    pthread_mutex_lock(&pcMutex);pcInitialize();dc_pc_touch_end(state,&pcState,id);pthread_mutex_unlock(&pcMutex);
+}
+void dc_pc_touch_input_reset(dc_pc_touch *state) {
+    pthread_mutex_lock(&pcMutex);pcInitialize();dc_pc_touch_reset(state,&pcState);pthread_mutex_unlock(&pcMutex);
+}
 
 @interface DCPCInputView ()
 - (void)devicesChanged;

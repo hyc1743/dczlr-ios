@@ -59,6 +59,7 @@ final class SpritePresenter: NSObject {
     private var lastGameContext: String?
     private var lastRenderProbeStatus: String?
     private var renderProbeDone = false
+    private var mouseEvidence: Set<String> = []
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -91,51 +92,28 @@ final class SpritePresenter: NSObject {
     // Drive the visible controls' hit tests and UIKit ownership handlers.
     // No pad axes, button bits or renderer pointer values are fabricated here.
     private func driveTouchRoute() -> Bool {
-        func hold(_ control: Int, _ down: Bool, _ x: Float = 0, _ y: Float = 0) -> Bool {
-            dc_gamepad_test_hold(UInt32(control), x, y, down)
-        }
         let now = CACurrentMediaTime()
-        let pulse = now.truncatingRemainder(dividingBy: 0.9) < 0.18
+        let pulse = now.truncatingRemainder(dividingBy: 1.0) < 0.20
         var ok = true
         switch lastReportedScene {
         case .title:
-            let elapsed = now - (testTitleTime ?? now)
-            ok = hold(DC_TOUCH_PRIMARY, elapsed > 2 && pulse)
+            ok = dc_gamepad_test_mouse(830, 424, 0, now - (testTitleTime ?? now) > 2 && pulse)
         case .intro:
-            ok = hold(DC_TOUCH_PRIMARY, pulse)
+            ok = dc_gamepad_test_mouse(512, 600, 0, pulse)
         case .gameplay:
-            if !reportedControllerMovement || !reportedControllerCamera {
-                if !touchPositionMode {
-                    guard dc_gamepad_test_menu_action(4) else { return false }
-                    touchPositionMode = true
-                }
-                ok = hold(DC_TOUCH_MOVE, !reportedControllerMovement, 0.55, 0)
-                    && hold(DC_TOUCH_LOOK, !reportedControllerCamera, Float(sin(now * 7) * 0.35), -0.1)
-            } else {
-                _ = hold(DC_TOUCH_MOVE, false)
-                _ = hold(DC_TOUCH_LOOK, false)
-                if touchPositionMode {
-                    guard dc_gamepad_test_menu_action(4) else { return false }
-                    touchPositionMode = false
-                }
-                if !touchSaveObserved {
-                    ok = hold(DC_TOUCH_SAVE, pulse)
-                } else {
-                    _ = hold(DC_TOUCH_SAVE, false)
-                    /* Drive the real six-row scene menu through its pointer
-                     * hit test. A generic A/Plus shortcut would skip the
-                     * original row dispatch and hide scene/menu regressions. */
-                    let elapsed = now.truncatingRemainder(dividingBy: 9.0)
-                    let rowY: Float = elapsed < 3.0 ? 488.0/768.0 :
-                        elapsed < 6.0 ? 712.0/768.0 : 376.0/768.0
-                    ok = hold(DC_TOUCH_POINTER, pulse, 968.0/1024.0, rowY)
-                }
-            }
+            // Exercise independent Num6 + arrow Up while the pointer is moved.
+            ok = dc_gamepad_test_key(22, !reportedControllerCamera)
+                && dc_gamepad_test_key(11, !reportedControllerCamera)
+            let cycle = now.truncatingRemainder(dividingBy: 6.0)
+            // Row 1 is enabled in the admitted initial original menu profile.
+            // A separate right click is delivered at exactly the same cursor.
+            ok = ok && dc_gamepad_test_mouse(968, 376, 0, cycle < 3 && pulse)
+                && dc_gamepad_test_mouse(968, 376, 1, cycle >= 3 && pulse)
         default: return true
         }
         if ok && !reportedTouchStart {
             reportedTouchStart = true
-            model.record("Visible touch controls received hit-tested UIKit input", event: "PORTLAB_TOUCH_INPUT_STARTED")
+            model.record("Visible mouse buttons and relative drag received UIKit input", event: "PORTLAB_TOUCH_INPUT_STARTED")
         }
         return ok
     }
@@ -259,6 +237,10 @@ final class SpritePresenter: NSObject {
                 if let context = self.view?.gameplayContext, !context.isEmpty, context != self.lastGameContext {
                     self.lastGameContext = context
                     self.model.record(context, event: "PORTLAB_GAME_SCENE_CONTEXT")
+                    if self.testingTouch, !context.contains("menu_events=0") {
+                        self.model.record("Pointer click accepted by scene menu at logical (968,376)", event: "PORTLAB_MOUSE_MENU_ACCEPTED")
+                        self.mouseEvidence.insert("menu")
+                    }
                 }
                 if let status = self.view?.renderProbeStatus, !status.isEmpty, status != self.lastRenderProbeStatus {
                     self.lastRenderProbeStatus = status
@@ -281,6 +263,25 @@ final class SpritePresenter: NSObject {
                 if self.view?.controllerCameraAdvanced == true, !self.reportedControllerCamera {
                     self.reportedControllerCamera = true
                     self.model.record("Controller right stick changed the native camera", event: "PORTLAB_GAMEPAD_CAMERA_ADVANCED")
+                }
+                if error == nil, self.testingTouch, scene == .gameplay {
+                    if pcInput.mouse.0 == 3 {
+                        self.model.record("Left mouse press delivered to a presented frame", event: "PORTLAB_MOUSE_LEFT_DELIVERED")
+                        self.mouseEvidence.insert("left")
+                    }
+                    if pcInput.mouse.1 == 3 {
+                        self.model.record("Right mouse press delivered independently", event: "PORTLAB_MOUSE_RIGHT_DELIVERED")
+                        self.mouseEvidence.insert("right")
+                    }
+                    if pcInput.pointer_active != 0, pcInput.dx != 0 || pcInput.dy != 0 {
+                        self.model.record("Relative drag moved the persistent pointer", event: "PORTLAB_MOUSE_MOVE_DELIVERED")
+                        self.mouseEvidence.insert("move")
+                    }
+                    if self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move"]), self.reportedControllerCamera {
+                        if self.mouseEvidence.insert("passed").inserted {
+                            self.model.record("Bounded virtual mouse input verified; original scene equivalence remains unverified", event: "PORTLAB_MOUSE_INPUT_PASSED")
+                        }
+                    }
                 }
                 if let error = error {
                     self.failed = true

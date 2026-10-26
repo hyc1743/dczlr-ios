@@ -43,6 +43,11 @@ on:
         required: false
         default: "."
         type: string
+      mouse_input_only:
+        description: "Validate the real-resource virtual mouse path separately from incomplete original scene callbacks"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -180,8 +185,23 @@ jobs:
         with:
           name: PortLab-simulator-pc-input
           path: out/ios-pc-input/
+      - name: Verify virtual mouse on the first real scene
+        if: inputs.mouse_input_only && (inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '')
+        timeout-minutes: 12
+        run: |
+          python3 tools/check_ios_sprite.py \
+            --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app \
+            --runtime iOS-18-5 --expected-scene mouseInput --mouse-input \
+            --resource-parts "${DCZLR_RESOURCE_PARTS:-$RUNNER_TEMP/dczlr-resource-parts}" \
+            --output out/ios-mouse-input
+      - name: Upload real-scene mouse input evidence
+        if: always() && inputs.mouse_input_only
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-real-scene-mouse-input
+          path: out/ios-mouse-input/
       - name: Exercise the original story loop on simulator
-        if: inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
+        if: ${{ !inputs.mouse_input_only && (inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '') }}
         timeout-minutes: 12
         run: |
           python3 tools/check_ios_sprite.py \
@@ -191,7 +211,7 @@ jobs:
             --resource-parts "${DCZLR_RESOURCE_PARTS:-$RUNNER_TEMP/dczlr-resource-parts}" \
             --output out/ios-real-story
       - name: Verify scene and interaction GPU captures across all story maps
-        if: inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
+        if: ${{ !inputs.mouse_input_only && (inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '') }}
         timeout-minutes: 12
         run: |
           python3 tools/check_ios_sprite.py \
@@ -226,7 +246,7 @@ jobs:
           if-no-files-found: ignore
 
   unsigned-ipa:
-    if: inputs.build_ipa == true
+    if: inputs.build_ipa == true && !inputs.mouse_input_only
     needs: ios
     runs-on: macos-latest
     steps:

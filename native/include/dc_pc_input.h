@@ -19,7 +19,7 @@ typedef struct dc_pc_latch {
     uint8_t pending_keys[DC_PC_KEY_COUNT], pending_mouse[DC_PC_MOUSE_COUNT];
     float x,y;
     int32_t dx,dy,wheel;
-    uint32_t pointer_active;
+    uint32_t pointer_active; /* Bit set per source owning an absolute pointer. */
 } dc_pc_latch;
 typedef struct dc_pc_frame {
     uint8_t keys[DC_PC_KEY_COUNT], mouse[DC_PC_MOUSE_COUNT];

@@ -16,4 +16,6 @@ void dc_gamepad_set_context(uint32_t scene,BOOL completed,BOOL busy);
  * Returns NO in Release; it never writes controller axes directly. */
 BOOL dc_gamepad_test_hold(uint32_t control,float x,float y,BOOL down);
 BOOL dc_gamepad_test_menu_action(uint32_t index);
+BOOL dc_gamepad_test_mouse(float gameX,float gameY,uint32_t button,BOOL down);
+BOOL dc_gamepad_test_key(uint32_t target,BOOL down);
 NS_ASSUME_NONNULL_END

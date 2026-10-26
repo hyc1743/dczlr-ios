@@ -17,7 +17,7 @@ SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-c
           "title": "title-screen background and menu layers", "intro": "first new-game script record and text adapter"}
 GAMEPLAY_SCENES = {"gameplay": "chapter 3 map and actor scene", "gameComplete": "completed chapter 3 map sequence"}
 STORY_SCENES = {"story": "script chapters 0-2, gameplay scene, interaction and chapter 4 script"}
-SCENE_CHOICES = tuple(SCENES) + tuple(GAMEPLAY_SCENES) + tuple(STORY_SCENES) + ('renderProbe',)
+SCENE_CHOICES = tuple(SCENES) + tuple(GAMEPLAY_SCENES) + tuple(STORY_SCENES) + ('renderProbe','mouseInput')
 
 
 def has_session(log,session):
@@ -173,7 +173,23 @@ def pose_advanced(log):
     return bool(re.search(r"(?m)^\S+ PORTLAB_NATIVE_POSE_ADVANCED(?= |$)", log))
 
 
+def mouse_input_evidence(log):
+    if 'PORTLAB_TOUCH_ROUTE_FAILED' in log or 'Vulkan 初始化或绘制失败' in log:
+        raise ValueError('Virtual mouse run failed')
+    required=('PORTLAB_TOUCH_INPUT_STARTED','PORTLAB_INTRO_RECORD=0:0','PORTLAB_INTRO_RECORD=1:0',
+        'PORTLAB_INTRO_RECORD=2:0','PORTLAB_SCENE_PRESENTED=gameplay','PORTLAB_GAMEPLAY_SKIN_ADVANCED',
+        'PORTLAB_MOUSE_MOVE_DELIVERED','PORTLAB_MOUSE_LEFT_DELIVERED','PORTLAB_MOUSE_RIGHT_DELIVERED',
+        'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_INPUT_PASSED')
+    for event in required:
+        if not re.search(r'(?m)^\S+ '+re.escape(event)+r'(?= |$)',log):raise ValueError('Missing mouse evidence: '+event)
+    return {'scope':'bounded input on first real-resource scene','input':'visible relative drag, mouse buttons and Num6/arrow combination',
+        'menu':'left click accepted by scene hit test','complete_story':'not tested',
+        'right_click_menu_behavior':'not certified','original_game_equivalence':'not established','physical_device':'not tested'}
+
 def scene_ready(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
+    if expected=='mouseInput':
+        try:mouse_input_evidence(log);return True
+        except ValueError:return False
     if expected=='renderProbe':
         return bool(re.search(r'(?m)^\S+ PORTLAB_RENDER_PROBE_COMPLETED completed captures=15(?= |$)',log)) and 'Vulkan 初始化或绘制失败' not in log
     if expected == 'story':
@@ -191,6 +207,7 @@ def scene_ready(log, expected, require_animation=False, require_xa=False, requir
 
 
 def scene_evidence(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
+    if expected=='mouseInput':return mouse_input_evidence(log)
     if expected=='renderProbe':
         if not scene_ready(log,expected):raise ValueError('GPU render checkpoints did not complete')
         return {'render_checkpoints':'completed; per-frame validation follows','physical_iphone':'not tested'}
@@ -297,7 +314,9 @@ def preserve_gameplay_capture(container, output):
 
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
           exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False,
-          exercise_story=False,touch_controls=False,render_probe=False):
+          exercise_story=False,touch_controls=False,render_probe=False,mouse_input=False):
+    if mouse_input and (not resource_parts or expected_scene!='mouseInput' or exercise_story or touch_controls or pc_input):
+        raise ValueError('Mouse input check requires its independent real-resource route')
     if exercise_new_game and (not startup_fixture and not resource_parts):
         raise ValueError('New-game exercise requires generated startup fixture or staged resource parts')
     if exercise_new_game and startup_fixture and expected_scene != 'intro':
@@ -368,7 +387,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         # Both automation routes hand Data to the renderer at launch. Restore
         # it completely before either route can start reading game resources.
         stage_resource_parts(resource_parts, container, output,
-                             restore=exercise_real_gameplay or exercise_story or render_probe)
+                             restore=exercise_real_gameplay or exercise_story or render_probe or mouse_input)
     launch_environment=dict(os.environ)
     # Hosted simulators can expose a host/virtual gamepad. Isolate this display
     # probe from that device so virtual controls are actually rendered. The
@@ -384,6 +403,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_STORY']='1'
     if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
     if touch_controls:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_TOUCH_CONTROLS']='1'
+    if mouse_input:
+        launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_STORY']='1'
+        launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_TOUCH_CONTROLS']='1'
+        launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
     if render_probe:launch_environment['SIMCTL_CHILD_PORTLAB_RENDER_PROBE']='1'
     # Cold CoreSimulator may queue the same request for over two minutes.
     # Observe that live command and app-authored evidence concurrently; never
@@ -391,7 +414,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     launch_output=(output/'launch.txt').open('w',encoding='utf-8')
     launch_process=subprocess.Popen(['xcrun','simctl','launch','--terminate-running-process',device,'org.example.portlab'],
         stdout=launch_output,stderr=subprocess.STDOUT,text=True,env=launch_environment)
-    wait_seconds=600 if exercise_story or render_probe else (300 if startup_fixture else 240)
+    wait_seconds=600 if exercise_story or render_probe or mouse_input else (300 if startup_fixture else 240)
     deadline = time.monotonic() + wait_seconds
     log = ""
     captured=set()
@@ -412,7 +435,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
                     if scene not in captured:
                         run('xcrun','simctl','io',device,'screenshot',str(output/('startup-'+scene+'.png')),timeout=30)
                         captured.add(scene)
-            if (exercise_real_gameplay or exercise_story) and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
+            if (exercise_real_gameplay or exercise_story or mouse_input) and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
                 # Scene objects reuse this native capture filename. Preserve
                 # the first scene now, before a slow simctl screenshot lets
                 # the game advance and overwrite it with a later chapter.
@@ -509,6 +532,9 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
               "pc_input_visible": pc_input,
               "simulator": phone["name"], "runtime": phone["runtime"], "udid": device,"launch_command":launch_state,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
+    if mouse_input:
+        from startup_pixels import verify_gameplay_actor
+        report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')
@@ -600,6 +626,7 @@ if __name__ == "__main__":
     parser.add_argument("--pc-input", action="store_true", help="show and verify the actual keyboard/mouse overlay")
     parser.add_argument("--touch-controls", action="store_true",help="drive visible touch controls through window hit tests and UIKit handlers")
     parser.add_argument("--render-probe",action="store_true",help="capture and validate idle/interaction/restored GPU frames in each distinct story map")
+    parser.add_argument("--mouse-input",action="store_true",help="independent real-resource virtual mouse gate; does not certify original scene callbacks")
     parser.add_argument("--resource-parts", type=Path,
                         help="local directory containing DczlrData.manifest.json and all dczdata parts")
     parser.add_argument("--exercise-real-gameplay", action="store_true",
@@ -610,6 +637,6 @@ if __name__ == "__main__":
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input,args.exercise_story,args.touch_controls,args.render_probe)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input,args.exercise_story,args.touch_controls,args.render_probe,args.mouse_input)
     else:
         parser.error("--app is required unless --boot-only is selected")

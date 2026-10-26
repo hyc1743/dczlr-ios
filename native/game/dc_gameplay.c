@@ -15,6 +15,11 @@ dc_status dc_game_player_step(const dc_game_player *s,const dc_game_input *in,fl
     return DC_OK;
 }
 static uint32_t checksum(const uint8_t *p,size_t n){uint32_t h=2166136261u;for(size_t i=0;i<n;++i)h=(h^p[i])*16777619u;return h;}
+dc_status dc_game_actor_prefix(uint32_t stage,char *out) {
+    if(!out)return DC_ARGUMENT;
+    if(stage>2)return DC_RANGE;
+    *out="bca"[stage];return DC_OK;
+}
 
 dc_status dc_game_map_presentation_profile(uint32_t selector,dc_game_map_presentation *out) {
     if(!out)return DC_ARGUMENT;

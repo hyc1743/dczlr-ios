@@ -46,13 +46,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         (dc_pc_key_held(&input,0x38) && dc_pc_key_pressed(&input,0x3e))) {
         controller->buttons |= DC_PAD_MINUS;controller->pressed |= DC_PAD_MINUS;
     }
-    /* Z/X are the original mouse buttons. Keeping them in the pad snapshot
-     * makes right-click cancel/back work in gameplay as well as in menus. */
-    if (input.mouse[0]&1u) controller->buttons|=DC_PAD_A;
-    if (input.mouse[0]==3) controller->pressed|=DC_PAD_A;
-    if (input.mouse[1]&1u) controller->buttons|=DC_PAD_B;
-    if (input.mouse[1]==3) controller->pressed|=DC_PAD_B;
-    if (input.mouse[1]==2) controller->released|=DC_PAD_B;
+    /* Mouse buttons keep their original pointer/menu semantics. A right
+     * click over a game button must not become a global pad Cancel command. */
 }
 
 @implementation DCVulkanSpriteView {
@@ -229,17 +224,6 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         return nil;
     }
     [_gameScene consumeChapterEndAction];
-    return nil;
-}
-- (NSString *)handleNonGameplayScene:(DCGameScene *)scene directory:(NSString *)directory
-    controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput {
-    /* Keep the original scene kind visible to the host. These callbacks are
-     * intentionally separate from chapter-3 gameplay; until their exact
-     * native scene routines are wired, input must not be reinterpreted as a
-     * gameplay touch/menu action. */
-    (void)directory;(void)controller;(void)pcInput;
-    if(scene.sceneKind==DC_STORY_SCENE_ENDING && scene.interactionCompleted)
-        return nil;
     return nil;
 }
 - (NSString *)playPendingGameplayVoice {
@@ -775,10 +759,6 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             if(voiceFailure)return voiceFailure;
             NSString *transitionFailure=[self handleGameplayTransitionFromDirectory:directory];
             if(transitionFailure)return transitionFailure;
-            if(!_gameScene.interactiveScene) {
-                NSString *sceneFailure=[self handleNonGameplayScene:_gameScene directory:directory controller:gameController pcInput:gamePC];
-                if(sceneFailure)return sceneFailure;
-            }
             _previousGameplayTouch=gameTouch;
             _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
             ++_presentedFrames;
