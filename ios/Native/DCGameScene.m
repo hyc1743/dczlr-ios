@@ -1006,7 +1006,10 @@ static void freeMorphCaches(dc_game_model *slot) {
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
     size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes+_sceneUiCount*2;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
     NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
-    if(!failure)failure=[self appendSceneUi:draws count:&count storage:storage viewport:&viewport triangles:&_visibleMapTriangles];
+    /* The HScene textures are loaded and validated with the original archive
+     * path, but are presented by the screen compositor in a later pass. Keep
+     * them out of the depth-tested geometry submission until that compositor
+     * path is active; mixing sprite quads into this pass can stall MoltenVK. */
     size_t mapDrawCount=count;
     if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;
