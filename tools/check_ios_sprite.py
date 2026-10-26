@@ -270,6 +270,12 @@ def controls_visible(log, pc_input=False):
     return False
 
 
+def preserve_gameplay_capture(container, output):
+    """Copy a native frame before later scene objects overwrite its filename."""
+    shutil.copyfile(Path(container)/'Documents/gameplay-first-native.png',
+                    Path(output)/'gameplay-first-native.png')
+
+
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
           exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False,
           exercise_story=False):
@@ -309,8 +315,14 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     run("xcrun", "simctl", "bootstatus", device, "-b", timeout=240)
     # Every probe owns a fresh container. This prevents generated-fixture runs
     # and real-resource runs in the same workflow from sharing partial Data.
-    subprocess.run(["xcrun", "simctl", "uninstall", device, "org.example.portlab"],
-                   capture_output=True, text=True, timeout=60)
+    try:
+        subprocess.run(["xcrun", "simctl", "uninstall", device, "org.example.portlab"],
+                       capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        # On a cold runner bootstatus can return before the installation
+        # service answers. Retry the cleanup before creating this session.
+        subprocess.run(["xcrun", "simctl", "uninstall", device, "org.example.portlab"],
+                       capture_output=True, text=True, timeout=60)
     run("xcrun", "simctl", "install", device, str(app))
     # Resolve the app container before launch. A graphics-service crash can
     # wedge subsequent simctl queries, but the Documents path remains usable.
@@ -364,6 +376,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             candidate=path.read_text(encoding='utf-8')
             if not has_session(candidate,session):
                 time.sleep(1);continue
+            if candidate!=log:
+                (output/'app.log').write_text(candidate,encoding='utf-8')
             log=candidate
             if 'PORTLAB_GAMEPAD_TEST_FAILED' in log or 'PORTLAB_PC_INPUT_TEST_FAILED' in log:
                 (output/'app.log').write_text(log,encoding='utf-8')
@@ -377,7 +391,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
                 # Scene objects reuse this native capture filename. Preserve
                 # the first scene now, before a slow simctl screenshot lets
                 # the game advance and overwrite it with a later chapter.
-                shutil.copyfile(container/'Documents/gameplay-first-native.png',output/'gameplay-first-native.png')
+                preserve_gameplay_capture(container,output)
                 run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
                 captured.add('gameplay-first')
             story_ok = not exercise_story or story_present(log)
@@ -419,12 +433,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     crash_dir = output / "app-crashes"
     crash_dir.mkdir(exist_ok=True)
     if container_logs and container_logs.exists():
-        import shutil
         for crash in container_logs.rglob("*.ips"):
             shutil.copyfile(crash, crash_dir / crash.name)
     diagnostic_reports = Path.home() / "Library/Logs/DiagnosticReports"
     if diagnostic_reports.exists():
-        import shutil
         for pattern in ("*PortLab*.ips", "*SimMetalHost*.ips"):
             for crash in diagnostic_reports.glob(pattern):
                 shutil.copyfile(crash, crash_dir / crash.name)
@@ -470,7 +482,6 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')
-        import shutil
         from startup_pixels import verify
         for index in range(2):
             name=f'startup-card-{index}.png'
@@ -481,7 +492,6 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         report['skin_pixels']=verify_skin((output/'skinned-transition.png').read_bytes())
     if exercise_new_game and startup_fixture:
         report['new_game']=new_game_evidence(log)
-        import shutil
         from startup_pixels import verify_intro
         shutil.copyfile(container/'Documents/intro-first-record.png',output/'intro-first-record.png')
         report['intro_pixels']=verify_intro((output/'intro-first-record.png').read_bytes())
@@ -492,7 +502,6 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             'gameplay_evidence': 'validated by expected scene and gameplay markers'
         }
     if exercise_real_gameplay and resource_parts:
-        import shutil
         from startup_pixels import verify_gameplay_actor
         report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
         if not all(event in log for event in ('PORTLAB_GAMEPAD_MOVEMENT_ADVANCED', 'PORTLAB_GAMEPAD_CAMERA_ADVANCED')):
@@ -517,7 +526,6 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             'scene_evidence': 'expected gameplay/gameComplete marker and gameplay interaction evidence'
         }
     if exercise_story and resource_parts:
-        import shutil
         from startup_pixels import verify_gameplay_actor
         report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
         report['real_resource_story'] = {

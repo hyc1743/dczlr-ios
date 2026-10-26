@@ -7,10 +7,20 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts,story_evidence
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts,story_evidence,preserve_gameplay_capture
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_first_native_frame_survives_later_scene_overwrite(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);container=root/'container';output=root/'evidence'
+            (container/'Documents').mkdir(parents=True);output.mkdir()
+            native=container/'Documents/gameplay-first-native.png'
+            native.write_bytes(b'first scene exact GPU frame')
+            preserve_gameplay_capture(container,output)
+            native.write_bytes(b'later scene overwrote the host filename')
+            self.assertEqual((output/native.name).read_bytes(),b'first scene exact GPU frame')
+
     def test_fresh_launch_session_rejects_old_or_echoed_markers(self):
         session='a'*32
         valid='2026-10-24T00:00:00Z PORTLAB_SESSION='+session+' started\n'
