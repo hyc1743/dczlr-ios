@@ -2,6 +2,7 @@ import ctypes as C
 from pathlib import Path
 import sys
 import unittest
+import json
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
@@ -15,25 +16,39 @@ class NativeModelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.lib=library()
 
-    def test_hidden_binding_evaluates_world_without_populating_render_cache(self):
+    def test_original_render_hide_and_transform_skip_vectors(self):
+        from render_visibility_cases import native_result
+        evidence=json.loads((ROOT/'tests/fixtures/render-visibility-original-vectors.json').read_text())
+        self.assertEqual(evidence['operations'],56)
+        for row in evidence['vectors']:
+            actual=native_result(self.lib,row['input'])
+            for a,b in zip(actual,row['result']):
+                self.assertEqual(a['visible'],b['visible'])
+                for x,y in zip(a['child_world'],b['child_world']):self.assertLess(abs(x-y),1e-5*(1+abs(y)))
+
+    def test_render_hidden_nodes_still_update_world_matrices(self):
         xx=diagnostic_fixture();model=C.c_void_p()
         self.assertEqual(self.lib.dc_model_open_static(xx,len(xx),C.byref(model)),0)
         self.addCleanup(self.lib.dc_model_close,model)
-        world=matrix(translation=(20,4,-3));cached=Matrix();binding=Matrix();visible=C.c_uint32()
         self.assertEqual(self.lib.dc_model_hide_node(model,1,1),0)
-        self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
-        self.assertEqual(self.lib.dc_model_global(model,1,C.byref(cached)),0)
-        self.assertEqual(list(cached.values),list(matrix().values))
-        self.assertEqual(self.lib.dc_model_binding_global(model,1,C.byref(world),C.byref(binding)),0)
-        self.assertEqual(list(binding.values),list(world.values))
-        after=Matrix();self.lib.dc_model_global(model,1,C.byref(after));self.assertEqual(bytes(after),bytes(cached))
-        self.lib.dc_model_mesh_visible(model,0,C.byref(visible));self.assertEqual(visible.value,0)
+        visible=C.c_uint32();out=Matrix()
+        for position in ((20,4,-3),(30,6,-7)):
+            world=matrix(translation=position)
+            self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+            self.assertEqual(self.lib.dc_model_global(model,1,C.byref(out)),0)
+            self.assertEqual(list(out.values),list(world.values))
+            self.lib.dc_model_mesh_visible(model,0,C.byref(visible));self.assertEqual(visible.value,0)
+
+    def test_render_hidden_parent_can_reveal_a_child_without_stopping_transforms(self):
+        xx=diagnostic_fixture();model=C.c_void_p()
+        self.assertEqual(self.lib.dc_model_open_static(xx,len(xx),C.byref(model)),0)
+        self.addCleanup(self.lib.dc_model_close,model)
+        self.assertEqual(self.lib.dc_model_hide_node(model,0,1),0)
+        visible=C.c_uint32();self.lib.dc_model_mesh_visible(model,0,C.byref(visible));self.assertEqual(visible.value,0)
         self.assertEqual(self.lib.dc_model_hide_node(model,1,0),0)
-        self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
-        self.lib.dc_model_global(model,1,C.byref(after));self.assertEqual(bytes(after),bytes(binding))
-        snapshot=bytes(binding)
-        self.assertEqual(self.lib.dc_model_binding_global(model,999,C.byref(world),C.byref(binding)),4)
-        self.assertEqual(bytes(binding),snapshot)
+        world=matrix(translation=(20,4,-3));self.lib.dc_model_tick(model,0,0,C.byref(world))
+        self.lib.dc_model_mesh_visible(model,0,C.byref(visible));self.assertEqual(visible.value,1)
+        out=Matrix();self.lib.dc_model_global(model,1,C.byref(out));self.assertEqual(list(out.values),list(world.values))
 
     def test_original_face_target_binding_is_a_valid_world_matrix_while_hidden(self):
         from native_core import PPArchive
@@ -49,7 +64,8 @@ class NativeModelTests(unittest.TestCase):
                         query=bytes(v^255 for v in (prefix+'_On_namida\0').encode());node=C.c_uint32()
                         self.assertEqual(self.lib.dc_xx_find_node_encoded(parsed.handle,query,len(query),C.byref(node)),0)
                     self.lib.dc_model_hide_node(model,node.value,1);out=Matrix()
-                    self.assertEqual(self.lib.dc_model_binding_global(model,node.value,C.byref(world),C.byref(out)),0)
+                    self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+                    self.assertEqual(self.lib.dc_model_global(model,node.value,C.byref(out)),0)
                     self.assertEqual(out.values[15],1)
                     self.assertGreater(abs(out.values[12])+abs(out.values[13])+abs(out.values[14]),1)
                 finally:self.lib.dc_model_close(model)

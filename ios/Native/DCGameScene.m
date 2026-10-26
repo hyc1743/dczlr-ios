@@ -179,7 +179,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         /* FUN_005181f0 stores its third face-node lookup at +0x1708:
          * prefix + _On_namida. FUN_00539dd0 option 0 retargets that node. */
         uint32_t node=[self findNode:&_face name:[self characterNode:@"a_On_namida"]];dc_matrix target;
-        if(node==UINT32_MAX||dc_model_binding_global(_face.model,node,&_face.world,&target)!=DC_OK){++_pendingContextActions;return nil;}
+        if(node==UINT32_MAX||dc_model_global(_face.model,node,&target)!=DC_OK){++_pendingContextActions;return nil;}
         dc_camera_orbit current=[self activeCameraOrbit],next;
         if(dc_camera_retarget(&current,&target,1,&next)!=DC_OK)return @"Primary camera retarget failed";
         _lastCameraTarget=target;

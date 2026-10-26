@@ -8,6 +8,7 @@ extern "C" {
 #define DC_SCENE_NO_PARENT UINT32_MAX
 typedef struct dc_scene_node {
     uint32_t parent, modifier;
+    /* hidden is original +0x1f8 traversal suppression, not +0x1f0 render hide. */
     uint8_t hidden, billboard, reserved[2];
     dc_matrix local, extra;
 } dc_scene_node;

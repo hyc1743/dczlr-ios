@@ -36,6 +36,7 @@ struct dc_model {
     dc_animation_timing timing[512];
     event_track *events;
     dc_scene_node *nodes,*scratch_nodes;
+    uint8_t *render_hidden;
     dc_matrix *globals,*scratch_globals;
     dc_material_value *materials,*scratch_materials;
     pose_track *poses;
@@ -64,7 +65,7 @@ void dc_model_close(dc_model *m) {
     if (m->skins) for (uint32_t i=0;i<m->info.nodes;++i) {
         free(m->skins[i].bones);free(m->skins[i].palette);free(m->skins[i].scratch_palette);
     }
-    free(m->nodes);free(m->scratch_nodes);free(m->globals);free(m->scratch_globals);
+    free(m->nodes);free(m->scratch_nodes);free(m->render_hidden);free(m->globals);free(m->scratch_globals);
     free(m->materials);free(m->scratch_materials);free(m->poses);free(m->tracks);free(m->events);free(m->meshes);
     free(m->skins);dc_xx_close(m->xx);free(m);
 }
@@ -89,6 +90,7 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
         m->xa_info.morph_vector_sets || m->xa_info.bone_tracks>4096 || m->xa_info.material_tracks>4096) { status=DC_FORMAT;goto failed; }
     if (!static_only) TRY(dc_xa_load_clips(xa,xa_length,m->clips,m->timing,512));
     ALLOC(nodes,m->info.nodes);ALLOC(scratch_nodes,m->info.nodes);
+    ALLOC(render_hidden,m->info.nodes);
     ALLOC(skins,m->info.nodes);
     ALLOC(globals,m->info.nodes);ALLOC(scratch_globals,m->info.nodes);
     ALLOC(materials,m->info.materials);ALLOC(scratch_materials,m->info.materials);
@@ -328,26 +330,6 @@ dc_status dc_model_global(const dc_model *m,uint32_t index,dc_matrix *out) {
     return DC_OK;
 }
 
-dc_status dc_model_binding_global(const dc_model *m,uint32_t index,const dc_matrix *world,dc_matrix *out) {
-    if(!m||!world||!output_allowed(m,out,sizeof(*out)))return DC_ARGUMENT;
-    if(index>=m->info.nodes)return DC_RANGE;
-    uint32_t *chain=malloc(m->info.nodes*sizeof(*chain));
-    if(!chain)return DC_MEMORY;
-    size_t count=0;uint32_t at=index;
-    while(at!=DC_SCENE_NO_PARENT) {
-        if(at>=m->info.nodes||count>=m->info.nodes){free(chain);return DC_FORMAT;}
-        chain[count++]=at;at=m->nodes[at].parent;
-    }
-    dc_scene_node *path=malloc(count*sizeof(*path));dc_matrix *globals=calloc(count,sizeof(*globals));
-    if(!path||!globals){free(chain);free(path);free(globals);return DC_MEMORY;}
-    for(size_t i=0;i<count;++i) {
-        path[i]=m->nodes[chain[count-1-i]];
-        path[i].hidden=0;path[i].parent=i?(uint32_t)i-1:DC_SCENE_NO_PARENT;
-    }
-    dc_status status=dc_scene_update(path,count,world,globals,count);
-    if(status==DC_OK)*out=globals[count-1];
-    free(chain);free(path);free(globals);return status;
-}
 dc_status dc_model_mesh(const dc_model *m,uint32_t index,dc_xx_submesh *out) {
     if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
     if (index>=m->info.submeshes) return DC_RANGE;
@@ -364,6 +346,7 @@ dc_status dc_model_mesh_visible(const dc_model *m,uint32_t mesh,uint32_t *out) {
     if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
     if (mesh>=m->info.submeshes) return DC_RANGE;
     uint32_t node=m->meshes[mesh].info.node;
+    if(m->render_hidden[node]==1){*out=0;return DC_OK;}
     while (node!=DC_XX_NO_PARENT) {
         if (m->nodes[node].hidden) {*out=0;return DC_OK;}
         node=m->nodes[node].parent;
@@ -373,7 +356,14 @@ dc_status dc_model_mesh_visible(const dc_model *m,uint32_t mesh,uint32_t *out) {
 dc_status dc_model_hide_node(dc_model *m,uint32_t node,uint32_t hidden) {
     if(!m)return DC_ARGUMENT;
     if(node>=m->info.nodes||hidden>1)return DC_RANGE;
-    m->nodes[node].hidden=(uint8_t)hidden;
+    /* Original 0x412450 recursively writes render byte +0x1f0. The
+     * independent +0x1f8 transform-suppression byte must stay unchanged. */
+    uint8_t *subtree=calloc(m->info.nodes,1);if(!subtree)return DC_MEMORY;
+    subtree[node]=1;
+    for(uint32_t i=node+1;i<m->info.nodes;++i)
+        if(m->nodes[i].parent!=DC_SCENE_NO_PARENT&&subtree[m->nodes[i].parent])subtree[i]=1;
+    for(uint32_t i=node;i<m->info.nodes;++i)if(subtree[i])m->render_hidden[i]=(uint8_t)hidden;
+    free(subtree);
     return DC_OK;
 }
 dc_status dc_model_load_vertices(const dc_model *m,uint32_t mesh,dc_mesh_vertex *out,size_t capacity) {

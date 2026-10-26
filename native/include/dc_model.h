@@ -39,13 +39,6 @@ DC_API dc_status dc_model_tick(dc_model *model,uint32_t delta,uint32_t now,const
 DC_API dc_status dc_model_get_info(const dc_model *model,dc_xx_info *out);
 DC_API dc_status dc_model_material(const dc_model *model,uint32_t index,dc_material_value *out);
 DC_API dc_status dc_model_global(const dc_model *model,uint32_t index,dc_matrix *out);
-/* Host query for non-render bindings. Evaluates the current local/extra
- * matrices along this node's parent chain with the supplied root world,
- * including render-hidden nodes. Cached render globals, hidden flags and
- * animation state are unchanged. dc_model_global retains the original
- * hidden-subtree cache behavior; it may contain no evaluated target yet. */
-DC_API dc_status dc_model_binding_global(const dc_model *model,uint32_t index,
-    const dc_matrix *world,dc_matrix *out);
 DC_API dc_status dc_model_mesh(const dc_model *model,uint32_t index,dc_xx_submesh *out);
 /* After a successful tick, unskinned positions/normals remain node-local;
  * skinned positions and inverse-transpose blended normals are world-space.
@@ -53,10 +46,13 @@ DC_API dc_status dc_model_mesh(const dc_model *model,uint32_t index,dc_xx_submes
  * Failed ticks preserve both palettes and deformed mesh buffers. */
 DC_API dc_status dc_model_vertex_space(const dc_model *model,uint32_t mesh,uint32_t *out);
 DC_API dc_status dc_model_load_vertices(const dc_model *model,uint32_t mesh,dc_mesh_vertex *out,size_t capacity);
-/* Hierarchical hidden flags only; material alpha/effects are separate draw
- * admission. Projection itself remains a low-level operation without culling. */
+/* Render-hidden byte +0x1f0 controls this mesh. An ancestor's transform-skip
+ * +0x1f8 suppresses traversal. Material alpha/effects are separate admission.
+ * Projection itself remains a low-level operation without culling. */
 DC_API dc_status dc_model_mesh_visible(const dc_model *model,uint32_t mesh,uint32_t *out);
-/* Runtime node visibility; descendants inherit the hidden flag. */
+/* Original 0x412450: recursively set the render-hidden byte (+0x1f0) for
+ * this node and descendants. A later child call may reveal that subtree.
+ * Render hiding does not suppress transforms (+0x1f8) or animation. */
 DC_API dc_status dc_model_hide_node(dc_model *model,uint32_t node,uint32_t hidden);
 DC_API dc_status dc_model_project(const dc_model *model,uint32_t mesh,const dc_matrix *view_projection,
     const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity);

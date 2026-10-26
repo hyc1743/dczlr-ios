@@ -550,8 +550,6 @@ def library():
     lib.dc_model_mesh_visible.restype=C.c_int
     lib.dc_model_hide_node.argtypes=[C.c_void_p,C.c_uint32,C.c_uint32]
     lib.dc_model_hide_node.restype=C.c_int
-    lib.dc_model_binding_global.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(Matrix),C.POINTER(Matrix)]
-    lib.dc_model_binding_global.restype=C.c_int
     lib.dc_matrix_inverse_affine.argtypes=[C.POINTER(Matrix),C.POINTER(Matrix)]
     lib.dc_matrix_inverse_affine.restype=C.c_int
     lib.dc_model_get_animation.argtypes=[C.c_void_p,C.POINTER(AnimationState)]

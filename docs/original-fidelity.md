@@ -136,7 +136,7 @@ The downloaded ZIP passed CRC validation; SHA-256 is
 The layout-review image masks the game area only for reviewing the controls;
 original GPU captures are retained separately and are not modified.
 
-## Primary camera actions (next implementation)
+## Primary camera actions (2026-10-27)
 
 `dc_scene_action_build` now separates original context indices from resource
 IDs. Isolated execution of FUN_00539dd0 and the type-4 system branch of
@@ -175,25 +175,34 @@ each, and a reset pose checked independently against original CAM bytes.
 Local unittest discovery passes 293 tests. GitHub validation for this change
 must complete before treating these new callback captures as observed evidence.
 
-### Hidden target cache correction
+### Render visibility versus transform suppression
 
 Run 40407020843 passed its initial camera gate, but manual artifact review
-found the target position was (0,0,0): the render-hidden face node still had
-its initial identity cache. That run does not certify correct retarget binding.
-The cached-transform API intentionally preserves hidden-subtree globals, so
-changing normal scene traversal would break its separately checked behavior.
+found the target position was (0,0,0): hiding the face mesh incorrectly froze
+its node's transform at the initial identity cache. That run does not certify
+correct retarget binding. The superseded follow-up run 40410498469 was cancelled
+when the original flag distinction was established.
 
-The host now uses `dc_model_binding_global`, a separate read-only query that
-evaluates current local/extra matrices along the selected node's parent chain
-under the current root world matrix. It includes render-hidden ancestors and
-leaves visibility, animation and cached render globals unchanged. This query
-is host binding work, not a claim that the original hidden-cache algorithm
-always recomputes those nodes. Tests compare it to visible-node evaluation,
-assert that render caches/visibility stay unchanged, and check the actual
-bound face node for all three original stage resources. Captures now retain
-the complete target world matrix; the verifier rejects missing, nonfinite or
-non-affine matrices. Camera retarget admission also rejects a zero-filled
-non-affine target matrix. The corrected binding requires a new simulator run.
+Original FUN_00412450 recursively writes render-hidden byte +0x1f0. Original
+FUN_00415620 continues matrix updates/traversal under a render-hidden parent;
+its independent +0x1f8 byte suppresses matrix updates and the subtree. The
+previous host conflated these two bytes in dc_model_hide_node. The final fix
+stores render visibility separately, recursively sets it as the original does,
+and keeps serialized transform-suppression flags unchanged. A child may be
+shown again beneath a render-hidden parent. Hidden face targets now have
+normal current cached world matrices, used through dc_model_global; no
+special forced-binding transform query is retained.
+
+Isolated original instruction execution on eight synthetic two-node scenarios
+(56 operations) checks recursive render hiding, revealing a child, matrix
+updates while hidden, and independent transform-skip behavior. Matrix math
+and the unused no-billboard camera inverse are explicit synthetic boundaries;
+render-list admission and cached matrices are observed, not GPU equivalence.
+The vectors are in tests/fixtures/render-visibility-original-vectors.json.
+Resource checks cover the hidden face target of all three original stages.
+Captures retain the complete target world matrix; nonfinite, missing and
+non-affine matrices are rejected. Retarget math also rejects a zero-filled
+non-affine input. The corrected target still requires final simulator evidence.
 
 A separate static follow-up finding for the remaining character callbacks:
 FUN_005201e0 constructs 35 effect slots from 30 names starting at VA 0x63c278
