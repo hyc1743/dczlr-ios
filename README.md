@@ -58,7 +58,7 @@ unfinished; these numeric/reader results do not make gameplay available.
 Implementation and verification details:
 
 - [Story dispatch and chapter-end menu](docs/story-dispatch.md)
-- [Keyboard/mouse controls](docs/windows-controls.md), [original Windows input evidence](docs/windows-input-evidence.md), [gamepad layout](docs/gamepad.md)
+- [Game-specific touch controls](docs/touch-controls.md), [optional keyboard/mouse panel](docs/windows-controls.md), [original Windows input evidence](docs/windows-input-evidence.md)
 - [Current runtime completeness audit](docs/runtime-completeness.md)
 - [Model runtime, startup connection and triangle geometry](docs/model-runtime.md)
 - [Animation controller](docs/animation-reconstruction.md), [material sampling](docs/material-sampling.md), [node pose sampling](docs/pose-sampling.md)

@@ -56,6 +56,13 @@ repeated interaction/advance presses remain gated while a voice is playing.
 
 ## Validation
 
+Version 0.1.7 (build 8), game code `c0bd2fd`, passed run `40307596134`:
+261 portable tests, the simulator build and UIKit regression, generated
+startup and keyboard/mouse checks, the real-resource visible-touch route,
+and unsigned ARM64 device packaging. The preceding complete touch route in
+run `40306482306` also passed. The final source additionally hides an unused
+title skip button and checks that condition in the UIKit regression.
+
 Portable tests cover scene layouts, phone/tablet safe areas, minimum target
 sizes, concurrent ownership, pointer coordinates, cancelled touches, short
 save taps through the actual bridge, and stopping camera movement without

@@ -1,5 +1,23 @@
 # Real-resource playability checks — 2026-10-26
 
+## Version 0.1.7: actual touch-control route
+
+Run `40307596134` from game code `c0bd2fd` passed 261 portable tests, the
+simulator build, UIKit control ownership/window checks, the real-resource
+touch route and unsigned ARM64 device packaging. Unlike the older tests
+below, this route targets visible controls through the actual window hit
+test and UIKit touch handlers. Raw controller injection is disabled.
+
+Observed actions include title confirmation, script continuation, the
+optional position-adjustment menu, camera drag, the visible Save button,
+interaction completion and the visible Next Chapter action. The first
+native GPU frame and the saved player/story records are checked too.
+See [Touch controls](touch-controls.md) for the scene-specific layout and
+the bounds of the test. Full original gameplay and physical-device finger
+delivery remain unverified; the later-map placement finding below remains.
+
+## Earlier bounded gameplay checks
+
 The initial native gameplay routes pass on an iPhone 16 Pro simulator running
 iOS 18.5. This does **not** establish complete game playability or physical
 iPhone compatibility.
