@@ -108,15 +108,18 @@ def verify_gameplay_actor(data):
     """
     width,height,channels,pixels=decode(data)
     scale=min(width/1024,height/768);ox=(width-1024*scale)/2;oy=(height-768*scale)/2
-    hits=0;first=height;last=-1
+    hits=0;skin=0;first=height;last=-1
     for y in range(int(oy+100*scale),min(height,int(oy+740*scale))):
         for x in range(max(0,int(ox+280*scale)),min(width,int(ox+740*scale))):
             at=(y*width+x)*channels;r,g,b=pixels[at:at+3]
-            if b>r+20 and g>r+10 and b>=g-8:
+            # Grey-blue background silhouettes passed the former loose gate.
+            # Require saturated outfit color and a separate skin-color region.
+            if b>r+45 and g>r+25 and b>=g-8:
                 hits+=1;first=min(first,y);last=max(last,y)
+            if r>g+12 and g>b+10 and r>120:skin+=1
     area=1024*768*scale*scale
-    if not area*.01<hits<area*.25 or last-first<160*scale:
-        raise ValueError(f'First gameplay actor is absent, occluded or fragmented: outfit_pixels={hits}, span={last-first}')
-    return {'method':'first native GPU frame; bounded outfit area and height',
-            'outfit_pixels':hits,'vertical_span':last-first,'width':width,'height':height,
+    if not area*.01<hits<area*.25 or skin<area*.003 or last-first<160*scale:
+        raise ValueError(f'First gameplay actor is absent, occluded or fragmented: outfit_pixels={hits}, skin_pixels={skin}, span={last-first}')
+    return {'method':'first native GPU frame; bounded saturated outfit area, skin region and height',
+            'outfit_pixels':hits,'skin_pixels':skin,'vertical_span':last-first,'width':width,'height':height,
             'original_image_equivalence':'not established'}

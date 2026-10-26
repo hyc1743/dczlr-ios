@@ -1,0 +1,116 @@
+name: Test real game routes with an existing simulator app
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_run:
+        description: Successful Build PortLab iOS IPA run supplying the simulator app
+        required: true
+        type: string
+      resource_bundle_urls:
+        description: Comma-separated HTTPS URLs of the encrypted resource parts
+        required: true
+        type: string
+      resource_bundle_sha256s:
+        description: Comma-separated SHA-256 values of the encrypted parts
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  playability:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify simulator app source matches the current native and iOS sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_RUN: ${{ inputs.app_run }}
+        run: |
+          [[ "$APP_RUN" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$APP_RUN" > "$RUNNER_TEMP/app-run.json"
+          python3 - <<'PY'
+          import json,os,subprocess
+          from pathlib import Path
+          run=json.loads((Path(os.environ['RUNNER_TEMP'])/'app-run.json').read_text())
+          assert run['conclusion']=='success'
+          assert run['path']=='.github/workflows/build-ios.yml'
+          subprocess.run(['git','diff','--exit-code',run['head_sha'],'HEAD','--','ios','native'],check=True)
+          print('Reusing simulator app from source '+run['head_sha'])
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: PortLab-simulator-and-resources
+          run-id: ${{ inputs.app_run }}
+          github-token: ${{ github.token }}
+          path: out/reused-simulator
+      - name: Prepare existing simulator app and Python dependencies
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 - <<'PY'
+          import os,plistlib,stat
+          from pathlib import Path
+          apps=list(Path('out/reused-simulator').rglob('PortLab.app'))
+          assert len(apps)==1
+          app=apps[0].resolve()
+          info=plistlib.loads((app/'Info.plist').read_bytes())
+          binary=app/info['CFBundleExecutable']
+          binary.chmod(binary.stat().st_mode|stat.S_IXUSR|stat.S_IXGRP|stat.S_IXOTH)
+          with open(os.environ['GITHUB_ENV'],'a') as env:
+              env.write('PORTLAB_SIM_APP='+str(app)+'\n')
+          PY
+      - name: Download and decrypt the verified resource bundle
+        id: resources
+        env:
+          RESOURCE_URLS: ${{ inputs.resource_bundle_urls }}
+          RESOURCE_HASHES: ${{ inputs.resource_bundle_sha256s }}
+          DCZLR_RESOURCE_KEY: ${{ secrets.DCZLR_RESOURCE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,os,urllib.request
+          from pathlib import Path
+          urls=os.environ['RESOURCE_URLS'].split(',');hashes=os.environ['RESOURCE_HASHES'].split(',')
+          assert len(urls)==len(hashes) and len(urls)>0
+          with (Path(os.environ['RUNNER_TEMP'])/'resources.dczenc').open('wb') as bundle:
+              for url,expected in zip(urls,hashes):
+                  assert url.startswith('https://')
+                  digest=hashlib.sha256()
+                  with urllib.request.urlopen(url,timeout=120) as source:
+                      while data:=source.read(1024*1024):
+                          digest.update(data);bundle.write(data)
+                  assert digest.hexdigest()==expected
+          PY
+          python3 tools/encrypted_resource_parts.py unpack --input "$RUNNER_TEMP/resources.dczenc" \
+            --output "$RUNNER_TEMP/resource-parts" --key-env DCZLR_RESOURCE_KEY
+      - name: Exercise real movement, camera, interaction and save records
+        timeout-minutes: 10
+        run: |
+          python3 tools/check_ios_sprite.py --app "$PORTLAB_SIM_APP" --runtime iOS-18-5 \
+            --expected-scene gameplay --exercise-new-game --exercise-real-gameplay \
+            --resource-parts "$RUNNER_TEMP/resource-parts" --output out/real-game-controls
+      - name: Exercise script to gameplay to next script with exact first-frame capture
+        if: ${{ !cancelled() && steps.resources.outcome == 'success' }}
+        timeout-minutes: 14
+        run: |
+          python3 tools/check_ios_sprite.py --app "$PORTLAB_SIM_APP" --runtime iOS-18-5 \
+            --expected-scene story --exercise-story \
+            --resource-parts "$RUNNER_TEMP/resource-parts" --output out/real-game-story
+      - name: Upload logs, reports, save metadata and captured frames
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-game-playability-evidence
+          path: |
+            out/real-game-controls/
+            out/real-game-story/

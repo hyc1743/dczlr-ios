@@ -162,6 +162,12 @@ def pose_advanced(log):
 def scene_ready(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
     if expected == 'story':
         return story_present(log)
+    if expected in GAMEPLAY_SCENES:
+        try:
+            gameplay_evidence(log,require_complete=expected=='gameComplete',require_skin=True)
+            return "Vulkan 初始化或绘制失败" not in log
+        except ValueError:
+            return False
     observed = gameplay_scenes(log) if expected in GAMEPLAY_SCENES else presented_scenes(log)
     return (expected in observed and (not require_animation or animation_advanced(log))
             and (not require_xa or xa_fixture_loaded(log)) and (not require_material or material_advanced(log))
@@ -367,20 +373,23 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
                     if scene not in captured:
                         run('xcrun','simctl','io',device,'screenshot',str(output/('startup-'+scene+'.png')),timeout=30)
                         captured.add(scene)
-            if exercise_real_gameplay and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
-                run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
-                captured.add('gameplay-first')
-            if exercise_story and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
+            if (exercise_real_gameplay or exercise_story) and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
+                # Scene objects reuse this native capture filename. Preserve
+                # the first scene now, before a slow simctl screenshot lets
+                # the game advance and overwrite it with a later chapter.
+                shutil.copyfile(container/'Documents/gameplay-first-native.png',output/'gameplay-first-native.png')
                 run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
                 captured.add('gameplay-first')
             story_ok = not exercise_story or story_present(log)
+            gameplay_ok = not exercise_real_gameplay or all(event in log for event in (
+                'PORTLAB_GAMEPAD_MOVEMENT_ADVANCED', 'PORTLAB_GAMEPAD_CAMERA_ADVANCED'))
             scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
             audio_ok=not startup_fixture or bool(re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log))
             if startup_fixture:audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_NATIVE_SKIN_ADVANCED(?= |$)',log))
             if exercise_new_game and startup_fixture:
                 audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log))
                 audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_RECORD=1:0(?= |$)',log))
-            if (scene_ok and audio_ok and story_ok) or "Vulkan 初始化或绘制失败" in log:
+            if (scene_ok and audio_ok and story_ok and gameplay_ok) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
     launch_pending=launch_process.poll() is None
@@ -484,11 +493,24 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         }
     if exercise_real_gameplay and resource_parts:
         import shutil
-        shutil.copyfile(container/'Documents/gameplay-first-native.png',output/'gameplay-first-native.png')
         from startup_pixels import verify_gameplay_actor
         report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
         if not all(event in log for event in ('PORTLAB_GAMEPAD_MOVEMENT_ADVANCED', 'PORTLAB_GAMEPAD_CAMERA_ADVANCED')):
             raise RuntimeError('Controller input did not advance both native movement and camera')
+        import ctypes as C
+        from native_core import library, GamePlayer, StoryState
+        saved=(container/'Documents/game/Data/save/player.state').read_bytes()
+        (output/'player.state').write_bytes(saved)
+        player,story=GamePlayer(),StoryState()
+        lib=library()
+        player_status=lib.dc_game_player_load(saved,len(saved),C.byref(player))
+        story_status=lib.dc_story_load(saved[32:],max(0,len(saved)-32),C.byref(story))
+        save_report={'bytes':len(saved),'player_status':player_status,'story_status':story_status,
+                     'player_map':player.map_selector,'story_chapter':story.chapter if story_status==0 else None}
+        (output/'save-check.json').write_text(json.dumps(save_report,indent=2)+'\n',encoding='utf-8')
+        if player_status or story_status:
+            raise RuntimeError('Gameplay save did not preserve both player and story records: '+json.dumps(save_report))
+        report['save_record']=save_report
         report['real_resource_gameplay'] = {
             'resources': 'local dczdata parts staged and imported',
             'interaction_input': 'automated touch pulses through the normal input adapter',
@@ -496,7 +518,6 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         }
     if exercise_story and resource_parts:
         import shutil
-        shutil.copyfile(container/'Documents/gameplay-first-native.png',output/'gameplay-first-native.png')
         from startup_pixels import verify_gameplay_actor
         report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
         report['real_resource_story'] = {

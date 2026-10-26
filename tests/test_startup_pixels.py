@@ -5,7 +5,7 @@ import unittest
 import zlib
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
-from startup_pixels import decode,verify,verify_intro,verify_skin
+from startup_pixels import decode,verify,verify_intro,verify_skin,verify_gameplay_actor
 
 
 def png(color,width=8,height=8,letterbox=False):
@@ -16,6 +16,22 @@ def png(color,width=8,height=8,letterbox=False):
 
 
 class StartupPixelTests(unittest.TestCase):
+    def test_actor_gate_rejects_blue_background_without_skin(self):
+        def sample(with_skin, grey_blue=False):
+            def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
+            width,height=320,240
+            pixels=bytearray(bytes((0,0,0,255))*width*height)
+            color=(130,155,170,255) if grey_blue else (70,150,200,255)
+            for y in range(60,220):
+                for x in range(140,180):
+                    value=(240,200,160,255) if with_skin and 70<=y<100 else color
+                    pixels[(y*width+x)*4:(y*width+x)*4+4]=bytes(value)
+            raw=b''.join(b'\0'+pixels[y*width*4:(y+1)*width*4] for y in range(height))
+            return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+        self.assertGreater(verify_gameplay_actor(sample(True))['skin_pixels'],0)
+        for data in (sample(False),sample(False,True),png((0,0,0),320,240)):
+            with self.assertRaises(ValueError):verify_gameplay_actor(data)
+
     def test_skin_color_gate_does_not_accept_a_card_or_black_frame(self):
         # The color gate only proves generated surface presence, not pose or
         # bone identity; the native change/presentation marker is separate.
