@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import math
 import plistlib
 import re
 from pathlib import Path
@@ -179,12 +180,34 @@ def mouse_input_evidence(log):
     required=('PORTLAB_TOUCH_INPUT_STARTED','PORTLAB_INTRO_RECORD=0:0','PORTLAB_INTRO_RECORD=1:0',
         'PORTLAB_INTRO_RECORD=2:0','PORTLAB_SCENE_PRESENTED=gameplay','PORTLAB_GAMEPLAY_SKIN_ADVANCED',
         'PORTLAB_MOUSE_MOVE_DELIVERED','PORTLAB_MOUSE_LEFT_DELIVERED','PORTLAB_MOUSE_RIGHT_DELIVERED',
-        'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_INPUT_PASSED')
+        'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_CONTEXT_RENDERED',
+        'PORTLAB_MOUSE_CONTEXT_SELECTED','PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_MOUSE_INPUT_PASSED')
     for event in required:
         if not re.search(r'(?m)^\S+ '+re.escape(event)+r'(?= |$)',log):raise ValueError('Missing mouse evidence: '+event)
     return {'scope':'bounded input on first real-resource scene','input':'visible relative drag, mouse buttons and Num6/arrow combination',
         'menu':'left click accepted by scene hit test','complete_story':'not tested',
-        'right_click_menu_behavior':'not certified','original_game_equivalence':'not established','physical_device':'not tested'}
+        'right_click_menu_behavior':'initial camera menu GPU visibility, left selection and right dismissal checked',
+        'context_action_callbacks':'not implemented; selection does not certify an executed game action',
+        'original_game_equivalence':'not established','physical_device':'not tested'}
+
+
+def black_gutter_evidence(log):
+    controls=re.findall(r'(?m)^\S+ PORTLAB_GAMEPAD_PRESENTATION ([^\n]+)',log)
+    render=re.findall(r'(?m)^\S+ PORTLAB_RENDER_VIEWPORT ([^\n]+)',log)
+    if not controls or not render:raise ValueError('Missing game/control viewport evidence')
+    c=controls[-1];r=render[-1]
+    for field in ('layout=black-gutters-v4','attached=1','hidden=0','key_overlap=0'):
+        if field not in c.split():raise ValueError('Virtual controls overlap game or are not visible: '+field)
+    def rect(row):
+        m=re.search(r'\bgame=([0-9.,-]+)',row)
+        values=[float(v) for v in m[1].split(',')] if m else []
+        if len(values)!=4 or not all(math.isfinite(v) for v in values):raise ValueError('Invalid game rectangle')
+        return values
+    a=rect(c);b=rect(r)
+    if any(abs(x-y)>.01 for x,y in zip(a,b)):raise ValueError('Render and controls use different game rectangles')
+    x,y,w,h=b
+    if x<=0 or y<0 or w<=0 or h<=0 or abs(w/h-4/3)>.001:raise ValueError('Invalid central 4:3 game viewport')
+    return {'game_rect_points':b,'virtual_key_overlap':0,'layout':'all 28 key circles in black side gutters','pointer_mapping':'shared game viewport'}
 
 def scene_ready(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
     if expected=='mouseInput':
@@ -238,6 +261,21 @@ def run(*command, timeout=120):
     if result.returncode:
         raise RuntimeError(f"{command[0]} failed: {(result.stdout + result.stderr)[-4000:]}")
     return result.stdout.strip()
+
+
+def simulator_screenshot(device, path):
+    """Retry a failed simulator capture once; retain both attempts as evidence."""
+    attempts=[]
+    for attempt in range(2):
+        try:
+            result=run('xcrun','simctl','io',device,'screenshot',str(path),timeout=30)
+            attempts.append({'attempt':attempt+1,'result':'saved','output':result})
+            Path(str(path)+'.capture.json').write_text(json.dumps(attempts,indent=2)+'\n',encoding='utf-8')
+            return
+        except (subprocess.TimeoutExpired,RuntimeError) as error:
+            attempts.append({'attempt':attempt+1,'result':'failed','error':str(error)})
+    Path(str(path)+'.capture.json').write_text(json.dumps(attempts,indent=2)+'\n',encoding='utf-8')
+    raise RuntimeError('Simulator screenshot failed twice: '+str(path))
 
 
 def select_device(output, runtime):
@@ -433,14 +471,14 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             if startup_fixture:
                 for scene in presented_scenes(log):
                     if scene not in captured:
-                        run('xcrun','simctl','io',device,'screenshot',str(output/('startup-'+scene+'.png')),timeout=30)
+                        simulator_screenshot(device,output/('startup-'+scene+'.png'))
                         captured.add(scene)
             if (exercise_real_gameplay or exercise_story or mouse_input) and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
                 # Scene objects reuse this native capture filename. Preserve
                 # the first scene now, before a slow simctl screenshot lets
                 # the game advance and overwrite it with a later chapter.
                 preserve_gameplay_capture(container,output)
-                run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
+                simulator_screenshot(device,output/'gameplay-first.png')
                 captured.add('gameplay-first')
             story_ok = not exercise_story or story_present(log)
             if touch_controls:
@@ -493,13 +531,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         for pattern in ("*PortLab*.ips", "*SimMetalHost*.ips"):
             for crash in diagnostic_reports.glob(pattern):
                 shutil.copyfile(crash, crash_dir / crash.name)
-    try:
-        screenshot = subprocess.run(["xcrun", "simctl", "io", device, "screenshot", str(output / "sprite-scene.png")],
-            capture_output=True, text=True, timeout=30)
-        screenshot_log = screenshot.stdout + screenshot.stderr
-    except subprocess.TimeoutExpired as error:
-        screenshot_log = str(error)
-    (output / "screenshot-command.txt").write_text(screenshot_log, encoding="utf-8")
+    simulator_screenshot(device,output/'sprite-scene.png')
     # Diagnostics can outlast a late cold launch. Re-read the same container's
     # evidence before classifying the outcome; a stale empty snapshot is not
     # proof that the app failed to start.
@@ -534,7 +566,14 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
     if mouse_input:
         from startup_pixels import verify_gameplay_actor
+        report['virtual_controls']=black_gutter_evidence(log)
         report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
+        for name in ('gameplay-first-native.json','gameplay-context-native.png','gameplay-context-native.json'):
+            shutil.copyfile(container/'Documents'/name,output/name)
+        context=json.loads((output/'gameplay-context-native.json').read_text())
+        if not context['context_open'] or context['context_icon']!=3 or context['context_count']!=7 or context['context_visible_pixels']<100:
+            raise ValueError('Original camera context is not visible in exact GPU capture')
+        report['context_gpu_capture']=context
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')

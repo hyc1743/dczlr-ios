@@ -2,8 +2,8 @@
 
 The native host is a development port. An IPA, submitted frames, input markers
 and a bounded map exercise do not establish a complete playable original
-runtime; the reconstructed story/menu/interaction logic below is verified
-function-by-function against the pinned original executable.
+runtime. Some isolated numeric story helpers have original-function oracles;
+those checks do not certify the scene state machines or their host wiring.
 
 | Area | Observed host behavior | Completeness |
 | --- | --- | --- |
@@ -14,8 +14,8 @@ function-by-function against the pinned original executable.
 | Script chapters | The intro text host plays any numbered script chapter, including mid-story entries | Chapters 0–25 scripts verified against local 00–16.txt resources |
 | Gameplay scenes | Chapters 3/10/17 (gameplay), 5/12/19 (watch), 7/14/21 (night) and 24 (ending) enter the story scene with the original map/stage | Scene kinds wired; per-scene camera/lighting internals remain partial |
 | Chapter-end menu | Rows map to the original action codes 2/3/4/5 (advance, edit, save menu, fade) | Original FUN_00523380 semantics reimplemented and matched on 5,760 oracle cases |
-| Gameplay menu activation | Row 2 touch, row 4 finish, rows 1/3/5 alternate events with the interaction-counter gate | Original FUN_00532240 chapter-type-4 branch reimplemented |
-| Interactions | Touch/finish/alternate events drive animation, voice chains and outcome flags | Bounded port semantics; the original per-region mood curves remain unrecovered |
+| Scene UI | Original right-side icons and initial type-4 right-click menu profiles render from RPP_02 | Menu layout/input shell implemented; evolved profiles and action callbacks pending |
+| Interactions | Unsupported main-row-to-event/chapter shortcuts removed | Original context action callbacks and scene behavior remain incomplete |
 | Story persistence | Story state roundtrips through the host save record with the player position | Native PLGS record with checksum verified |
 | Chapter 24 ending | Entering the ending chapter unlocks all three stage progress flags; the epilogue script completes the story | Matches the original end-of-script dispatcher |
 | Saves | Host position/map state and original save-prefix metadata exist | Complete original session serialization is not established |
@@ -25,13 +25,13 @@ Source boundaries:
 
 - `native/game/dc_story.c`: recovered chapter tables, chapter-end handler,
   script-finish routing and the story save record.
-- `native/game/dc_gameplay.c`: `dc_game_menu_activate` row dispatch from
-  FUN_00532240.
+- `native/game/dc_scene_ui.c`: initial right-click profiles and menu geometry
+  from FUN_005319e0/00533a70/005352c0/00535730; no story dispatch.
 - `ios/Native/DCVulkanSpriteView.m`: story loop, title destinations, gallery
   presentation and persistence wiring.
 - `ios/Native/DCIntroScene.m`: numbered script chapters with mid-story entry.
-- `ios/Native/DCGameScene.m`: story scene kinds, the six-row menu, chapter-end
-  actions and the edit presentation.
+- `ios/Native/DCGameScene.m`: partial scene rendering and original scene icon/
+  context sprite composition. Original scene action state machines are pending.
 
 Verification:
 

@@ -30,4 +30,9 @@ typedef NS_ENUM(NSInteger, DCVulkanSpriteScene) {
     NS_SWIFT_NAME(requestDraw(atX:y:time:touching:controller:pcInput:completion:));
 - (void)releaseRenderer;
 @end
+/* Full-screen input/black gutter coordinate space; its child renders 4:3. */
+@interface DCVulkanContainerView : UIView
+@property(nonatomic, readonly) DCVulkanSpriteView *surface;
+@property(nonatomic) BOOL reservesControls;
+@end
 NS_ASSUME_NONNULL_END

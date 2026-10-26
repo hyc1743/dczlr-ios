@@ -70,3 +70,45 @@ The unrecognized `rpsp_02.pp` archive is explicitly excluded. This does not
 certify original scene effects, lighting, geometry composition or gameplay.
 No texture payloads were exported; the metadata report is retained locally as
 `out/texture-upload-audit.json`.
+
+## Scene UI and black gutters
+
+The main scene icons are the P_chara/P_fuku/P_cam/P_sys S/N pairs from
+RPP_02, not the HScene selection page. Table VA 0x673d98 specifies 96x96
+sprites at (920,328/440/552/664), zero pivot. FUN_0051a4c0 hides the outfit
+icon when the selected stage progress is zero. The host now renders these
+sprites after geometry with depth disabled, retains that availability rule,
+and loads the context M_k/M_c/M_s sprite pairs using their original IDs.
+FUN_005319e0 uses a 105-unit fan, thirds of 35, logical 240x32 sprites and
+pivot (.9,.5); the input core now hit-tests those same rectangles.
+
+The unsupported `dc_game_menu_activate` API and production main-icon-to-clip,
+interaction-count and finish mappings were removed. Context selections and
+close codes are recorded separately. **Context action callbacks are pending**;
+opening or selecting a visible menu does not certify the selected action.
+Initial type-4 character, camera and system profiles are admitted. Evolved
+character/outfit profiles and other scene types fail admission rather than
+showing guessed options. Camera mode flags currently remain at initial values.
+
+A shared C viewport reserves three columns of virtual controls in each black
+gutter and keeps the central game view at 4:3. Renderer frame, visible key
+bounds, relative mouse scale and DEBUG pointer route use the same rectangle.
+The pointer persists within that rectangle. All 28 key circles must stay
+outside it, including Esc/V/F1. iPad layouts reserve gutters by reducing the
+central game viewport, rather than covering its original UI.
+
+The mouse gate now requires exact GPU context visibility, a left-selected
+context index, subsequent right dismissal and reopening. Separate GPU
+readbacks compare actor against map-only geometry and UI against geometry,
+so icons cannot count as visible actor pixels. The report explicitly keeps
+context action callbacks, full story and original equivalence unverified.
+The preceding f96d3c6 GitHub run 40393733219 passed portable tests and failed
+on a simctl startup-title screenshot timeout after title presentation; it
+never reached the real mouse gate. Screenshot capture now retries once and
+retains each attempt, and still fails if neither capture succeeds.
+
+FUN_0051a890 additionally selects the outfit texture atlas quarter by stage:
+u0=.5/.25/0, u1=u0+.25 (the underlying resource is 384x96). Both that helper
+and FUN_00533940 render the S base followed by a visible N hover overlay.
+The host preserves that composition instead of stretching the entire outfit
+atlas or replacing the base texture on hover.

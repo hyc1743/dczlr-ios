@@ -15,7 +15,8 @@ class SceneEvidenceTests(unittest.TestCase):
         events=('PORTLAB_TOUCH_INPUT_STARTED','PORTLAB_INTRO_RECORD=0:0','PORTLAB_INTRO_RECORD=1:0',
             'PORTLAB_INTRO_RECORD=2:0','PORTLAB_SCENE_PRESENTED=gameplay','PORTLAB_GAMEPLAY_SKIN_ADVANCED',
             'PORTLAB_MOUSE_MOVE_DELIVERED','PORTLAB_MOUSE_LEFT_DELIVERED','PORTLAB_MOUSE_RIGHT_DELIVERED',
-            'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_INPUT_PASSED')
+            'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_CONTEXT_RENDERED',
+            'PORTLAB_MOUSE_CONTEXT_SELECTED','PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_MOUSE_INPUT_PASSED')
         def log(rows):return '\n'.join('2026-10-27T00:00:00Z '+e+' submitted' for e in rows)
         report=mouse_input_evidence(log(events));self.assertEqual(report['complete_story'],'not tested')
         self.assertTrue(scene_ready(log(events),'mouseInput'));self.assertFalse(scene_ready(log(events),'story'))

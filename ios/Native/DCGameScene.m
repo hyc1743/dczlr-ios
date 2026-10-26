@@ -4,6 +4,7 @@
 #include "dc_camera.h"
 #include "dc_eyeneck.h"
 #include "dc_gameplay.h"
+#include "dc_scene_ui.h"
 #include "dc_menu.h"
 #include "dc_model.h"
 #include "dc_story.h"
@@ -88,7 +89,14 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_game_player _player;
     BOOL _playerSaveDirty,_manualSaveCompleted;
     dc_game_interaction_state _interactionState;
-    dc_game_menu_activate_state _activateState;
+    DCArchive *_sceneUIArchive;
+    NSMutableDictionary<NSString *,NSNumber *> *_sceneUITextures;
+    dc_scene_context _contextMenu;
+    BOOL _contextOpen;
+    int32_t _mainIconHover,_lastContextSelection;
+    uint32_t _stageProgress,_contextOpens,_contextSelections,_contextDismissals,_sceneUIDraws;
+    uint32_t _sceneUIIconDraws;
+    size_t _sceneUIVisiblePixels,_sceneContextVisiblePixels;
     BOOL _interactionActive;uint32_t _interactionStartTick;
     uint32_t _interactionCount;BOOL _interactionCompleted;
     uint32_t _storyChapter,_storyStage,_storyPhase,_mapSelector;
@@ -129,8 +137,9 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSDictionary *)lastRenderCapture { return _lastRenderCapture; }
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u",
-        _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow];
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d context_callbacks=pending",
+        _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
+        _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
@@ -457,7 +466,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _cameraAutoSelected=YES;return found?nil:@"No camera preset projects the actor";
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
-    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage resumeSavedPlayer:(BOOL)resume error:(NSString **)error {
+    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress resumeSavedPlayer:(BOOL)resume error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
     _storyChapter=chapter;_storyPhase=0;
     dc_story_chapter profile;
@@ -466,6 +475,8 @@ static void freeMorphCaches(dc_game_model *slot) {
      * previous map/stage from the story state. */
     _mapSelector=profile.map>=0 ? (uint32_t)profile.map : (mapSelector<=8 ? mapSelector : 0);
     _sceneKind=profile.scene;_sceneType=profile.scene_type;
+    _stageProgress=progress;_mainIconHover=-1;_lastContextSelection=-1;
+    _sceneUITextures=[NSMutableDictionary dictionary];
     _storyStage=profile.stage>=0 ? (uint32_t)profile.stage : (stage<=2 ? stage : 0);
     if(dc_game_actor_prefix(_storyStage,&_characterPrefix)!=DC_OK){if(error)*error=@"Actor stage profile rejected";return nil;}
 #if DEBUG
@@ -475,6 +486,14 @@ static void freeMorphCaches(dc_game_model *slot) {
     _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};
     _gameMenuInitialized=YES;
     _naturalGameplayRoute=![[[NSProcessInfo processInfo] environment][@"PORTLAB_EXERCISE_REAL_GAMEPLAY"] isEqualToString:@"1"];
+    if(_sceneType==4) {
+        _sceneUIArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:nil];
+        if(!_sceneUIArchive){if(error)*error=@"Original scene UI archive unavailable";return nil;}
+        for(NSString *icon in @[@"chara",@"fuku",@"cam",@"sys"])for(NSString *state in @[@"S",@"N"]) {
+            NSString *name=[NSString stringWithFormat:@"P_%@_%@.ema",icon,state];
+            if(![self sceneUITexture:name error:error])return nil;
+        }
+    }
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:nil];
@@ -598,9 +617,63 @@ static void freeMorphCaches(dc_game_model *slot) {
             slot->textures[i]=0;
         }
     }
-    _renderer=NULL;
+    [self detachSceneUI];_renderer=NULL;
 }
-- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face]; }
+- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachSceneUI];[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face]; }
+
+- (void)detachSceneUI {
+    if(_renderer)for(NSNumber *handle in _sceneUITextures.allValues)dc_vk_sprite_remove_texture(_renderer,handle.unsignedLongLongValue);
+    [_sceneUITextures removeAllObjects];
+}
+- (uintptr_t)sceneUITexture:(NSString *)name error:(NSString **)error {
+    NSNumber *cached=_sceneUITextures[name];if(cached)return cached.unsignedLongLongValue;
+    for(uint32_t i=0;i<_sceneUIArchive.entryCount;++i) {
+        if([[_sceneUIArchive asciiNameAtIndex:i] caseInsensitiveCompare:name]!=NSOrderedSame)continue;
+        DCDecodedImage *image=[_sceneUIArchive decodeImageAtIndex:i inputLimit:8*1024*1024 outputLimit:16*1024*1024 error:nil];
+        uintptr_t handle=0;
+        if(image&&dc_vk_sprite_upload(_renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&handle)==DC_OK) {
+            _sceneUITextures[name]=@(handle);return handle;
+        }
+        break;
+    }
+    if(error)*error=[NSString stringWithFormat:@"Original scene UI texture unavailable: %@",name];return 0;
+}
+- (NSString *)appendSceneUISprite:(NSString *)name pose:(dc_sprite_pose)pose draws:(dc_vk_geometry_item *)draws count:(size_t *)count storage:(NSMutableArray *)storage {
+    NSString *error=nil;uintptr_t texture=[self sceneUITexture:name error:&error];if(!texture)return error;
+    dc_sprite_vertex strip[4];if(dc_sprite_build_vertices(&pose,strip)!=DC_OK)return @"Scene UI vertex conversion failed";
+    NSMutableData *data=[NSMutableData dataWithLength:6*sizeof(dc_sprite_vertex)];dc_sprite_vertex *v=data.mutableBytes;
+    const unsigned order[]={0,1,2,2,1,3};for(unsigned i=0;i<6;++i)v[i]=strip[order[i]];
+    [storage addObject:data];draws[(*count)++]=(dc_vk_geometry_item){.vertices=v,.vertex_count=6,.texture=texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_DISABLED,.cull_mode=DC_VK_CULL_NONE};
+    return nil;
+}
+- (NSString *)appendSceneUI:(dc_vk_geometry_item *)draws count:(size_t *)count storage:(NSMutableArray *)storage viewport:(dc_viewport)viewport {
+    _sceneUIDraws=0;if(_sceneType!=4)return nil;
+    float scale=viewport.width/1024.f;
+    NSArray<NSString *> *icons=@[@"chara",@"fuku",@"cam",@"sys"];
+    for(unsigned row=1;row<=4;++row) {
+        if(row==2&&!_stageProgress)continue;
+        float u0,u1;if(dc_scene_icon_uv(_storyStage,row,&u0,&u1)!=DC_OK)return @"Scene icon atlas selection failed";
+        dc_sprite_pose p={.width=96*scale,.height=96*scale,.x=viewport.x+920*scale,.y=viewport.y+(328+112*(row-1))*scale,
+            .scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u0=u0,.u1=u1,.v1=1};
+        for(unsigned state=0;state<2;++state) {
+            if(state&&_mainIconHover!=(int32_t)row)continue;
+            NSString *name=[NSString stringWithFormat:@"P_%@_%@.ema",icons[row-1],state?@"N":@"S"];
+            NSString *error=[self appendSceneUISprite:name pose:p draws:draws count:count storage:storage];if(error)return error;++_sceneUIDraws;
+        }
+    }
+    _sceneUIIconDraws=_sceneUIDraws;
+    if(_contextOpen)for(unsigned i=0;i<_contextMenu.count;++i) {
+        dc_scene_context_item item=_contextMenu.items[i];if(item.resource_id<0)continue;
+        dc_sprite_pose p={.width=240*scale,.height=32*scale,.x=viewport.x+item.x*scale,.y=viewport.y+item.y*scale,.origin_x=.9f,.origin_y=.5f,
+            .scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1};
+        for(unsigned state=0;state<2;++state) {
+            if(state&&_contextMenu.hover!=(int32_t)i)continue;
+            char resource[32];if(dc_scene_context_resource(_sceneType,_contextMenu.icon,item.resource_id,state,resource,sizeof(resource))!=DC_OK)return @"Scene context resource profile failed";
+            NSString *error=[self appendSceneUISprite:[NSString stringWithUTF8String:resource] pose:p draws:draws count:count storage:storage];if(error)return error;++_sceneUIDraws;
+        }
+    }
+    return nil;
+}
 
 - (uint32_t)textureFor:(dc_game_model *)slot mesh:(const dc_xx_submesh *)mesh {
     dc_xx_material material;if(dc_xx_material_at(slot->xx,mesh->material,&material)!=DC_OK)return UINT32_MAX;
@@ -802,95 +875,52 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     if(gameplayScene && controller.pressed&DC_PAD_X){_playerSaveDirty=YES;_manualSaveCompleted=[self savePlayerState];}
     if(controller.pressed&DC_PAD_Y){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
-    /* Scene progression is driven by the original menu row dispatch below.
-     * A generic A/Plus press must never skip an interaction or advance the
-     * chapter by itself; the old host shortcut made the port diverge from the
-     * original route whenever a touch landed outside a menu row. */
+    /* Context-menu dismissal never advances the chapter. */
     if(gameplayScene && (controller.pressed&DC_PAD_B)&&_storyPhase==1) {
         _storyPhase=0;_interactionCompleted=NO;_interactionState.completed=0;
         _chapterEndAction=0;
     }
     /* Non-gameplay callbacks have separate state machines. Do not invent
      * tap-to-skip behavior for watch/night/ending chapters. */
-    BOOL menuActivated=NO;
-    if (gameplayScene && (pcInput.pointer_active || pcInput.mouse[0] || (_gameMenuInitialized && touching) || _previousGameMenuTouch)) {
-        float menuScale=fminf((float)width/1024.0f,(float)height/768.0f);
-        float menuOffsetX=((float)width-1024.0f*menuScale)*.5f;
-        float menuOffsetY=((float)height-768.0f*menuScale)*.5f;
-        float screenX=(x+1.0f)*.5f*(float)width;
-        float screenY=(1.0f-y)*.5f*(float)height;
-        dc_menu_button buttons[DC_GAME_MENU_COUNT];
-        if (dc_game_menu_profile(buttons,DC_GAME_MENU_COUNT)!=DC_OK)
-            return @"Game menu profile unavailable";
-        int32_t menuResult=-1;
-        uint8_t menuInput=(pcInput.pointer_active||pcInput.mouse[0])?pcInput.mouse[0]:(touching?(_previousGameMenuTouch?1:3):(_previousGameMenuTouch?2:0));
-        if (menuInput==3) {
-            int32_t hoverResult=-1;
-            if(dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(screenX-menuOffsetX),
-                (int32_t)lrintf(screenY-menuOffsetY),menuScale,0,&hoverResult)!=DC_OK)
-                return @"Game pointer hover failed";
+    if(gameplayScene) {
+        float scale=fminf((float)width/1024.f,(float)height/768.f);
+        float px=((x+1)*.5f*width-(width-1024*scale)*.5f)/scale;
+        float py=((1-y)*.5f*height-(height-768*scale)*.5f)/scale;
+        uint32_t left=pcInput.pointer_active||pcInput.mouse[0]?pcInput.mouse[0]:(touching?(_previousGameMenuTouch?1:3):(_previousGameMenuTouch?2:0));
+        if(_contextOpen) {
+            dc_scene_context_event event;
+            if(dc_scene_context_step(&_contextMenu,px,py,left,pcInput.mouse[1],&event)!=DC_OK)return @"Scene context input failed";
+            if(event.close_code) {
+                _contextOpen=NO;
+                if(event.selected>=0){++_contextSelections;_lastContextSelection=event.selected;}
+                else ++_contextDismissals;
+                // The original dispatches option callbacks here. Do not replace
+                // them with interaction counters, random clips or chapter skips.
+            }
+        } else {
+            dc_menu_button buttons[DC_GAME_MENU_COUNT];dc_game_menu_profile(buttons,DC_GAME_MENU_COUNT);
+            buttons[2].disabled=_stageProgress?0:1;
+            int32_t result=-1;
+            if(dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(px),(int32_t)lrintf(py),1,0,&result)!=DC_OK)return @"Scene icon hover failed";
+            _mainIconHover=result==-1?-1:_gameMenu.hover;
+            if(left==3&&_mainIconHover>=1&&_mainIconHover<=4){++_acceptedMenuEvents;_lastAcceptedMenuRow=(uint32_t)_mainIconHover;}
+            if(pcInput.mouse[1]==3&&_mainIconHover>=1&&_mainIconHover<=4) {
+                dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
+                dc_scene_context_input input={.scene_type=_sceneType,.icon=(uint32_t)_mainIconHover,.stage_progress=_stageProgress,
+                    .animation=animation.current,.camera_mode=0,.secondary_camera_mode=0,.x=px,.y=py};
+                dc_status status=dc_scene_context_build(&input,&_contextMenu);
+                if(status!=DC_OK&&status!=DC_NOT_FOUND)return @"Scene context profile failed";
+                if(status==DC_OK&&_contextMenu.count){
+                    _contextOpen=YES;++_contextOpens;
+#if DEBUG
+                    if(_contextOpens==1&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+                        [self requestRenderCapture:@"gameplay-context-native.png"];
+#endif
+                }
+            }
         }
-        if (dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(screenX-menuOffsetX),
-                         (int32_t)lrintf(screenY-menuOffsetY),menuScale,menuInput,
-                         &menuResult)!=DC_OK)
-            return @"Game menu input update failed";
-        menuActivated=menuResult==1 && _gameMenu.selected>=1 && _gameMenu.selected<=5;
-        if(menuActivated){++_acceptedMenuEvents;_lastAcceptedMenuRow=(uint32_t)_gameMenu.selected;}
     }
-    /* Original shared menu activation dispatch (0x00532240, chapter type 4).
-       Row 2 starts a touch interaction, row 4 finishes the scene, rows 1/3/5
-       trigger alternate events; a row-1 activation only keeps the scene when
-       the interaction counter exceeds one. */
-    BOOL pressEdge=pcInput.pointer_active||pcInput.mouse[0]?pcInput.mouse[0]==3:(touching&&!_previousGameMenuTouch);
-    BOOL releaseEdge=pcInput.pointer_active||pcInput.mouse[0]?pcInput.mouse[0]==2:(!touching&&_previousGameMenuTouch);
     _previousGameMenuTouch=touching;
-    dc_game_menu_activate_input activateInput={
-        .scene_type=_sceneType,
-        .selected_row=menuActivated?(uint32_t)_gameMenu.selected:UINT32_MAX,
-        .interaction_count=_interactionCount,
-        .press_edge=pressEdge,
-        .release_edge=releaseEdge
-    };
-    dc_game_menu_activate_result activateResult={0};
-    if(gameplayScene && dc_game_menu_activate(&activateInput,&_activateState,&activateResult)!=DC_OK)
-        return @"Game menu activation update failed";
-    if(gameplayScene && _editMode) {
-        if(activateResult.handled) {
-            uint32_t row=activateInput.selected_row;
-            if(row>=1&&row<=3)[self applyOutfitVariant:row];
-            else if(row==4)_chapterEndAction=6;
-            else if(row==5)[self applyOutfitVariant:0];
-        }
-    } else if(gameplayScene && activateResult.handled && _storyPhase==0) {
-        switch(activateResult.kind) {
-        case DC_GAME_MENU_EVENT_TOUCH: {
-            if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
-            _interactionCount++;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;
-            _stageOutcomeB=1;
-            _pendingVoiceName=@"ast001_01.wav";
-            break;
-        }
-        case DC_GAME_MENU_EVENT_FINISH:
-            _interactionCompleted=YES;_storyPhase=1;
-            if(_interactionCount>0)_stageOutcomeA=1;
-            _playerSaveDirty=YES;
-            break;
-        case DC_GAME_MENU_EVENT_OTHER:
-            _interactionCount++;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;
-            break;
-        default: break;
-        }
-    } else if(gameplayScene && activateResult.handled && _storyPhase==1) {
-        /* Chapter-end choice follows the original chapter-end handler action
-           codes: row 1 advance, row 2 save menu, row 3 edit, row 4 fade,
-           row 5 returns to the scene. */
-        uint32_t row=activateResult.kind==DC_GAME_MENU_EVENT_MISS?UINT32_MAX:activateInput.selected_row;
-        if(row==1)_chapterEndAction=2;
-        else if(row==2)_chapterEndAction=4;
-        else if(row==3)_chapterEndAction=3;
-        else if(row==4)_chapterEndAction=5;
-        else if(row==5)_storyPhase=0;
-    }
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
     BOOL renderCheckpoint=NO;
@@ -961,7 +991,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
-    size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
+    size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes+22;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
     NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
     size_t mapDrawCount=count;
     if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
@@ -971,6 +1001,8 @@ static void freeMorphCaches(dc_game_model *slot) {
             failure=@"Game face anchor lookup failed";
         if(!failure)failure=[self append:&_face delta:0 tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     }
+    size_t sceneDrawCount=count;
+    if(!failure)failure=[self appendSceneUI:draws count:&count storage:storage viewport:viewport];
     if(!failure) {
         uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f)),right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f)),bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));
         dc_vk_clip_rect clip={left,top,right-left,bottom-top};uint8_t clear[4]={0,0,0,255};
@@ -983,18 +1015,24 @@ static void freeMorphCaches(dc_game_model *slot) {
             NSMutableData *background=[NSMutableData dataWithLength:pixels.length];
             if(dc_vk_geometry_render_region(_renderer,draws,mapDrawCount,clear,background.mutableBytes,background.length,&clip)!=DC_OK)
                 failure=@"Actor visibility background readback failed";
-            if(!failure&&dc_vk_geometry_render_region(_renderer,draws,count,clear,NULL,0,&clip)!=DC_OK)
-                failure=@"Actor visibility presentation restore failed";
             if(failure){free(draws);return failure;}
-            const uint8_t *base=background.bytes;uint8_t *frame=pixels.mutableBytes;
+            NSMutableData *scenePixels=[NSMutableData dataWithLength:pixels.length];
+            if(dc_vk_geometry_render_region(_renderer,draws,sceneDrawCount,clear,scenePixels.mutableBytes,scenePixels.length,&clip)!=DC_OK){free(draws);return @"Scene-only visibility readback failed";}
+            NSMutableData *iconPixels=_contextOpen?[NSMutableData dataWithLength:pixels.length]:nil;
+            if(iconPixels&&dc_vk_geometry_render_region(_renderer,draws,sceneDrawCount+_sceneUIIconDraws,clear,iconPixels.mutableBytes,iconPixels.length,&clip)!=DC_OK){free(draws);return @"Scene context visibility readback failed";}
+            if(dc_vk_geometry_render_region(_renderer,draws,count,clear,NULL,0,&clip)!=DC_OK){free(draws);return @"Scene UI presentation restore failed";}
+            const uint8_t *base=background.bytes,*scene=scenePixels.bytes;uint8_t *frame=pixels.mutableBytes;
+            const uint8_t *icons=iconPixels.bytes;size_t uiVisible=0,contextVisible=0;
             size_t visible=0;uint32_t minX=width,minY=height,maxX=0,maxY=0;
             for(uint32_t py=0;py<height;++py)for(uint32_t px=0;px<width;++px) {
                 size_t offset=((size_t)py*width+px)*4;
-                if(abs((int)frame[offset]-(int)base[offset])>8||
-                   abs((int)frame[offset+1]-(int)base[offset+1])>8||
-                   abs((int)frame[offset+2]-(int)base[offset+2])>8) {
+                if(abs((int)scene[offset]-(int)base[offset])>8||
+                   abs((int)scene[offset+1]-(int)base[offset+1])>8||
+                   abs((int)scene[offset+2]-(int)base[offset+2])>8) {
                     ++visible;minX=MIN(minX,px);minY=MIN(minY,py);maxX=MAX(maxX,px);maxY=MAX(maxY,py);
                 }
+                if(abs((int)frame[offset]-(int)scene[offset])>8||abs((int)frame[offset+1]-(int)scene[offset+1])>8||abs((int)frame[offset+2]-(int)scene[offset+2])>8)++uiVisible;
+                if(icons&&(abs((int)frame[offset]-(int)icons[offset])>8||abs((int)frame[offset+1]-(int)icons[offset+1])>8||abs((int)frame[offset+2]-(int)icons[offset+2])>8))++contextVisible;
                 // CAMetalLayer is opaque. Store that presented RGB directly,
                 // without misinterpreting the render-target blend alpha.
                 frame[offset+3]=255;
@@ -1009,15 +1047,19 @@ static void freeMorphCaches(dc_game_model *slot) {
             BOOL saved=NO;if(destination){CGImageDestinationAddImage(destination,image,NULL);saved=CGImageDestinationFinalize(destination);CFRelease(destination);}
             if(image)CGImageRelease(image);
             if(saved) {
+                _sceneUIVisiblePixels=uiVisible;if(_contextOpen)_sceneContextVisiblePixels=contextVisible;
                 dc_animation_state pose={0};dc_model_get_animation(_actor.model,&pose);
                 _lastRenderCapture=@{@"file":captureName,@"chapter":@(_storyChapter),@"map":@(_mapSelector),
                     @"stage":@(_storyStage),@"anchor":_anchorName?:@"",@"camera":_cameraSource?:@"",
                     @"width":@(width),@"height":@(height),@"viewport_pixels":@((double)viewport.width*viewport.height),
+                    @"scene_ui_draws":@(_sceneUIDraws),@"scene_ui_visible_pixels":@(uiVisible),@"context_visible_pixels":@(contextVisible),@"context_open":@(_contextOpen),@"context_icon":@(_contextMenu.icon),@"context_count":@(_contextMenu.count),
                     @"actor_visible_pixels":@(visible),@"actor_bbox":visible?@[@(minX),@(minY),@(maxX),@(maxY)]:@[],
                     @"interaction_active":@(_interactionActive),@"interaction_completed":@(_interactionCompleted),
                     @"pose_frame":@(pose.frame),@"depth_policy":@"material_auto",
                     @"map_animation":@(_map.xaData!=nil),
                     @"world_position":@[@(_actor.world.values[12]),@(_actor.world.values[13]),@(_actor.world.values[14])]};
+                NSData *metadata=[NSJSONSerialization dataWithJSONObject:_lastRenderCapture options:NSJSONWritingPrettyPrinted error:nil];
+                [metadata writeToURL:[[url URLByDeletingPathExtension] URLByAppendingPathExtension:@"json"] atomically:YES];
                 _requestedRenderCapture=nil;_capturedGameplayFrame=YES;
             } else failure=@"Gameplay frame capture failed";
         }

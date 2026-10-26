@@ -11,8 +11,7 @@ from pathlib import Path
 import sys
 import unittest
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'tools'))
-from native_core import (library,StoryState,StoryOutcomes,StoryPlan,StoryChapter,
-                         GameMenuActivateInput,GameMenuActivateState,GameMenuActivateResult)
+from native_core import library,StoryState,StoryOutcomes,StoryPlan,StoryChapter
 from story_cases import story_cases
 
 class NativeStoryTests(unittest.TestCase):
@@ -82,20 +81,5 @@ class NativeStoryTests(unittest.TestCase):
         self.assertEqual(loaded.chapter,24);self.assertEqual(loaded.map,0xff);self.assertEqual(loaded.stage,0xff)
         self.assertEqual(loaded.unlocked,1);self.assertEqual(loaded.stages[0].flag_a,1)
         self.assertEqual(loaded.stages[1].flag_b,1);self.assertEqual(loaded.stages[2].progress,2)
-
-    def test_menu_activate_dispatch(self):
-        cases=[(4,0xffffffff,0,1,0,1,1,0),(4,4,0,1,0,1,2,3),(4,2,0,1,0,1,2,2),
-               (4,1,0,1,0,1,2,1),(4,1,2,1,0,1,1,1),(4,3,0,0,0,0,0,0),(4,5,0,1,1,1,2,1)]
-        for scene_type,row,counter,press,release,handled,stay,kind in cases:
-            state=GameMenuActivateState(toggle_active=1)
-            inp=GameMenuActivateInput(scene_type=scene_type,selected_row=row,
-                interaction_count=counter,press_edge=press,release_edge=release)
-            result=GameMenuActivateResult()
-            self.assertEqual(self.lib.dc_game_menu_activate(C.byref(inp),C.byref(state),C.byref(result)),0)
-            self.assertEqual((result.handled,result.stay,result.kind),(handled,stay,kind))
-        state=GameMenuActivateState(toggle_active=1)
-        inp=GameMenuActivateInput(scene_type=4,selected_row=6,interaction_count=0,press_edge=1,release_edge=0)
-        result=GameMenuActivateResult()
-        self.assertNotEqual(self.lib.dc_game_menu_activate(C.byref(inp),C.byref(state),C.byref(result)),0)
 
 if __name__=='__main__':unittest.main()

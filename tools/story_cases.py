@@ -143,29 +143,7 @@ def main():
     bad = StoryState(chapter=26, map=0, stage=0)
     assert lib.dc_story_script_finish(C.byref(bad), C.byref(plan)) != 0
     assert lib.dc_story_menu_action(C.byref(state), 9, C.byref(plan)) != 0
-    # Menu activation dispatcher (0x532240 case 4 semantics).
-    from native_core import GameMenuActivateInput, GameMenuActivateState, GameMenuActivateResult
-    cases = [
-        (4, 0xffffffff, 0, 1, 0, 1, 1, 0),   # miss: handled, stay
-        (4, 4, 0, 1, 0, 1, 2, 3),           # finish row
-        (4, 2, 0, 1, 0, 1, 2, 2),           # touch row
-        (4, 1, 0, 1, 0, 1, 2, 1),           # row 1 with counter 0 -> exit
-        (4, 1, 2, 1, 0, 1, 1, 1),           # row 1 with counter 2 -> stay
-        (4, 3, 0, 0, 0, 0, 0, 0),           # no press edge -> not handled
-        (4, 5, 0, 1, 1, 1, 2, 1),           # row 5 + release edge
-    ]
-    for scene_type, row, counter, press, release, handled, stay, kind in cases:
-        state2 = GameMenuActivateState(toggle_active=1)
-        inp = GameMenuActivateInput(scene_type=scene_type, selected_row=row,
-            interaction_count=counter, press_edge=press, release_edge=release)
-        result = GameMenuActivateResult()
-        status = lib.dc_game_menu_activate(C.byref(inp), C.byref(state2), C.byref(result))
-        assert status == 0, f'menu activate status {status}'
-        assert result.handled == handled, f'handled {row}'
-        assert result.stay == stay, f'stay {row}'
-        assert result.kind == kind, f'kind {row}'
-    print({'story_cases': run_story_cases(), 'chapter24_unlock': True,
-           'menu_activate_cases': len(cases)})
+    print({'story_cases': run_story_cases(), 'chapter24_unlock': True})
 
 
 if __name__ == '__main__':

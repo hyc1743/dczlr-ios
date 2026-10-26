@@ -69,21 +69,21 @@ installs, backup banks, audio-player stops and cleanup calls) against
 function reads the chapter tables from the image's own data section, so the
 recovered table bytes are exercised directly.
 
-## Gameplay menu activation
+## Scene icons and context menus
 
-The shared original menu activation helper `FUN_00532240` (chapter type 4
-branch) drives the gameplay scene rows:
+The earlier main-row interpretation of `FUN_00532240` was incorrect. The
+function handles a separate right-click context menu. Main rows 1-4 identify
+Character, Outfit, Camera and System. The context selection index at +0xc94
+is not an interaction counter; return 2 closes this context and does not
+instruct the story dispatcher to advance a chapter.
 
-- row 4 plays the finish event and exits to the chapter-end menu;
-- row 2 starts a touch interaction (voice chain and animation);
-- rows 1/3/5 trigger alternate events;
-- a row-1 activation keeps the scene only when the interaction counter
-  exceeds one;
-- a missed press keeps the scene without an event; the release edge clears
-  the armed toggle flag.
-
-`dc_game_menu_activate` reimplements this branch and is covered by portable
-tests in `tests/test_native_story.py`.
+`dc_scene_ui.c` now implements the initial type-4 option profiles, original
+resource names, 105/35 menu arrangement and pivot-based hit rectangles.
+`DCGameScene` renders the original main icons and context sprites, and keeps
+left selection/right dismissal separate from the pending action callbacks.
+The previous `dc_game_menu_activate` API and fabricated row-to-event mapping
+were removed. Evolved character/outfit profiles and callback execution remain
+incomplete. See `original-fidelity.md` for evidence and validation limits.
 
 ## Host wiring
 

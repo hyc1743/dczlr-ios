@@ -8,9 +8,9 @@ NS_ASSUME_NONNULL_BEGIN
  * night and ending). The chapter selector drives the original static
  * map/stage tables through dc_story_chapter_profile. Local RPP_10 map,
  * RPP_08 actor, RPP_09 face model/morph, RPP_04 eyes/neck binding and the
- * native camera/model/clip path render the scene; the six-row menu and the
- * chapter-end actions follow the original shared menu activation dispatch
- * (0x00532240 case 4) and the chapter-end handler (0x00523380). */
+ * native camera/model/clip path render the scene. Main scene icons and the
+ * initial type-4 right-click menus are separate from context action callbacks,
+ * which are still being recovered. */
 @interface DCGameScene : NSObject
 @property(nonatomic,readonly) BOOL loaded;
 @property(nonatomic,readonly) uint32_t visibleMapTriangles;
@@ -36,7 +36,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL interactiveScene;
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
-    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage resumeSavedPlayer:(BOOL)resume error:(NSString **)error;
+    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress resumeSavedPlayer:(BOOL)resume error:(NSString **)error;
 - (void)detachRenderer;
 - (nullable NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
     width:(uint32_t)width height:(uint32_t)height;

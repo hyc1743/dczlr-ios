@@ -14,8 +14,10 @@ class Target(C.Structure):
     _fields_=[('x',C.c_float),('y',C.c_float),('diameter',C.c_float),('code',C.c_uint32)]
 class Contact(C.Structure):
     _fields_=[('id',C.c_uint64),('control',C.c_uint32),('x',C.c_float),('y',C.c_float)]
+class View(C.Structure):
+    _fields_=[('x',C.c_float),('y',C.c_float),('width',C.c_float),('height',C.c_float)]
 class State(C.Structure):
-    _fields_=[('width',C.c_float),('height',C.c_float),('cursor_x',C.c_float),('cursor_y',C.c_float),('targets',Target*28),('contacts',Contact*16)]
+    _fields_=[('width',C.c_float),('height',C.c_float),('cursor_x',C.c_float),('cursor_y',C.c_float),('view',View),('targets',Target*28),('contacts',Contact*16)]
 
 class PCTouchTests(unittest.TestCase):
     @classmethod
@@ -49,6 +51,8 @@ class PCTouchTests(unittest.TestCase):
                 self.assertLessEqual(target.x+target.diameter/2,w-r+.001)
                 self.assertGreaterEqual(target.y-target.diameter/2,t-.001)
                 self.assertLessEqual(target.y+target.diameter/2,h-b+.001)
+                self.assertTrue(target.x+target.diameter/2<=self.s.view.x or
+                    target.x-target.diameter/2>=self.s.view.x+self.s.view.width)
                 for other in self.s.targets[i+1:]:
                     self.assertGreaterEqual(math.hypot(target.x-other.x,target.y-other.y),(target.diameter+other.diameter)/2-.001)
             self.assertEqual(len(set(x.code for x in self.s.targets)),28)

@@ -16,6 +16,7 @@
 #include "dc_menu.h"
 #include "dc_save.h"
 #include "dc_gameplay.h"
+#include "dc_pc_touch.h"
 #include "dc_story.h"
 #include <math.h>
 #include <string.h>
@@ -186,7 +187,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     NSString *gameError=nil;
     BOOL resume=_resumeNextScene;_resumeNextScene=NO;
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter
-        mapSelector:_story.map stage:_story.stage resumeSavedPlayer:resume error:&gameError];
+        mapSelector:_story.map stage:_story.stage stageProgress:_story.stage<DC_STORY_STAGES?_story.stages[_story.stage].progress:0 resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
@@ -892,6 +893,11 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     CGSize drawableSize = layer.drawableSize;
     uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
     NSString *directory = [self.startupDataDirectory copy] ?: @"";
+    if([self.superview isKindOfClass:DCVulkanContainerView.class] && self.bounds.size.width>0 && self.bounds.size.height>0) {
+        CGSize inputSize=self.superview.bounds.size;
+        pcInput.x=(pcInput.x*inputSize.width-self.frame.origin.x)/self.bounds.size.width;
+        pcInput.y=(pcInput.y*inputSize.height-self.frame.origin.y)/self.bounds.size.height;
+    }
     dispatch_async(_renderQueue, ^{
         @autoreleasepool {
             NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching controller:controller pcInput:pcInput];
@@ -919,5 +925,27 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             });
         }
     });
+}
+@end
+
+@implementation DCVulkanContainerView
+- (instancetype)initWithFrame:(CGRect)frame {
+    if((self=[super initWithFrame:frame])) {
+        self.backgroundColor=UIColor.blackColor;
+        _surface=[[DCVulkanSpriteView alloc] initWithFrame:self.bounds];
+        [self addSubview:_surface];
+    }
+    return self;
+}
+- (void)setReservesControls:(BOOL)value { _reservesControls=value;[self setNeedsLayout]; }
+- (void)safeAreaInsetsDidChange { [super safeAreaInsetsDidChange];[self setNeedsLayout]; }
+- (void)layoutSubviews {
+    [super layoutSubviews];CGRect frame=self.bounds;
+    if(_reservesControls) {
+        UIEdgeInsets s=self.safeAreaInsets;dc_pc_touch_view v;
+        if(dc_pc_touch_viewport(frame.size.width,frame.size.height,s.left,s.top,s.right,s.bottom,&v)==DC_OK)
+            frame=CGRectMake(v.x,v.y,v.width,v.height);
+    }
+    _surface.frame=frame;
 }
 @end

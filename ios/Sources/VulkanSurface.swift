@@ -6,25 +6,28 @@ struct VulkanSurface: UIViewRepresentable {
 
     func makeCoordinator() -> SpritePresenter { SpritePresenter(model: model) }
 
-    func makeUIView(context: Context) -> DCVulkanSpriteView {
-        let view = DCVulkanSpriteView(frame: .zero)
+    func makeUIView(context: Context) -> DCVulkanContainerView {
+        let container = DCVulkanContainerView(frame: .zero)
+        let view = container.surface
         let realGameplay = ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1"
             || ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_STORY"] == "1"
         view.startupDataDirectory = (model.resourcesReady || realGameplay) ? model.gameDataDirectory.path : nil
+        container.reservesControls = model.resourcesReady || realGameplay
         context.coordinator.attach(view)
-        return view
+        return container
     }
 
-    func updateUIView(_ view: DCVulkanSpriteView, context: Context) {
+    func updateUIView(_ container: DCVulkanContainerView, context: Context) {
         let realGameplay = ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1"
             || ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_STORY"] == "1"
-        view.startupDataDirectory = (model.resourcesReady || realGameplay) ? model.gameDataDirectory.path : nil
+        container.surface.startupDataDirectory = (model.resourcesReady || realGameplay) ? model.gameDataDirectory.path : nil
+        container.reservesControls = model.resourcesReady || realGameplay
         context.coordinator.setActive(model.active)
     }
 
-    static func dismantleUIView(_ view: DCVulkanSpriteView, coordinator: SpritePresenter) {
+    static func dismantleUIView(_ view: DCVulkanContainerView, coordinator: SpritePresenter) {
         coordinator.stop()
-        view.releaseRenderer()
+        view.surface.releaseRenderer()
     }
 }
 
@@ -46,6 +49,7 @@ final class SpritePresenter: NSObject {
     private var reportedControllerMovement = false
     private var reportedControllerCamera = false
     private var reportedGamepadPresentation: String?
+    private var reportedRenderViewport: String?
     private var introChapter = 0
     private var lastIntroRecord: String?
     private var reportedTextFade = false
@@ -60,6 +64,7 @@ final class SpritePresenter: NSObject {
     private var lastRenderProbeStatus: String?
     private var renderProbeDone = false
     private var mouseEvidence: Set<String> = []
+    private var mouseMenuPhase = 0
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -104,11 +109,20 @@ final class SpritePresenter: NSObject {
             // Exercise independent Num6 + arrow Up while the pointer is moved.
             ok = dc_gamepad_test_key(22, !reportedControllerCamera)
                 && dc_gamepad_test_key(11, !reportedControllerCamera)
-            let cycle = now.truncatingRemainder(dividingBy: 6.0)
-            // Row 1 is enabled in the admitted initial original menu profile.
-            // A separate right click is delivered at exactly the same cursor.
-            ok = ok && dc_gamepad_test_mouse(968, 376, 0, cycle < 3 && pulse)
-                && dc_gamepad_test_mouse(968, 376, 1, cycle >= 3 && pulse)
+            // Each stage waits for native state from a presented frame.
+            // Select an actual camera context row, dismiss via a fresh right
+            // press, then leave the menu open for the final screenshot.
+            let leftPhase = mouseMenuPhase == 0 || mouseMenuPhase == 2
+            ok = ok && dc_gamepad_test_mouse(0, 0, leftPhase ? 1 : 0, false)
+            if mouseMenuPhase == 0 {
+                ok = ok && dc_gamepad_test_mouse(968, 376, 0, pulse)
+            } else if mouseMenuPhase == 2 {
+                ok = ok && dc_gamepad_test_mouse(900, 705, 0, pulse)
+            } else if mouseMenuPhase < 6 {
+                ok = ok && dc_gamepad_test_mouse(968, 600, 1, pulse)
+            } else {
+                ok = ok && dc_gamepad_test_mouse(0, 0, 1, false)
+            }
         default: return true
         }
         if ok && !reportedTouchStart {
@@ -121,6 +135,13 @@ final class SpritePresenter: NSObject {
     @objc private func draw() {
         guard model.active, !failed, !renderProbeDone, !renderPending, let view = view else { return }
         if model.gameResourcesActive {
+            let game = view.frame
+            let input = view.superview?.bounds.size ?? view.bounds.size
+            let viewport = String(format: "input=%.0fx%.0f game=%.3f,%.3f,%.3f,%.3f", input.width, input.height, game.minX, game.minY, game.width, game.height)
+            if viewport != reportedRenderViewport {
+                reportedRenderViewport = viewport
+                model.record(viewport, event: "PORTLAB_RENDER_VIEWPORT")
+            }
             let presentation = dc_gamepad_presentation()
             if presentation != reportedGamepadPresentation {
                 reportedGamepadPresentation = presentation
@@ -240,6 +261,35 @@ final class SpritePresenter: NSObject {
                     if self.testingTouch, !context.contains("menu_events=0") {
                         self.model.record("Pointer click accepted by scene menu at logical (968,376)", event: "PORTLAB_MOUSE_MENU_ACCEPTED")
                         self.mouseEvidence.insert("menu")
+                        if self.mouseMenuPhase == 0 { self.mouseMenuPhase = 1 }
+                    }
+                    if self.testingTouch {
+                        let fields = Dictionary(context.split(separator: " ").compactMap { token -> (String, Int)? in
+                            let parts = token.split(separator: "=", maxSplits: 1)
+                            guard parts.count == 2, let value = Int(parts[1]) else { return nil }
+                            return (String(parts[0]), value)
+                        }, uniquingKeysWith: { _, new in new })
+                        let opened = fields["context_open"] == 1
+                        let opens = fields["context_opens"] ?? 0
+                        if opened, (fields["context_pixels"] ?? 0) > 100, self.mouseEvidence.insert("context").inserted {
+                            self.model.record("Original camera menu rendered with separate GPU visibility evidence", event: "PORTLAB_MOUSE_CONTEXT_RENDERED")
+                        }
+                        if self.mouseMenuPhase == 1, opened, opens >= 1 { self.mouseMenuPhase = 2 }
+                        if self.mouseMenuPhase == 2, (fields["context_selections"] ?? 0) > 0 {
+                            self.mouseMenuPhase = 3
+                            self.mouseEvidence.insert("selection")
+                            self.model.record("Left press selected context index 6; action callback is still pending", event: "PORTLAB_MOUSE_CONTEXT_SELECTED")
+                        }
+                        if self.mouseMenuPhase == 3, opened, opens >= 2 { self.mouseMenuPhase = 4 }
+                        if self.mouseMenuPhase == 4, (fields["context_dismissals"] ?? 0) > 0 {
+                            self.mouseMenuPhase = 5
+                            self.mouseEvidence.insert("dismiss")
+                            self.model.record("A separate right press dismissed the context menu", event: "PORTLAB_MOUSE_CONTEXT_DISMISSED")
+                        }
+                        if self.mouseMenuPhase == 5, opened, opens >= 3 {
+                            self.mouseMenuPhase = 6
+                            self.mouseEvidence.insert("finalcontext")
+                        }
                     }
                 }
                 if let status = self.view?.renderProbeStatus, !status.isEmpty, status != self.lastRenderProbeStatus {
@@ -277,7 +327,7 @@ final class SpritePresenter: NSObject {
                         self.model.record("Relative drag moved the persistent pointer", event: "PORTLAB_MOUSE_MOVE_DELIVERED")
                         self.mouseEvidence.insert("move")
                     }
-                    if self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move"]), self.reportedControllerCamera {
+                    if self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move", "context", "selection", "dismiss", "finalcontext"]), self.reportedControllerCamera {
                         if self.mouseEvidence.insert("passed").inserted {
                             self.model.record("Bounded virtual mouse input verified; original scene equivalence remains unverified", event: "PORTLAB_MOUSE_INPUT_PASSED")
                         }

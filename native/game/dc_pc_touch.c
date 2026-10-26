@@ -1,16 +1,28 @@
 #include "dc_pc_touch.h"
 #include <math.h>
 #include <string.h>
-dc_status dc_pc_touch_layout(dc_pc_touch *s,float w,float h,float l,float t,float r,float b) {
-    if(!s)return DC_ARGUMENT;
+dc_status dc_pc_touch_viewport(float w,float h,float l,float t,float r,float b,dc_pc_touch_view *out) {
+    if(!out)return DC_ARGUMENT;
     const float v[]={w,h,l,t,r,b};for(unsigned i=0;i<6;++i)if(!isfinite(v[i]))return DC_RANGE;
     if(l<0||t<0||r<0||b<0||w-l-r<540||h-t-b<240)return DC_RANGE;
+    float aw=w-l-r,ah=h-t-b,d=fminf(46,ah*.095f);
+    float vw=fminf(aw-2*(3*d+12),ah*4/3);
+    *out=(dc_pc_touch_view){l+(aw-vw)*.5f,t+(ah-vw*.75f)*.5f,vw,vw*.75f};
+    return DC_OK;
+}
+dc_status dc_pc_touch_layout(dc_pc_touch *s,float w,float h,float l,float t,float r,float b) {
+    if(!s)return DC_ARGUMENT;
+    dc_pc_touch_view view;
+    dc_status status=dc_pc_touch_viewport(w,h,l,t,r,b,&view);if(status!=DC_OK)return status;
     dc_pc_touch next=*s;next.width=w;next.height=h;
-    float aw=w-l-r,ah=h-t-b,d=fminf(56,fminf(aw*.051f,ah*.095f));
+    next.view=view;
+    next.cursor_x=fmaxf(view.x/w,fminf((view.x+view.width)/w,next.cursor_x));
+    next.cursor_y=fmaxf(view.y/h,fminf((view.y+view.height)/h,next.cursor_y));
+    float ah=h-t-b,d=fminf(46,ah*.095f);
     /* Group positions follow the supplied picture, not a keyboard grid. */
     const uint32_t codes[]={1,0x2f,0x3b,0x1e,0x2c,0x2d,0x1f,0xc9,0xc7,0xcf,0xd1,
         0xc8,0xcb,0xcd,0xd0,2,3,4,5,0x2e,0x48,0x4b,0x4d,0x50,259,260,256,257};
-    const float px[]={.5f,3.4f,5.5f,1.5f,.5f,2.5f,1.5f,1.5f,.5f,2.5f,1.5f,
+    const float px[]={.5f,1.5f,2.5f,1.5f,.5f,2.5f,1.5f,1.5f,.5f,2.5f,1.5f,
         1.5f,.5f,2.5f,1.5f,-.5f,-.5f,-.5f,-.5f,-.5f,-1.5f,-2.5f,-.5f,-1.5f,-2.1f,-2.1f,-2.1f,-2.1f};
     const float py[]={.065f,.065f,.065f,.20f,.27f,.27f,.34f,.46f,.53f,.53f,.60f,
         .71f,.78f,.78f,.85f,.08f,.18f,.28f,.38f,.49f,.68f,.76f,.76f,.84f,.15f,.235f,.32f,.405f};
@@ -54,10 +66,10 @@ dc_status dc_pc_touch_move(dc_pc_touch *s,dc_pc_latch *in,uint64_t id,float x,fl
     dc_pc_touch_contact *f=&s->contacts[at];
     if(f->control==DC_PC_TOUCH_POINTER) {
         float before_x=s->cursor_x,before_y=s->cursor_y;
-        s->cursor_x=fmaxf(0,fminf(1,s->cursor_x+(x-f->x)/s->width));
-        s->cursor_y=fmaxf(0,fminf(1,s->cursor_y+(y-f->y)/s->height));
+        s->cursor_x=fmaxf(s->view.x/s->width,fminf((s->view.x+s->view.width)/s->width,s->cursor_x+(x-f->x)/s->width));
+        s->cursor_y=fmaxf(s->view.y/s->height,fminf((s->view.y+s->view.height)/s->height,s->cursor_y+(y-f->y)/s->height));
         dc_pc_input_pointer(in,27,s->cursor_x,s->cursor_y);
-        float scale=fminf(s->width/1024.f,s->height/768.f);
+        float scale=s->view.width/1024.f;
         dc_pc_input_motion(in,27,(int32_t)lrintf((s->cursor_x-before_x)*s->width/scale),
             (int32_t)lrintf((s->cursor_y-before_y)*s->height/scale),0);
     }

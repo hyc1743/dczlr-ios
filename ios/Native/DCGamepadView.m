@@ -204,8 +204,14 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
 - (void)resignActive { dc_gamepad_set_active(NO); }
 - (void)becomeActive { dc_gamepad_set_active(YES); }
 - (NSString *)presentationState {
-    return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%u paths=%d test_virtual=%d detected=() pc_visible=%d layout=picture-mouse-v3",
-        self.bounds.size.width,self.bounds.size.height,self.window!=nil,_controls.hidden,inputState.connected,_keys[0].path!=NULL,testVirtualControls(),_pcMode];
+    unsigned overlaps=0;
+    for(unsigned i=0;i<DC_PC_TOUCH_COUNT;++i) {
+        dc_pc_touch_target r=_touch.targets[i];
+        if(r.x+r.diameter*.5f>_touch.view.x&&r.x-r.diameter*.5f<_touch.view.x+_touch.view.width)++overlaps;
+    }
+    return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%u paths=%d test_virtual=%d detected=() pc_visible=%d layout=black-gutters-v4 game=%.3f,%.3f,%.3f,%.3f key_overlap=%u",
+        self.bounds.size.width,self.bounds.size.height,self.window!=nil,_controls.hidden,inputState.connected,_keys[0].path!=NULL,testVirtualControls(),_pcMode,
+        _touch.view.x,_touch.view.y,_touch.view.width,_touch.view.height,overlaps];
 }
 #if DEBUG
 - (BOOL)testTarget:(uint32_t)target down:(BOOL)down {
@@ -228,8 +234,8 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
      * the visible mouse button. Includes letterbox offsets and safe areas. */
     CGPoint start=CGPointMake(CGRectGetMidX(self.bounds),CGRectGetMidY(self.bounds));
     if([self hitTest:start withEvent:nil]!=self)return NO;
-    CGFloat w=self.bounds.size.width,h=self.bounds.size.height,scale=MIN(w/1024,h/768);
-    CGPoint wanted=CGPointMake((w-1024*scale)*.5+x*scale,(h-768*scale)*.5+y*scale);
+    CGFloat w=self.bounds.size.width,h=self.bounds.size.height,scale=_touch.view.width/1024;
+    CGPoint wanted=CGPointMake(_touch.view.x+x*scale,_touch.view.y+y*scale);
     DCTouchProbe *finger=[DCTouchProbe new];finger.point=start;
     [self touchesBegan:[NSSet setWithObject:finger] withEvent:nil];
     finger.point=CGPointMake(start.x+wanted.x-_touch.cursor_x*w,start.y+wanted.y-_touch.cursor_y*h);

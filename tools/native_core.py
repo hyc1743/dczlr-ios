@@ -185,18 +185,6 @@ class GameInteractionResult(C.Structure):
     _fields_=[("begin",C.c_uint32),("restore",C.c_uint32),("completed",C.c_uint32)]
 
 
-class GameMenuActivateInput(C.Structure):
-    _fields_=[("scene_type",C.c_uint32),("selected_row",C.c_uint32),("interaction_count",C.c_uint32),("press_edge",C.c_uint32),("release_edge",C.c_uint32)]
-
-
-class GameMenuActivateState(C.Structure):
-    _fields_=[("toggle_active",C.c_uint32)]
-
-
-class GameMenuActivateResult(C.Structure):
-    _fields_=[("handled",C.c_uint32),("stay",C.c_uint32),("kind",C.c_uint32)]
-
-
 class StoryChapter(C.Structure):
     _fields_=[("script",C.c_int32),("last_frame",C.c_int32),("map",C.c_int32),("stage",C.c_int32),("scene",C.c_uint32),("scene_type",C.c_uint32)]
 
@@ -441,12 +429,14 @@ def library():
     sources.append(ROOT / "native/game/dc_pc_input.c")
     sources.append(ROOT / "native/game/dc_touch_controls.c")
     sources.append(ROOT / "native/game/dc_pc_touch.c")
+    sources.append(ROOT / "native/game/dc_scene_ui.c")
     inputs = sources + [ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
                         ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h", ROOT / "native/include/dc_story.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     inputs.append(ROOT / "native/include/dc_touch_controls.h")
     inputs.append(ROOT / "native/include/dc_pc_touch.h")
+    inputs.append(ROOT / "native/include/dc_scene_ui.h")
     inputs.append(ROOT / "native/include/dc_pc_input.h")
     for path in inputs:
         digest.update(path.read_bytes())
@@ -622,8 +612,6 @@ def library():
     lib.dc_game_menu_profile.restype=C.c_int
     lib.dc_game_interaction_step.argtypes=[C.POINTER(GameInteractionState),C.POINTER(GameInteractionInput),C.POINTER(GameInteractionState),C.POINTER(GameInteractionResult)]
     lib.dc_game_interaction_step.restype=C.c_int
-    lib.dc_game_menu_activate.argtypes=[C.POINTER(GameMenuActivateInput),C.POINTER(GameMenuActivateState),C.POINTER(GameMenuActivateResult)]
-    lib.dc_game_menu_activate.restype=C.c_int
     lib.dc_story_chapter_profile.argtypes=[C.c_uint32,C.POINTER(StoryChapter)]
     lib.dc_story_chapter_profile.restype=C.c_int
     lib.dc_story_advance.argtypes=[C.POINTER(StoryState),C.POINTER(StoryOutcomes),C.POINTER(StoryPlan)]
