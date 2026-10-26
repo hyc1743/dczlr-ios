@@ -48,6 +48,12 @@ final class LabModel: ObservableObject {
         }
         importResourcePacksIfPresent()
         #if DEBUG
+        if let failure = DCPCInputView.verifyInput() {
+            gameError = failure
+            record(failure, event: "PORTLAB_PC_INPUT_TEST_FAILED")
+        } else {
+            record("Concurrent UIKit mouse and keyboard input passed", event: "PORTLAB_PC_INPUT_TEST_PASSED")
+        }
         if let failure = DCGamepadView.verifyControls() {
             gameError = failure
             record(failure, event: "PORTLAB_GAMEPAD_TEST_FAILED")

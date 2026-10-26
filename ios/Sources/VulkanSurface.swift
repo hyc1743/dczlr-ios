@@ -85,6 +85,7 @@ final class SpritePresenter: NSObject {
         }
         renderPending = true
         var pad = model.gamepad.sample()
+        let pcInput = dc_pc_input_read()
         var pointerX = model.x, pointerY = model.y
         var touching = model.touchActive
         if pad.touch_count > 0 {
@@ -139,7 +140,7 @@ final class SpritePresenter: NSObject {
             if !reportedControllerCamera { pad.rx = 10000 }
         }
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
-            touching: touching, controller: pad) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
+            touching: touching, controller: pad, pcInput: pcInput) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
                 guard let self = self else { return }
                 self.renderPending = false
                 if self.view?.controllerMovementAdvanced == true, !self.reportedControllerMovement {

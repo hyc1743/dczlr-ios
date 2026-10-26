@@ -1,5 +1,10 @@
 # iOS controls
 
+The default input mode is now keyboard and mouse. Use the top-left mode
+button to switch to this inherited gamepad layout. See
+[Windows-style controls](windows-controls.md) for pointer, mouse buttons,
+keyboard shortcuts, concurrent input and the boundaries of the scene adapter.
+
 The input frontend adapts weixing3's staged `DmGamepad.m`, based on
 nxnative `677345b0933f5f8754aeec3125d14df32683ca97`. Its MIT notice ships in
 `ios/Resources/Nxnative-LICENSE`. This replaces the simplified Swift controls.

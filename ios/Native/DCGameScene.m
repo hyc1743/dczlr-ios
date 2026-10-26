@@ -726,7 +726,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(morphVertices){for(uint32_t i=0;i<slot->info.submeshes;++i)free(morphVertices[i]);free(morphVertices);free(morphCounts);}
     return nil;
 }
-- (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller
+- (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
     float padDelta=_tickInitialized?fminf((tick-_lastTick)/1000.f,.1f):0;
@@ -736,7 +736,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(controller.pressed&DC_PAD_Y){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
     BOOL newTouch=touching&&!_inputInitialized;
     BOOL menuActivated=NO;
-    if ((_gameMenuInitialized && touching) || _previousGameMenuTouch) {
+    if (pcInput.active || (_gameMenuInitialized && touching) || _previousGameMenuTouch) {
         float menuScale=fminf((float)width/1024.0f,(float)height/768.0f);
         float menuOffsetX=((float)width-1024.0f*menuScale)*.5f;
         float menuOffsetY=((float)height-768.0f*menuScale)*.5f;
@@ -746,7 +746,13 @@ static void freeMorphCaches(dc_game_model *slot) {
         if (dc_game_menu_profile(buttons,DC_GAME_MENU_COUNT)!=DC_OK)
             return @"Game menu profile unavailable";
         int32_t menuResult=-1;
-        uint8_t menuInput=touching ? 0 : 3;
+        uint8_t menuInput=pcInput.active?pcInput.mouse[0]:(touching?(_previousGameMenuTouch?1:3):(_previousGameMenuTouch?2:0));
+        if (menuInput==3) {
+            int32_t hoverResult=-1;
+            if(dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(screenX-menuOffsetX),
+                (int32_t)lrintf(screenY-menuOffsetY),menuScale,0,&hoverResult)!=DC_OK)
+                return @"Game pointer hover failed";
+        }
         if (dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(screenX-menuOffsetX),
                          (int32_t)lrintf(screenY-menuOffsetY),menuScale,menuInput,
                          &menuResult)!=DC_OK)

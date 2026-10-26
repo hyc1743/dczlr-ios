@@ -19,6 +19,7 @@
 #import <CoreText/CoreText.h>
 #include <pthread.h>
 #import "DCGamepadView.h"
+#import "DCPCInputView.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -147,6 +148,9 @@ static __weak DCGamepadView *g_view;
     CALayer *_controls;                            // holds every control layer: hidden while a physical controller is connected (the view itself stays, for game touches)
     BOOL _padOff;                                  // a physical controller is connected: every touch goes to the game
     UITouch *_game[16];                            // touches on the game's touch screen by finger slot
+    DCPCInputView *_pcInput;
+    UIButton *_inputMode;
+    BOOL _pcMode;
 }
 
 static UIColor *k_idle, *k_on, *k_line, *k_ringFill, *k_text, *k_textOn;
@@ -192,11 +196,36 @@ static BOOL fullOnly(int b) { return b == B_LS || b == B_RS || b >= B_LEFT; }   
         [nc addObserver:self selector:@selector(padsChanged) name:GCControllerDidConnectNotification object:nil];
         [nc addObserver:self selector:@selector(padsChanged) name:GCControllerDidDisconnectNotification object:nil];
         [self padsChanged];
+        _pcInput=[[DCPCInputView alloc] initWithFrame:self.bounds]; [self addSubview:_pcInput];
+        _inputMode=[UIButton buttonWithType:UIButtonTypeCustom];
+        _inputMode.backgroundColor=[UIColor colorWithWhite:.12 alpha:.85];
+        _inputMode.layer.cornerRadius=8;
+        _inputMode.titleLabel.font=[UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+        [_inputMode addTarget:self action:@selector(toggleInputMode) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:_inputMode];
+        NSNumber *pcSaved=[NSUserDefaults.standardUserDefaults objectForKey:@"DCZLRPCInput"];
+        _pcMode=pcSaved?pcSaved.boolValue:YES;
+        // Generated CI probes explicitly exercise the inherited gamepad layout.
+        if (virtual_controls_test()) _pcMode=NO;
+#if DEBUG
+        if (getenv("PORTLAB_TEST_PC_INPUT")) _pcMode=YES;
+#endif
+        [self applyInputMode];
         [nc addObserver:self selector:@selector(resignActive) name:UIApplicationWillResignActiveNotification object:nil];
         [nc addObserver:self selector:@selector(becomeActive) name:UIApplicationDidBecomeActiveNotification object:nil];
         motion_start();
     }
     return self;
+}
+- (void)toggleInputMode {
+    [self reset]; _pcMode=!_pcMode;
+    [NSUserDefaults.standardUserDefaults setBool:_pcMode forKey:@"DCZLRPCInput"];
+    [self applyInputMode];
+}
+- (void)applyInputMode {
+    _controls.hidden=_padOff||_pcMode;
+    [_pcInput setInputEnabled:_pcMode];
+    [_inputMode setTitle:_pcMode?@"用手柄":@"用键鼠" forState:UIControlStateNormal];
 }
 - (void)resignActive { dc_gamepad_set_active(NO); }
 - (void)becomeActive { dc_gamepad_set_active(YES); }
@@ -207,9 +236,9 @@ static BOOL fullOnly(int b) { return b == B_LS || b == B_RS || b >= B_LEFT; }   
     for(GCController *c in GCController.controllers) {
         [devices addObject:[NSString stringWithFormat:@"%@/%@/fixture=%d",c.vendorName?:@"unknown",c.productCategory,c==verification_controller]];
     }
-    return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%lu paths=%d test_virtual=%d detected=%@",
+    return [NSString stringWithFormat:@"bounds=%.0fx%.0f attached=%d hidden=%d physical=%lu paths=%d test_virtual=%d detected=%@ pc_visible=%d",
         self.bounds.size.width,self.bounds.size.height,self.window!=nil,_controls.hidden,
-        (unsigned long)physical,_ring.path!=NULL,virtual_controls_test(),devices];
+        (unsigned long)physical,_ring.path!=NULL,virtual_controls_test(),devices,_pcInput&&!_pcInput.hidden];
 }
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; [g_motion stopAccelerometerUpdates]; g_motion=nil; }
 - (void)applyLayout {   // show / hide the controls for the current layout
@@ -410,6 +439,9 @@ static void placeLabel(CATextLayer *t, CGPoint c, CGFloat fs) {
 
 - (void)layoutSubviews {
     [super layoutSubviews];
+    _pcInput.frame=self.bounds;
+    CGRect inputSafe=UIEdgeInsetsInsetRect(self.bounds,self.safeAreaInsets);
+    _inputMode.frame=CGRectMake(CGRectGetMinX(inputSafe)+8,CGRectGetMinY(inputSafe)+6,76,38);
     if (!CGSizeEqualToSize(_layoutSize,self.bounds.size)) { [self reset]; _layoutSize=self.bounds.size; }
     CGFloat u = self.u;
     [CATransaction begin]; [CATransaction setDisableActions:YES];
@@ -474,7 +506,7 @@ static void read_pad(GCExtendedGamepad *g) {
     }
     pthread_mutex_lock(&bridge_mu); bridge_state.connected=any; pthread_mutex_unlock(&bridge_mu);
     if (!any) { pthread_mutex_lock(&g_mu); g_pad_btn = 0; g_pad_lx = g_pad_ly = g_pad_rx = g_pad_ry = 0; pthread_mutex_unlock(&g_mu); publish(); }
-    void (^update)(void)=^{ self->_padOff = any; self->_controls.hidden = any; [self reset]; };
+    void (^update)(void)=^{ self->_padOff = any; [self applyInputMode]; [self reset]; };
     if(NSThread.isMainThread)update();else dispatch_async(dispatch_get_main_queue(),update);
 }
 @end
@@ -483,6 +515,7 @@ UIView *dm_gamepad_view(CGRect frame) { DCGamepadView *v = [[DCGamepadView alloc
 NSString *dc_gamepad_presentation(void) { return g_view?[g_view presentationState]:@"not-created"; }
 void dc_gamepad_set_active(BOOL active) {
     NSCAssert(NSThread.isMainThread,@"Gamepad lifecycle must run on the main thread");
+    dc_pc_input_set_active(active);
     pthread_mutex_lock(&bridge_mu); bridge_active=active; dc_pad_clear(&bridge_state); pthread_mutex_unlock(&bridge_mu);
     [g_view reset];
     if (active) { [g_view padsChanged]; motion_start(); }
@@ -509,6 +542,7 @@ void dc_gamepad_set_active(BOOL active) {
 #if DEBUG
     id saved=[NSUserDefaults.standardUserDefaults objectForKey:k_layout_key];
     DCGamepadView *v=[[DCGamepadView alloc] initWithFrame:CGRectMake(0,0,932,430)];
+    v->_pcMode=NO; [v applyInputMode];
     [v setFull:YES];[v layoutIfNeeded];
     __block NSString *failure=nil;
     void (^check)(BOOL,NSString *)=^(BOOL ok,NSString *name){if(!ok&&!failure)failure=name;};

@@ -170,6 +170,16 @@ jobs:
         timeout-minutes: 8
         run: |
           python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene intro --startup-fixture --exercise-new-game --output out/ios-startup
+      - name: Exercise simultaneous keyboard and mouse controls
+        timeout-minutes: 8
+        run: |
+          python3 tools/check_ios_sprite.py --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app --runtime iOS-18-5 --expected-scene title --startup-fixture --pc-input --output out/ios-pc-input
+      - name: Upload keyboard and mouse execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PortLab-simulator-pc-input
+          path: out/ios-pc-input/
       - name: Exercise real resource gameplay on simulator
         if: inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
         timeout-minutes: 12

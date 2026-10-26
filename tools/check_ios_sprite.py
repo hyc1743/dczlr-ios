@@ -199,7 +199,7 @@ def stage_resource_parts(parts_root, container, output, restore=False):
 
 
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
-          exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False):
+          exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False):
     if exercise_new_game and (not startup_fixture and not resource_parts):
         raise ValueError('New-game exercise requires generated startup fixture or staged resource parts')
     if exercise_new_game and startup_fixture and expected_scene != 'intro':
@@ -261,6 +261,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     # probe from that device so virtual controls are actually rendered. The
     # override is compiled out of Release; physical mapping has its own test.
     launch_environment['SIMCTL_CHILD_PORTLAB_TEST_VIRTUAL_CONTROLS']='1'
+    if pc_input:launch_environment['SIMCTL_CHILD_PORTLAB_TEST_PC_INPUT']='1'
     session=uuid.uuid4().hex
     launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
     if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
@@ -284,7 +285,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             if not has_session(candidate,session):
                 time.sleep(1);continue
             log=candidate
-            if 'PORTLAB_GAMEPAD_TEST_FAILED' in log:
+            if 'PORTLAB_GAMEPAD_TEST_FAILED' in log or 'PORTLAB_PC_INPUT_TEST_FAILED' in log:
                 (output/'app.log').write_text(log,encoding='utf-8')
                 raise RuntimeError('UIKit gamepad regression failed: '+log[-2000:])
             if startup_fixture:
@@ -369,11 +370,17 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             str(launch_timed_out) + "; launch=" + launch[-1000:] + "; log=" + log[-2000:])
     if 'PORTLAB_GAMEPAD_TEST_PASSED' not in log:
         raise RuntimeError('Missing UIKit gamepad regression evidence')
+    if 'PORTLAB_PC_INPUT_TEST_PASSED' not in log:
+        raise RuntimeError('Missing simultaneous UIKit keyboard and mouse regression evidence')
     if expected_scene != 'checker':
-        matches=re.findall(r'PORTLAB_GAMEPAD_PRESENTATION bounds=(\d+)x(\d+) attached=1 hidden=0 physical=0 paths=1',log)
+        pattern=(r'PORTLAB_GAMEPAD_PRESENTATION bounds=(\d+)x(\d+) attached=1 .*pc_visible=1'
+                 if pc_input else r'PORTLAB_GAMEPAD_PRESENTATION bounds=(\d+)x(\d+) attached=1 hidden=0 physical=0 paths=1')
+        matches=re.findall(pattern,log)
         if not any(int(w)>0 and int(h)>0 for w,h in matches):
             raise RuntimeError('Gamepad overlay was not visible in the actual application window: '+log[-2000:])
     report = {"gamepad_regression": "UIKit touch ownership and GameController snapshot passed",
+              "pc_input_regression": "Simultaneous UIKit key hold, mouse hold, pointer drag and independent release passed",
+              "pc_input_visible": pc_input,
               "simulator": phone["name"], "runtime": phone["runtime"], "udid": device,"launch_command":launch_state,
               **scene_evidence(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)}
     if startup_fixture:
@@ -426,6 +433,7 @@ if __name__ == "__main__":
     parser.add_argument("--boot-only", action="store_true")
     parser.add_argument("--startup-fixture", action="store_true")
     parser.add_argument("--exercise-new-game", action="store_true")
+    parser.add_argument("--pc-input", action="store_true", help="show and verify the actual keyboard/mouse overlay")
     parser.add_argument("--resource-parts", type=Path,
                         help="local directory containing DczlrData.manifest.json and all dczdata parts")
     parser.add_argument("--exercise-real-gameplay", action="store_true",
@@ -434,6 +442,6 @@ if __name__ == "__main__":
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input)
     else:
         parser.error("--app is required unless --boot-only is selected")

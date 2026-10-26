@@ -30,7 +30,7 @@ class NativeMenuTests(unittest.TestCase):
         self.assertEqual(self.lib.dc_menu_step(C.byref(state),buttons,33,0,0,1,0,C.byref(result)),1)
         self.assertEqual(self.lib.dc_menu_step(C.byref(state),buttons,1,0,0,1,0,C.cast(C.byref(state),C.POINTER(C.c_int32))),1)
 
-    def test_pointer_release_requires_prior_hover_for_original_activation_code(self):
+    def test_pointer_press_requires_prior_hover_for_original_activation_code(self):
         state=MenuState(selected=-1,hover=-1);button=(MenuButton*1)(MenuButton(0,0,10,10));result=C.c_int32()
         self.assertEqual(self.lib.dc_menu_step(C.byref(state),button,1,10,10,1,3,C.byref(result)),0)
         self.assertEqual(result.value,3)

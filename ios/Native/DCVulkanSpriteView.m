@@ -197,7 +197,9 @@ static void dc_write_float_le(uint8_t *out, float value) {
 }
 - (NSString *)drawAtX:(float)x y:(float)y time:(double)time
                 layer:(CAMetalLayer *)layer width:(uint32_t)width height:(uint32_t)height
-         dataDirectory:(NSString *)directory touching:(BOOL)touching controller:(dc_pad_frame)controller {
+         dataDirectory:(NSString *)directory touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput {
+    // Coordinates, buttons, all keys and motion arrive in one immutable frame.
+    if (pcInput.active) { x=pcInput.x*2-1; y=1-pcInput.y*2; touching=(pcInput.mouse[0]&1)!=0; }
     if (!width || !height) return @"CAMetalLayer has empty drawable size";
     if (_renderer && (_width != width || _height != height)) [self destroyRenderer];
     if (!_renderer) {
@@ -284,11 +286,14 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 NSString *gameError=[self startGameSceneFromDirectory:directory];
                 if(gameError)return gameError;
                 dc_pad_frame gameController=controller;
+                BOOL suppressInput=_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch;
                 if(_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch) gameController=(dc_pad_frame){0};
                 BOOL gameTouch=touching;
                 if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
                 if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
-                NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController width:_width height:_height];
+                dc_pc_frame gamePC=pcInput;
+                if(suppressInput) gamePC=(dc_pc_frame){0};
+                NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController pcInput:gamePC width:_width height:_height];
                 if(gameFailure)return gameFailure;
                 NSString *voiceFailure=[self playPendingGameplayVoice];
                 if(voiceFailure)return voiceFailure;
@@ -351,7 +356,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         float offsetY = ((float)_height - 768.0f * scale) * 0.5f;
         int32_t menuResult=-1,menuRow=-1;
         BOOL acceptsInput=!_titleState.waiting || (_titleState.action==0 && transitionReady);
-        if (acceptsInput && (touching || _previousTitleTouch)) {
+        if (acceptsInput && (pcInput.active || touching || _previousTitleTouch)) {
             float screenX = (x + 1.0f) * 0.5f * _width;
             float screenY = (1.0f - y) * 0.5f * _height;
             float gameX = (screenX - offsetX) / scale;
@@ -363,7 +368,15 @@ static void dc_write_float_le(uint8_t *out, float value) {
             dc_menu_button buttons[5]={0};
             for(uint32_t i=0;i<5;++i)buttons[i]=(dc_menu_button){.x=702,.y=400+72*i,.width=256,.height=48,
                 .disabled=(i==2&&!_editUnlocked)||(i==3&&!_extraUnlocked)};
-            uint8_t input=touching ? (_previousTitleTouch?2:1) : 3;
+            uint8_t input=pcInput.active?pcInput.mouse[0]:(touching ? (_previousTitleTouch?1:3) : (_previousTitleTouch?2:0));
+            // The original menu requires hover before the press. A direct
+            // touchscreen press moves and clicks in one event, so establish
+            // the same hover at this location before forwarding its press.
+            if (input==3) {
+                int32_t hoverResult;
+                if(dc_menu_step(&_titleMenu,buttons,5,(int32_t)gameX,(int32_t)gameY,1,0,&hoverResult)!=DC_OK)
+                    return @"Title pointer hover failed";
+            }
             int32_t result;
             dc_status menuStatus=dc_menu_step(&_titleMenu,buttons,5,(int32_t)gameX,(int32_t)gameY,1,input,&result);
             if(menuStatus!=DC_OK)return @"Title menu update failed";
@@ -443,7 +456,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
             ADD_TITLE_LAYER((uint32_t)_selectedTitleOption, 702, 400 + 72 * (_selectedTitleOption - 2));
         if (!_editUnlocked) ADD_TITLE_LAYER(7, 702, 544);
         if (!_extraUnlocked) ADD_TITLE_LAYER(8, 702, 616);
-        if (touching) {
+        if (touching && !pcInput.active) {
             float screenX = (x + 1.0f) * 0.5f * _width;
             float screenY = (1.0f - y) * 0.5f * _height;
             float gameX = (screenX - offsetX) / scale;
@@ -454,11 +467,14 @@ static void dc_write_float_le(uint8_t *out, float value) {
     } else {
         if(_gameScene) {
             dc_pad_frame gameController=controller;
+            BOOL suppressInput=_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch;
             if(_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch) gameController=(dc_pad_frame){0};
             BOOL gameTouch=touching;
             if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
             if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
-            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController width:_width height:_height];
+            dc_pc_frame gamePC=pcInput;
+            if(suppressInput) gamePC=(dc_pc_frame){0};
+            NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController pcInput:gamePC width:_width height:_height];
             if(gameFailure)return gameFailure;
             NSString *voiceFailure=[self playPendingGameplayVoice];
             if(voiceFailure)return voiceFailure;
@@ -588,7 +604,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     ++_presentedFrames;
     return nil;
 }
-- (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching controller:(dc_pad_frame)controller
+- (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
             completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL, BOOL, NSString *, BOOL, BOOL, BOOL))completion {
     if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO, NO, @"", NO, NO, NO); return; }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
@@ -597,7 +613,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     NSString *directory = [self.startupDataDirectory copy] ?: @"";
     dispatch_async(_renderQueue, ^{
         @autoreleasepool {
-            NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching controller:controller];
+            NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching controller:controller pcInput:pcInput];
             NSString *device = self->_deviceName ?: @"";
             DCVulkanSpriteScene scene = self->_presentedScene;
             BOOL advanced = self->_diagnosticAnimationAdvanced;
