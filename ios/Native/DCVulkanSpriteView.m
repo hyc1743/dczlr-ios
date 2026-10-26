@@ -155,7 +155,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(_gameScene)return nil;
     if(_gameAudio){NSString *audioError=[_gameAudio prepareGameplayAudio];if(audioError)return audioError;}
     NSString *gameError=nil;
-    _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter error:&gameError];
+    _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter
+        mapSelector:_story.map stage:_story.stage error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;

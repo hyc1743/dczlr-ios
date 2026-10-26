@@ -431,13 +431,16 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(found){_cameraBase=best.base;_cameraDistance=best.stored_distance;_cameraHeight=best.height;_cameraPitch=best.pitch;_cameraYaw=best.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];[_cameraFallbacks setObject:[NSValue valueWithBytes:&best objCType:@encode(dc_camera_orbit)] forKey:@(_mapSelector)];}
     _cameraAutoSelected=YES;return found?nil:@"No camera preset projects the actor";
 }
-- (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter error:(NSString **)error {
+- (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
+    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
     _storyChapter=chapter;_storyPhase=0;
     dc_story_chapter profile;
     if(dc_story_chapter_profile(chapter,&profile)!=DC_OK) { if(error)*error=@"Story chapter profile rejected";return nil; }
-    if(profile.map<0||profile.stage<0) { if(error)*error=@"Story chapter has no map selector";return nil; }
-    _mapSelector=(uint32_t)profile.map;_storyStage=(uint32_t)profile.stage;
+    /* Scene chapters carry their own selectors; the ending scene keeps the
+     * previous map/stage from the story state. */
+    _mapSelector=profile.map>=0 ? (uint32_t)profile.map : (mapSelector<=8 ? mapSelector : 0);
+    _storyStage=profile.stage>=0 ? (uint32_t)profile.stage : (stage<=2 ? stage : 0);
 #if DEBUG
     _captureGameplayFrame=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_GAMEPLAY"] isEqualToString:@"1"];
 #endif
