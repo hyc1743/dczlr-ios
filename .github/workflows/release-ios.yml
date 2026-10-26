@@ -12,12 +12,31 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   release:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify recorded gameplay validation matches the release game code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os,subprocess,sys
+          from pathlib import Path
+          sys.path.insert(0,'tools')
+          from github_transport import request
+          run=request(os.environ['GH_TOKEN'],'GET',
+              '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/40297158735')
+          assert run['status']=='completed' and run['conclusion']=='success'
+          subprocess.run(['git','diff','--exit-code',run['head_sha'],'HEAD','--',
+              'native','ios/Native','ios/Sources','ios/RuntimeChecks'],check=True)
+          print('Release game code matches successful real-resource simulator validation.')
+          PY
       - name: Select release tag
         id: tag
         env:
@@ -61,10 +80,22 @@ jobs:
               'graphics_backend': 'Vulkan/MoltenVK with explicit gameplay winding and bind-corrected actor attachment',
               'story_logic': 'original 26-chapter dispatcher, chapter-end menu actions, gameplay row activation and script chapters integrated; chapter-end handler matched the isolated original function on 5760 oracle cases',
               'menus': 'title New Game/Load/Edit/Extra/options destinations, gameplay six-row menu, chapter-end menu and unlock-gated gallery wired',
-              'game_playability': 'story/menu/interaction logic oracle-verified and locally audited; device execution unverified',
+              'game_playability': 'initial real-resource simulator routes passed; full game and physical device execution unverified',
               'controller': 'weixing3-derived UIKit virtual and ExtendedGamepad input; simulator regression passed',
-              'validation_run': '40284181749',
-              'portable_tests': 250,
+              'validation_run': '40297158735',
+              'simulator_app_build_run': '40292990624',
+              'portable_tests': 253,
+              'validation_scope': {
+                  'startup_and_new_game': 'real-resource route passed',
+                  'movement_camera_and_interaction': 'passed on iPhone 16 Pro / iOS 18.5 simulator',
+                  'save_record': '104-byte player/story record accepted by both native readers',
+                  'chapter_handoff': 'scripts 0-2 to gameplay to chapter 4 passed',
+                  'first_gameplay_frame': 'native GPU capture preserved before later scene overwrite; actor visibility checked',
+                  'complete_game_title_load_long_session_and_physical_device': 'not tested',
+              },
+              'known_limitations': ['later-map placement anchor matching is incomplete', 'original visual equivalence and audible output unverified'],
+              'validation_report': 'docs/playability-testing.md',
+              'release_run': os.environ['GITHUB_RUN_ID'],
               'source_revision': os.environ['GITHUB_SHA'],
               'gameplay_rendering': 'initial native GPU frame confirms visible actor; original image equivalence unverified',
               'resource_manifest': 'embedded',
