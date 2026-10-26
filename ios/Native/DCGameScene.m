@@ -460,7 +460,9 @@ static void freeMorphCaches(dc_game_model *slot) {
     if (_mapSelector == 0) {
         // The first map's archived home camera is a wide survey view. The
         // playable entry uses the actor anchor as its orbit target.
-        _cameraBase = _actorWorld;
+        _cameraBase = gameIdentity();
+        _cameraBase.values[12] = _actorWorld.values[12];
+        _cameraBase.values[14] = _actorWorld.values[14];
         _cameraDistance = 12.0f;
         _cameraHeight = 4.0f;
         _cameraPitch = -0.8f;
