@@ -261,6 +261,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     # probe from that device so virtual controls are actually rendered. The
     # override is compiled out of Release; physical mapping has its own test.
     launch_environment['SIMCTL_CHILD_PORTLAB_TEST_VIRTUAL_CONTROLS']='1'
+    # Diagnostic run: start the first room map to compare against device capture.
+    launch_environment['SIMCTL_CHILD_PORTLAB_START_MAP']=os.environ.get('PORTLAB_START_MAP','1')
     session=uuid.uuid4().hex
     launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
     if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'

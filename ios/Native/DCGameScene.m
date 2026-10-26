@@ -479,7 +479,13 @@ static void freeMorphCaches(dc_game_model *slot) {
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
     [self loadPlayerState];
     uint32_t savedMap=_player.map_selector;while(_mapSelector<savedMap){NSString *advanceError=[self advanceToNextMap];if(advanceError)break;}
-    _loaded=YES;return self;
+    _loaded=YES;
+    const char *startMap=getenv("PORTLAB_START_MAP");
+    if(startMap && atoi(startMap)==1) {
+        NSString *advanceError=[self advanceToNextMap];
+        if(advanceError) { if(error)*error=advanceError; return nil; }
+    }
+    return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
     if(_renderer)for(uint32_t i=0;i<slot->textureCount;++i)if(slot->textures[i])dc_vk_sprite_remove_texture(_renderer,slot->textures[i]);
