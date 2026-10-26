@@ -554,7 +554,8 @@ BOOL dc_gamepad_test_menu_action(uint32_t index) {
         DCTouchProbe *f=[DCTouchProbe new];f.point=center(v->_touch.layout.controls[kind]);return f;
     };
     void (^begin)(DCTouchProbe *)=^(DCTouchProbe *f) {
-        check([v hitTest:f.point withEvent:nil]==v,@"Visible touch control receives UIKit hits");
+        check([v hitTest:f.point withEvent:nil]==v,
+            [NSString stringWithFormat:@"Visible touch control receives UIKit hits at %.1f,%.1f",f.point.x,f.point.y]);
         [v touchesBegan:[NSSet setWithObject:f] withEvent:nil];
     };
     void (^end)(DCTouchProbe *)=^(DCTouchProbe *f){[v touchesEnded:[NSSet setWithObject:f] withEvent:nil];};
