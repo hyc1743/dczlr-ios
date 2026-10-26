@@ -31,7 +31,7 @@ jobs:
           sys.path.insert(0,'tools')
           from github_transport import request
           run=request(os.environ['GH_TOKEN'],'GET',
-              '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/40307596134')
+              '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/40318917568')
           assert run['status']=='completed' and run['conclusion']=='success'
           jobs=request(os.environ['GH_TOKEN'],'GET',
               '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+str(run['id'])+'/jobs?per_page=100')['jobs']
@@ -92,7 +92,7 @@ jobs:
               'validation_run': str(validation['run']),
               'tested_game_code_revision': validation['source'],
               'simulator_app_build_run': str(validation['run']),
-              'portable_tests': 261,
+              'portable_tests': 266,
               'validation_scope': {
                   'startup_and_new_game': 'real-resource route passed',
                   'movement_camera_and_interaction': 'visible window hit tests and UIKit touch handlers passed on iPhone 16 Pro / iOS 18.5 simulator; raw controller injection disabled',
@@ -101,12 +101,12 @@ jobs:
                   'first_gameplay_frame': 'native GPU capture preserved before later scene overwrite; actor visibility checked',
                   'complete_game_title_load_long_session_and_physical_device': 'not tested',
               },
-              'known_limitations': ['later-map placement anchor matching is incomplete', 'original visual equivalence and audible output unverified'],
+              'known_limitations': ['original visual equivalence and audible output unverified', 'physical device execution and signing unverified'],
               'validation_report': 'docs/playability-testing.md',
               'touch_controls_report': 'docs/touch-controls.md',
               'release_run': os.environ['GITHUB_RUN_ID'],
               'source_revision': os.environ['GITHUB_SHA'],
-              'gameplay_rendering': 'initial native GPU frame confirms visible actor; original image equivalence unverified',
+              'gameplay_rendering': 'GPU render probe passed idle, interaction and restored captures across five story maps; original image equivalence unverified',
               'resource_manifest': 'embedded',
               'resource_parts': 'external; existing Documents/game/Data can be reused',
               'signing': 'unsigned',
