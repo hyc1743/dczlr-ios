@@ -1,4 +1,4 @@
-name: Publish unsigned iOS release
+name: Publish development iOS IPA
 
 on:
   push:
@@ -6,8 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to create or update
+        description: Development release tag
         required: true
+        type: string
+      validation_run:
+        description: Successful scoped iOS simulator validation run
+        required: true
+        default: '40413204123'
         type: string
 
 permissions:
@@ -16,49 +21,48 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-latest
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify recorded gameplay validation matches the release game code
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PY'
-          import json,os,subprocess,sys
-          from pathlib import Path
-          sys.path.insert(0,'tools')
-          from github_transport import request
-          run=request(os.environ['GH_TOKEN'],'GET',
-              '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/40352140195')
-          assert run['status']=='completed' and run['conclusion']=='success'
-          jobs=request(os.environ['GH_TOKEN'],'GET',
-              '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+str(run['id'])+'/jobs?per_page=100')['jobs']
-          assert any(s['name']=='Exercise the original story loop on simulator' and s['conclusion']=='success'
-              for j in jobs for s in j['steps']), 'The real touch-control route must pass, not be skipped'
-          subprocess.run(['git','diff','--exit-code',run['head_sha'],'HEAD','--',
-              'native','ios/Native','ios/Sources','ios/RuntimeChecks'],check=True)
-          print('Release game code matches successful real-resource simulator validation.')
-          Path('out').mkdir(exist_ok=True)
-          Path('out/release-validation.json').write_text(json.dumps({'run':run['id'],'source':run['head_sha']}))
-          PY
-      - name: Select release tag
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select development release tag
         id: tag
         env:
           INPUT_TAG: ${{ inputs.tag }}
           REF_NAME: ${{ github.ref_name }}
-        run: echo "value=${INPUT_TAG:-$REF_NAME}" >> "$GITHUB_OUTPUT"
-      - name: Install XcodeGen
+        run: |
+          RELEASE_TAG="${INPUT_TAG:-$REF_NAME}"
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "value=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+      - name: Verify scoped simulator validation matches release code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VALIDATION_RUN: ${{ inputs.validation_run || '40413204123' }}
+          RELEASE_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          python3 tools/verify_release_validation.py --run "$VALIDATION_RUN" --tag "$RELEASE_TAG" --output out/release-validation.json
+      - name: Run portable and release packaging checks
+        run: |
+          python3 -m pip install -r requirements.txt
+          python3 -m unittest discover -s tests
+          python3 tools/validate_release_contract.py .
+      - name: Install XcodeGen and shader tools
         run: brew install xcodegen glslang spirv-tools
-      - name: Prepare pinned MoltenVK and self-authored shaders
+      - name: Prepare pinned MoltenVK and shaders
         run: |
           python3 tools/bootstrap_moltenvk.py --notices-output ios/Generated/MoltenVKNotices
           python3 tools/build_sprite_shaders.py --output ios/Generated/sprite-shaders
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate --spec project.yml
-      - name: Build unsigned device app
+      - name: Build unsigned ARM64 device app
         working-directory: ios
         run: |
           xcodebuild -project PortLab.xcodeproj -scheme PortLab -configuration Release \
@@ -67,66 +71,62 @@ jobs:
       - name: Package IPA
         working-directory: ios
         run: |
-          rm -rf build/release-ipa && mkdir -p build/release-ipa/Payload
+          mkdir -p build/release-ipa/Payload
           cp -R build/release/Build/Products/Release-iphoneos/PortLab.app build/release-ipa/Payload/
           (cd build/release-ipa && zip -qry "../DCZL-R-unsigned.ipa" Payload)
-      - name: Write build status report
-        working-directory: ios
+      - name: Inspect actual IPA and write release report
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.value }}
         run: |
-          python - <<'PY'
-          import json
-          import hashlib
-          import os
+          python3 tools/verify_ipa.py --ipa ios/build/DCZL-R-unsigned.ipa \
+            --manifest ios/Resources/DczlrData.manifest.json --version "${RELEASE_TAG#v}" \
+            --build 11 --output out/ipa-inspection.json
+          python3 - <<'PY'
+          import json,os
           from pathlib import Path
-          ipa = Path('build/DCZL-R-unsigned.ipa')
-          validation=json.loads(Path('../out/release-validation.json').read_text())
-          Path('build/build-report.json').write_text(json.dumps({
-              'product': 'DCZL-R-unsigned.ipa',
-              'host_build': 'compiled_by_xcodebuild',
-              'native_guest': 'native reimplementation linked',
-              'graphics_backend': 'Vulkan/MoltenVK with explicit gameplay winding and bind-corrected actor attachment',
-              'story_logic': 'original 26-chapter dispatcher, chapter-end menu actions, gameplay row activation and script chapters integrated; chapter-end handler matched the isolated original function on 5760 oracle cases',
-              'menus': 'contextual point/select, interaction, cancel, segment finish and chapter advance; native title destinations remain wired',
-              'game_playability': 'initial real-resource simulator routes passed; full game and physical device execution unverified',
-              'controller': 'game-specific UIKit touch controls; physical ExtendedGamepad merge and optional PC panel',
-              'validation_run': str(validation['run']),
-              'tested_game_code_revision': validation['source'],
-              'simulator_app_build_run': str(validation['run']),
-              'portable_tests': 267,
-              'validation_scope': {
-                  'startup_and_new_game': 'real-resource route passed',
-                  'movement_camera_and_interaction': 'visible window hit tests and UIKit touch handlers passed on iPhone 16 Pro / iOS 18.5 simulator; raw controller injection disabled',
-                  'save_record': 'visible Save button completed; 104-byte player/story record accepted by both native readers',
-                  'chapter_handoff': 'visible Continue/Interact/Next Chapter buttons drove scripts 0-2 to gameplay to chapter 4',
-                  'first_gameplay_frame': 'native GPU capture preserved before later scene overwrite; actor visibility checked',
-                  'complete_game_title_load_long_session_and_physical_device': 'not tested',
-              },
-              'known_limitations': ['original visual equivalence and audible output unverified', 'physical device execution and signing unverified'],
-              'validation_report': 'docs/playability-testing.md',
-              'touch_controls_report': 'docs/touch-controls.md',
-              'release_run': os.environ['GITHUB_RUN_ID'],
-              'source_revision': os.environ['GITHUB_SHA'],
-              'gameplay_rendering': 'GPU render probe passed idle, interaction and restored captures across five story maps; original image equivalence unverified',
-              'resource_manifest': 'embedded',
-              'resource_parts': 'external; existing Documents/game/Data can be reused',
-              'signing': 'unsigned',
-              'sha256': hashlib.sha256(ipa.read_bytes()).hexdigest(),
-          }, indent=2) + '\n')
-          Path('build/DCZL-R-unsigned.ipa.sha256').write_text(
-              hashlib.sha256(ipa.read_bytes()).hexdigest() + '  ' + ipa.name + '\n')
+          package=json.loads(Path('out/ipa-inspection.json').read_text())
+          validation=json.loads(Path('out/release-validation.json').read_text())
+          report={**package,'release_channel':'development prerelease',
+              'source_revision':os.environ['GITHUB_SHA'],'release_run':os.environ['GITHUB_RUN_ID'],
+              'validation':validation,'portable_checks':'passed in release workflow',
+              'known_limitations':['character/outfit actions and remaining camera modes incomplete',
+                  'secondary view and save/edit screens incomplete','complete story and original visual equivalence not established',
+                  'physical device execution and signing not tested'],
+              'resources':'external; existing Documents/game/Data can be reused',
+              'fidelity_report':'docs/original-fidelity.md'}
+          Path('ios/build/build-report.json').write_text(json.dumps(report,indent=2)+'\n')
+          Path('ios/build/DCZL-R-unsigned.ipa.sha256').write_text(package['sha256']+'  DCZL-R-unsigned.ipa\n')
           PY
-      - name: Create or update GitHub Release
+      - name: Retain release build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DCZL-R-device-release
+          path: |
+            ios/build/DCZL-R-unsigned.ipa
+            ios/build/DCZL-R-unsigned.ipa.sha256
+            ios/build/build-report.json
+            ios/Resources/DczlrData.manifest.json
+            out/ipa-inspection.json
+            out/release-validation.json
+      - name: Publish development GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.tag.outputs.value }}
         run: |
-          test -n "$RELEASE_TAG"
-          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
-            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "Unsigned iOS build. Sign with your own Apple identity before installation. Resource parts are separate assets." \
-              --target "$GITHUB_SHA"
+          if gh release view "$RELEASE_TAG" --json isDraft,targetCommitish > out/existing-release.json 2>/dev/null; then
+            python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          existing=json.loads(Path('out/existing-release.json').read_text())
+          assert existing['isDraft'] and existing['targetCommitish']==os.environ['GITHUB_SHA'], 'Refusing to replace an existing release'
+          PY
+          else
+            gh release create "$RELEASE_TAG" --draft --prerelease --title "$RELEASE_TAG (test build)" \
+              --notes-file "docs/releases/$RELEASE_TAG.md" --target "$GITHUB_SHA"
+          fi
           gh release upload "$RELEASE_TAG" \
             ios/build/DCZL-R-unsigned.ipa \
             ios/build/DCZL-R-unsigned.ipa.sha256 \
             ios/build/build-report.json \
-            ios/Resources/DczlrData.manifest.json \
-            --clobber
+            ios/Resources/DczlrData.manifest.json --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
