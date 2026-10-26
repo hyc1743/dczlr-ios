@@ -17,7 +17,7 @@ class NativeCameraTests(unittest.TestCase):
     def setUpClass(cls):cls.lib=library()
 
     def test_retarget_matches_original_instruction_vectors_with_math_boundaries(self):
-        from oracle_camera_retarget import cases
+        from camera_retarget_cases import cases
         source=list(cases());fixture=json.loads((ROOT/'tests/fixtures/camera-retarget-original-vectors.json').read_text())
         self.assertEqual(fixture['cases'],128)
         for row in fixture['vectors']:

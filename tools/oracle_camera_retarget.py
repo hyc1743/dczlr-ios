@@ -14,7 +14,7 @@ from unicorn import UC_PROT_READ,UC_PROT_WRITE,UC_PROT_EXEC
 from unicorn.x86_const import UC_X86_REG_ESP,UC_X86_REG_EBP,UC_X86_REG_EIP,UC_X86_REG_EAX,UC_X86_REG_ECX
 from oracle_animation import OriginalAnimation,OBJECT,STACK,STOP,TARGET_SHA256
 from native_core import library,Matrix,CameraOrbit
-from scene_cases import matrix
+from camera_retarget_cases import cases
 
 PRIMARY=0x7c82a8
 SECONDARY=OBJECT
@@ -95,15 +95,6 @@ class OriginalRetarget(OriginalAnimation):
         self.uc.emu_start(entry,STOP,count=10000)
         if self.uc.reg_read(UC_X86_REG_EIP)!=STOP or self.uc.reg_read(UC_X86_REG_ESP)!=STACK+4:raise RuntimeError('Retarget did not return')
         return self.floats(obj+base,16)+self.floats(obj+scalars,4)
-
-def cases():
-    for rotation in (0,.4):
-        for height in (0,3):
-            for distance in (-20,-60):
-                for pitch in (-.3,.2):
-                    for target in ((0,2,0),(8,4,-2),(-10,8,4),(2,-3,-9)):
-                        for primary in (0,1):
-                            yield CameraOrbit(matrix(rotation,1,(2,1,-3)),distance,height,pitch,.5),matrix(translation=target),primary
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--exe',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--vectors',type=Path,required=True);a=p.parse_args()
