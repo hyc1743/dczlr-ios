@@ -457,11 +457,19 @@ static void freeMorphCaches(dc_game_model *slot) {
     // The first playable room uses a close follow camera after the title
     // transition. The archive preset is the wide room survey camera; feeding
     // that distance directly leaves the player outside the room on iOS.
-    if (_mapSelector == 0 && fabsf(_cameraDistance) > 24.0f) {
+    if (_mapSelector == 0) {
+        // The first map's archived home camera is a wide survey view. The
+        // playable entry uses the actor anchor as its orbit target.
+        _cameraBase = _actorWorld;
         _cameraDistance = 12.0f;
-        _cameraHeight = 0.0f;
+        _cameraHeight = 4.0f;
+        _cameraPitch = -0.8f;
+        _cameraYaw = 0.0f;
+        _cameraOriginX = _cameraBase.values[12];
+        _cameraOriginZ = _cameraBase.values[14];
+        _cameraAutoSelected = YES;
     }
-    _cameraAutoSelected=NO;
+    if (_mapSelector != 0) _cameraAutoSelected=NO;
     _actor.world=_actorWorld;
     _face.world=_actorWorld;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
