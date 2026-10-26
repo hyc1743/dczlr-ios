@@ -52,6 +52,10 @@ final class SpritePresenter: NSObject {
     private var reportedSkinAdvance = false
     private var reportedGameplaySkinAdvance = false
     private var reportedInteraction = false
+    private var touchPositionMode = false
+    private var touchSaveObserved = false
+    private var reportedTouchStart = false
+    private var reportedTouchPass = false
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -77,6 +81,56 @@ final class SpritePresenter: NSObject {
         displayLink = nil
     }
 
+    private var testingTouch: Bool {
+        ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_TOUCH_CONTROLS"] == "1"
+    }
+
+    // Drive the visible controls' hit tests and UIKit ownership handlers.
+    // No pad axes, button bits or renderer pointer values are fabricated here.
+    private func driveTouchRoute() -> Bool {
+        func hold(_ control: Int32, _ down: Bool, _ x: Float = 0, _ y: Float = 0) -> Bool {
+            dc_gamepad_test_hold(UInt32(control), x, y, down)
+        }
+        let now = CACurrentMediaTime()
+        let pulse = now.truncatingRemainder(dividingBy: 0.9) < 0.18
+        var ok = true
+        switch lastReportedScene {
+        case .title:
+            let elapsed = now - (testTitleTime ?? now)
+            ok = hold(DC_TOUCH_PRIMARY, elapsed > 2 && pulse)
+        case .intro:
+            ok = hold(DC_TOUCH_PRIMARY, pulse)
+        case .gameplay:
+            if !reportedControllerMovement || !reportedControllerCamera {
+                if !touchPositionMode {
+                    guard dc_gamepad_test_menu_action(4) else { return false }
+                    touchPositionMode = true
+                }
+                ok = hold(DC_TOUCH_MOVE, !reportedControllerMovement, 0.55, 0)
+                    && hold(DC_TOUCH_LOOK, !reportedControllerCamera, Float(sin(now * 7) * 0.35), -0.1)
+            } else {
+                _ = hold(DC_TOUCH_MOVE, false)
+                _ = hold(DC_TOUCH_LOOK, false)
+                if touchPositionMode {
+                    guard dc_gamepad_test_menu_action(4) else { return false }
+                    touchPositionMode = false
+                }
+                if !touchSaveObserved {
+                    ok = hold(DC_TOUCH_SAVE, pulse)
+                } else {
+                    _ = hold(DC_TOUCH_SAVE, false)
+                    ok = hold(DC_TOUCH_PRIMARY, pulse)
+                }
+            }
+        default: return true
+        }
+        if ok && !reportedTouchStart {
+            reportedTouchStart = true
+            model.record("Visible touch controls received hit-tested UIKit input", event: "PORTLAB_TOUCH_INPUT_STARTED")
+        }
+        return ok
+    }
+
     @objc private func draw() {
         guard model.active, !failed, !renderPending, let view = view else { return }
         if model.gameResourcesActive {
@@ -87,6 +141,12 @@ final class SpritePresenter: NSObject {
             }
         }
         renderPending = true
+        if testingTouch && !driveTouchRoute() {
+            failed = true
+            displayLink?.isPaused = true
+            model.record("Touch input could not reach its visible control", event: "PORTLAB_TOUCH_ROUTE_FAILED")
+            return
+        }
         var pad = model.gamepad.sample()
         let pcInput = dc_pc_input_read()
         var pointerX = model.x, pointerY = model.y
@@ -98,7 +158,7 @@ final class SpritePresenter: NSObject {
         }
         // CI supplies generated resources and exercises the same menu input
         // adapter. Normal launches continue to use the user's pointer state.
-        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
+        if !testingTouch, ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
            let titleTime = testTitleTime, lastReportedScene == .title {
             let elapsed = CACurrentMediaTime() - titleTime
             let scale = min(view.bounds.width / 1024, view.bounds.height / 768)
@@ -108,7 +168,7 @@ final class SpritePresenter: NSObject {
             pointerY = Float(1 - 2 * py / view.bounds.height)
             touching = elapsed >= 6 && elapsed < 6.4
         }
-        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_STORY"] == "1" {
+        if !testingTouch, ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_STORY"] == "1" {
             if lastReportedScene == .title, let titleTime = testTitleTime {
                 // Same New Game activation as the generated-resource exercise.
                 let elapsed = CACurrentMediaTime() - titleTime
@@ -147,7 +207,7 @@ final class SpritePresenter: NSObject {
                 touching = cycle.truncatingRemainder(dividingBy: 1.0) < 0.22
             }
         }
-        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
+        if !testingTouch, ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
            let introTime = testIntroTime, lastReportedScene == .intro, introChapter == 0 {
             let elapsed = CACurrentMediaTime() - introTime
             touching = (elapsed >= 2 && elapsed < 2.2) ||
@@ -155,12 +215,12 @@ final class SpritePresenter: NSObject {
                 (elapsed >= 4 && elapsed < 4.2) ||
                 (elapsed >= 5 && elapsed < 5.2)
         }
-        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
+        if !testingTouch, ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
            let introTime = testIntroTime, lastReportedScene == .intro {
             let elapsed = CACurrentMediaTime() - introTime
             touching = elapsed >= 2 && elapsed.truncatingRemainder(dividingBy: 1.0) < 0.2
         }
-        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
+        if !testingTouch, ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
            lastReportedScene == .gameplay {
             if !wasGameplay { testGameplayTime = nil }
             if testGameplayTime == nil { testGameplayTime = CACurrentMediaTime() }
@@ -187,6 +247,10 @@ final class SpritePresenter: NSObject {
             touching: touching, controller: pad, pcInput: pcInput) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
                 guard let self = self else { return }
                 self.renderPending = false
+                if self.view?.gameplaySaveCompleted == true, !self.touchSaveObserved {
+                    self.touchSaveObserved = true
+                    self.model.record("The visible save button wrote the native player/story file", event: "PORTLAB_TOUCH_SAVE_COMPLETED")
+                }
                 if self.view?.controllerMovementAdvanced == true, !self.reportedControllerMovement {
                     self.reportedControllerMovement = true
                     self.model.record("Controller axes moved the native player", event: "PORTLAB_GAMEPAD_MOVEMENT_ADVANCED")
@@ -217,7 +281,7 @@ final class SpritePresenter: NSObject {
                     case .title:
                         if self.testTitleTime == nil { self.testTitleTime = CACurrentMediaTime() }
                         self.model.record("双卡启动状态已完成并进入标题呈现", event: "PORTLAB_STARTUP_COMPLETED")
-                        self.model.record("Vulkan / MoltenVK 已显示标题画面（\(device)）；后续游戏逻辑尚未接入", event: "PORTLAB_SCENE_PRESENTED=title")
+                        self.model.record("Vulkan / MoltenVK 已显示标题画面（\(device)）", event: "PORTLAB_SCENE_PRESENTED=title")
                     case .intro:
                         if self.testIntroTime == nil { self.testIntroTime = CACurrentMediaTime() }
                         self.model.record("New-game intro record presented; local chapter 3 scene follows", event: "PORTLAB_SCENE_PRESENTED=intro")
@@ -278,6 +342,13 @@ final class SpritePresenter: NSObject {
                 if interactionCompleted, !self.reportedInteraction {
                     self.reportedInteraction = true
                     self.model.record("Chapter interaction animation completed", event: "PORTLAB_GAME_INTERACTION_COMPLETED")
+                }
+                if self.testingTouch, scene == .intro, self.introChapter >= 4,
+                   self.reportedControllerMovement, self.reportedControllerCamera,
+                   self.touchSaveObserved, self.reportedInteraction, !self.reportedTouchPass {
+                    self.reportedTouchPass = true
+                    self.model.record("Visible touch controls completed selection, position adjustment, camera drag, save and chapter advance",
+                                      event: "PORTLAB_TOUCH_ROUTE_PASSED")
                 }
             }
     }

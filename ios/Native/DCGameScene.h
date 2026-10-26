@@ -21,6 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL actorSkinAdvanced;
 @property(nonatomic,readonly) BOOL controllerMovementAdvanced;
 @property(nonatomic,readonly) BOOL controllerCameraAdvanced;
+@property(nonatomic,readonly) BOOL manualSaveCompleted;
 @property(nonatomic,readonly) uint32_t chapter;
 @property(nonatomic,readonly) uint32_t chapterEndAction;
 @property(nonatomic,readonly) uint32_t stageOutcomeA;

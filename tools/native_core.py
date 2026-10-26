@@ -439,10 +439,12 @@ def library():
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_mesh_clip.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
                ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c", ROOT / "native/game/dc_camera.c", ROOT / "native/game/dc_gameplay.c", ROOT / "native/game/dc_gamepad.c", ROOT / "native/game/dc_story.c"]
     sources.append(ROOT / "native/game/dc_pc_input.c")
+    sources.append(ROOT / "native/game/dc_touch_controls.c")
     inputs = sources + [ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
                         ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h", ROOT / "native/include/dc_story.h"]
     digest = hashlib.sha256("\0".join(command).encode())
+    inputs.append(ROOT / "native/include/dc_touch_controls.h")
     for path in inputs:
         digest.update(path.read_bytes())
     directory = ROOT / "out/native-core"

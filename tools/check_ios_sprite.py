@@ -139,6 +139,20 @@ def story_present(log):
         return False
 
 
+def touch_route_evidence(log):
+    if 'PORTLAB_TOUCH_ROUTE_FAILED' in log:
+        raise ValueError('Visible touch input failed its window hit test')
+    story=story_evidence(log)
+    for event in ('PORTLAB_TOUCH_INPUT_STARTED','PORTLAB_GAMEPAD_MOVEMENT_ADVANCED',
+                  'PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_TOUCH_SAVE_COMPLETED',
+                  'PORTLAB_TOUCH_ROUTE_PASSED'):
+        if not re.search(r'(?m)^\S+ '+event+r'(?= |$)',log):
+            raise ValueError('Missing actual touch control evidence: '+event)
+    return {'input_path':'visible window hit test -> UIKit touch handlers -> native input snapshot -> game scene',
+            'raw_controller_injection':False,'actions':['point/confirm','position adjustment menu','camera drag','save','interaction','next chapter'],
+            'story':story,'physical_device':'not tested'}
+
+
 def animation_advanced(log):
     return bool(re.search(r"(?m)^\S+ PORTLAB_NATIVE_ANIMATION_ADVANCED(?= |$)", log))
 
@@ -278,7 +292,7 @@ def preserve_gameplay_capture(container, output):
 
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
           exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False,
-          exercise_story=False):
+          exercise_story=False,touch_controls=False):
     if exercise_new_game and (not startup_fixture and not resource_parts):
         raise ValueError('New-game exercise requires generated startup fixture or staged resource parts')
     if exercise_new_game and startup_fixture and expected_scene != 'intro':
@@ -287,6 +301,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         raise ValueError('Real gameplay exercise requires resource parts and gameplay target')
     if exercise_story and (not resource_parts or expected_scene != 'story'):
         raise ValueError('Story exercise requires resource parts and story target')
+    if touch_controls and (not exercise_story or pc_input):
+        raise ValueError('Touch controls require the real story route without PC mode')
     require_animation = expected_scene == "checker"
     require_xa = expected_scene == "checker"
     require_material = expected_scene == "checker"
@@ -360,6 +376,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if exercise_real_gameplay:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
     if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_STORY']='1'
     if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
+    if touch_controls:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_TOUCH_CONTROLS']='1'
     # Cold CoreSimulator may queue the same request for over two minutes.
     # Observe that live command and app-authored evidence concurrently; never
     # issue another launch merely because an observation interval elapsed.
@@ -379,7 +396,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             if candidate!=log:
                 (output/'app.log').write_text(candidate,encoding='utf-8')
             log=candidate
-            if 'PORTLAB_GAMEPAD_TEST_FAILED' in log or 'PORTLAB_PC_INPUT_TEST_FAILED' in log:
+            if 'PORTLAB_GAMEPAD_TEST_FAILED' in log or 'PORTLAB_PC_INPUT_TEST_FAILED' in log or 'PORTLAB_TOUCH_ROUTE_FAILED' in log:
                 (output/'app.log').write_text(log,encoding='utf-8')
                 raise RuntimeError('UIKit gamepad regression failed: '+log[-2000:])
             if startup_fixture:
@@ -395,6 +412,11 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
                 run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
                 captured.add('gameplay-first')
             story_ok = not exercise_story or story_present(log)
+            if touch_controls:
+                story_ok=story_ok and bool(re.search(r'(?m)^\S+ PORTLAB_TOUCH_ROUTE_PASSED(?= |$)',log))
+                if 'PORTLAB_TOUCH_SAVE_COMPLETED' in log and 'manual-save' not in captured:
+                    shutil.copyfile(container/'Documents/game/Data/save/player.state',output/'touch-player.state')
+                    captured.add('manual-save')
             gameplay_ok = not exercise_real_gameplay or all(event in log for event in (
                 'PORTLAB_GAMEPAD_MOVEMENT_ADVANCED', 'PORTLAB_GAMEPAD_CAMERA_ADVANCED'))
             scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
@@ -534,6 +556,15 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             'story_evidence': 'expected script->gameplay->interaction->chapter-4 script markers'
         }
         report['story']=story_evidence(log)
+    if touch_controls:
+        report['touch_controls']=touch_route_evidence(log)
+        import ctypes as C
+        from native_core import library,GamePlayer,StoryState
+        saved=(output/'touch-player.state').read_bytes()
+        player,story=GamePlayer(),StoryState();lib=library()
+        assert lib.dc_game_player_load(saved,len(saved),C.byref(player))==0
+        assert lib.dc_story_load(saved[32:],max(0,len(saved)-32),C.byref(story))==0
+        report['touch_save']={'bytes':len(saved),'player_record':'valid','story_record':'valid','chapter':story.chapter}
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")
@@ -549,6 +580,7 @@ if __name__ == "__main__":
     parser.add_argument("--startup-fixture", action="store_true")
     parser.add_argument("--exercise-new-game", action="store_true")
     parser.add_argument("--pc-input", action="store_true", help="show and verify the actual keyboard/mouse overlay")
+    parser.add_argument("--touch-controls", action="store_true",help="drive visible touch controls through window hit tests and UIKit handlers")
     parser.add_argument("--resource-parts", type=Path,
                         help="local directory containing DczlrData.manifest.json and all dczdata parts")
     parser.add_argument("--exercise-real-gameplay", action="store_true",
@@ -559,6 +591,6 @@ if __name__ == "__main__":
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input,args.exercise_story)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input,args.exercise_story,args.touch_controls)
     else:
         parser.error("--app is required unless --boot-only is selected")

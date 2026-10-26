@@ -7,10 +7,23 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts,story_evidence,preserve_gameplay_capture
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts,story_evidence,preserve_gameplay_capture,touch_route_evidence
 
 
 class SceneEvidenceTests(unittest.TestCase):
+    def test_touch_route_requires_visible_input_camera_save_and_next_chapter(self):
+        events=('PORTLAB_TOUCH_INPUT_STARTED','PORTLAB_INTRO_RECORD=0:0',
+                'PORTLAB_INTRO_RECORD=1:0','PORTLAB_INTRO_RECORD=2:0',
+                'PORTLAB_SCENE_PRESENTED=gameplay','PORTLAB_GAMEPLAY_SKIN_ADVANCED',
+                'PORTLAB_GAMEPAD_MOVEMENT_ADVANCED','PORTLAB_GAMEPAD_CAMERA_ADVANCED',
+                'PORTLAB_TOUCH_SAVE_COMPLETED','PORTLAB_GAME_INTERACTION_COMPLETED',
+                'PORTLAB_INTRO_RECORD=4:0','PORTLAB_TOUCH_ROUTE_PASSED')
+        def log(items):return '\n'.join('2026-10-26T00:00:00Z '+e+' submitted' for e in items)
+        self.assertFalse(touch_route_evidence(log(events))['raw_controller_injection'])
+        for i in range(len(events)):
+            with self.assertRaises(ValueError):touch_route_evidence(log(events[:i]+events[i+1:]))
+        with self.assertRaises(ValueError):touch_route_evidence(log(events+('PORTLAB_TOUCH_ROUTE_FAILED',)))
+
     def test_first_native_frame_survives_later_scene_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);container=root/'container';output=root/'evidence'

@@ -12,6 +12,7 @@
 #import "DCGameAudio.h"
 #import "DCIntroScene.h"
 #import "DCGameScene.h"
+#import "DCGamepadView.h"
 #include "dc_menu.h"
 #include "dc_save.h"
 #include "dc_gameplay.h"
@@ -95,6 +96,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
 - (DCVulkanSpriteScene)presentedScene { return _presentedScene; }
 - (BOOL)controllerMovementAdvanced { return _gameScene.controllerMovementAdvanced; }
 - (BOOL)controllerCameraAdvanced { return _gameScene.controllerCameraAdvanced; }
+- (BOOL)gameplaySaveCompleted { return _gameScene.manualSaveCompleted; }
 - (void)releaseRenderer {
     dispatch_async(_renderQueue, ^{
         [self->_gameAudio pause];
@@ -226,8 +228,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
     NSData *player=[NSData dataWithContentsOfFile:path];
     NSMutableData *record=[NSMutableData dataWithLength:DC_STORY_SAVE_BYTES];
     if(dc_story_save(&_story,record.mutableBytes,record.length)!=DC_OK)return;
-    NSMutableData *combined=[NSMutableData data];
-    if(player.length>=DC_GAME_PLAYER_SAVE_BYTES)[combined appendBytes:player.bytes length:DC_GAME_PLAYER_SAVE_BYTES];    [combined appendData:record];
+    NSMutableData *combined=[NSMutableData dataWithLength:DC_GAME_PLAYER_SAVE_BYTES];
+    if(player.length>=DC_GAME_PLAYER_SAVE_BYTES)
+        memcpy(combined.mutableBytes,player.bytes,DC_GAME_PLAYER_SAVE_BYTES);
+    [combined appendData:record];
     NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
     [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
     [combined writeToFile:path options:NSDataWritingAtomic error:nil];
@@ -583,6 +587,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 }
             } else if(command.kind==DC_TITLE_INIT_GAME) {
                 NSString *introError=nil;
+                // New Game must not inherit an old interaction-complete flag
+                // or player position. Reserve the player prefix for the first
+                // actual scene save, then append the fresh chapter state.
+                NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
+                [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
+                [[NSData dataWithBytes:(uint8_t[DC_GAME_PLAYER_SAVE_BYTES]){0} length:DC_GAME_PLAYER_SAVE_BYTES]
+                    writeToFile:[saveDirectory stringByAppendingPathComponent:@"player.state"] options:NSDataWritingAtomic error:nil];
                 [self resetStory];
                 [self saveStoryToDirectory:directory];
                 _introScene=[[DCIntroScene alloc] initWithDirectory:directory error:&introError];
@@ -638,7 +649,12 @@ static void dc_write_float_le(uint8_t *out, float value) {
         if(_gameScene) {
             dc_pad_frame gameController=controller;
             BOOL suppressInput=_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch;
-            if(_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch) gameController=(dc_pad_frame){0};
+            if(_suppressGameplayTouch) gameController=(dc_pad_frame){0};
+            else if(_gameAudio.gameplayVoiceBusy) {
+                // Voice playback must not disable movement, camera or saving.
+                uint64_t blocked=DC_PAD_A|DC_PAD_PLUS;
+                gameController.buttons&=~blocked;gameController.pressed&=~blocked;
+            }
             BOOL gameTouch=touching;
             if(_gameAudio.gameplayVoiceBusy)gameTouch=NO;
             if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
@@ -796,7 +812,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
             BOOL skinAdvanced=self->_startupScene.skinAdvanced;
             BOOL gameplaySkinAdvanced=self->_gameScene.actorSkinAdvanced;
             BOOL interactionCompleted=self->_gameScene.interactionCompleted;
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted); });
+            dispatch_async(dispatch_get_main_queue(), ^{
+                dc_gamepad_set_context((uint32_t)scene,interactionCompleted);
+                completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted);
+            });
         }
     });
 }

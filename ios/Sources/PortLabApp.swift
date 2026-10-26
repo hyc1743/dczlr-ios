@@ -15,6 +15,7 @@ struct PortLabApp: App {
                 GeometryReader { geometry in
                     VulkanSurface(model: model)
                         .gesture(DragGesture(minimumDistance: 0).onChanged { event in
+                            guard !model.gameResourcesActive else { return }
                             guard geometry.size.width > 0, geometry.size.height > 0 else { return }
                             model.x = Float(min(1, max(-1, 2 * event.location.x / geometry.size.width - 1)))
                             model.y = Float(min(1, max(-1, 1 - 2 * event.location.y / geometry.size.height)))

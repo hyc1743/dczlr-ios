@@ -187,7 +187,7 @@ jobs:
           python3 tools/check_ios_sprite.py \
             --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app \
             --runtime iOS-18-5 --expected-scene story \
-            --exercise-story \
+            --exercise-story --touch-controls \
             --resource-parts "${DCZLR_RESOURCE_PARTS:-$RUNNER_TEMP/dczlr-resource-parts}" \
             --output out/ios-real-story
       - name: Upload simulator Vulkan execution evidence

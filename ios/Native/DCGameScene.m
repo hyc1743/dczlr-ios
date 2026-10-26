@@ -81,7 +81,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_menu_state _gameMenu; BOOL _gameMenuInitialized,_previousGameMenuTouch;
     float _walkMinX,_walkMaxX,_walkMinZ,_walkMaxZ;
     dc_game_player _player;
-    BOOL _playerSaveDirty;
+    BOOL _playerSaveDirty,_manualSaveCompleted;
     dc_game_interaction_state _interactionState;
     dc_game_menu_activate_state _activateState;
     BOOL _interactionActive;uint32_t _interactionStartTick;
@@ -113,6 +113,7 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
 - (BOOL)controllerMovementAdvanced { return _controllerMovementAdvanced; }
 - (BOOL)controllerCameraAdvanced { return _controllerCameraAdvanced; }
+- (BOOL)manualSaveCompleted { return _manualSaveCompleted; }
 - (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
 - (void)consumeChapterEndAction { _chapterEndAction=0; }
 - (void)applyOutfitVariant:(uint32_t)variant {
@@ -371,17 +372,19 @@ static void freeMorphCaches(dc_game_model *slot) {
     _interactionState=(dc_game_interaction_state){.interaction_count=loaded.interaction_count,.completed=loaded.interaction_count>0};
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
 }
-- (void)savePlayerState {
-    if(!_playerSaveDirty)return;
+- (BOOL)savePlayerState {
+    if(!_playerSaveDirty)return YES;
     NSMutableData *data=[NSMutableData dataWithLength:DC_GAME_PLAYER_SAVE_BYTES];
-    if(dc_game_player_save(&_player,data.mutableBytes,data.length)!=DC_OK)return;
+    if(dc_game_player_save(&_player,data.mutableBytes,data.length)!=DC_OK)return NO;
     NSString *path=[_directory stringByAppendingPathComponent:@"save/player.state"];
     NSData *existing=[NSData dataWithContentsOfFile:path];
     NSMutableData *combined=[NSMutableData dataWithData:data];
     if(existing.length>DC_GAME_PLAYER_SAVE_BYTES)
         [combined appendBytes:(const uint8_t *)existing.bytes+DC_GAME_PLAYER_SAVE_BYTES length:existing.length-DC_GAME_PLAYER_SAVE_BYTES];
     NSString *directory=[_directory stringByAppendingPathComponent:@"save"];[[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
-    [combined writeToFile:path options:NSDataWritingAtomic error:nil];_playerSaveDirty=NO;
+    BOOL saved=[combined writeToFile:path options:NSDataWritingAtomic error:nil];
+    if(saved)_playerSaveDirty=NO;
+    return saved;
 }
 - (BOOL)surfaceYAtX:(float)x z:(float)z nearY:(float)nearY result:(float *)result {
     BOOL found=NO;float best=0,bestDistance=FLT_MAX;
@@ -753,10 +756,32 @@ static void freeMorphCaches(dc_game_model *slot) {
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
     float padDelta=_tickInitialized?fminf((tick-_lastTick)/1000.f,.1f):0;
-    BOOL confirm=(controller.pressed&(DC_PAD_A|DC_PAD_PLUS))!=0;
-    if(controller.pressed&DC_PAD_B){touching=NO;_inputInitialized=NO;}
-    if(controller.pressed&DC_PAD_X){_playerSaveDirty=YES;[self savePlayerState];}
+    BOOL confirm=(controller.pressed&DC_PAD_A)!=0;
+    BOOL next=(controller.pressed&DC_PAD_PLUS)!=0;
+    if(controller.pressed&DC_PAD_B){
+        touching=NO;_inputInitialized=NO;
+        if(_interactionState.active) {
+            _interactionState.active=0;_interactionActive=NO;
+            if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction cancel failed";
+        }
+    }
+    if(controller.pressed&DC_PAD_X){_playerSaveDirty=YES;_manualSaveCompleted=[self savePlayerState];}
     if(controller.pressed&DC_PAD_Y){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
+    // Touch controls use game actions, independent of the invisible PC menu.
+    // Confirm after completion advances; Next ends this segment first.
+    if(!_editMode) {
+        if((confirm||next)&&(_storyPhase==1||_interactionCompleted)) {
+            _chapterEndAction=2;confirm=NO;
+        } else if(next) {
+            _interactionCompleted=YES;_storyPhase=1;
+            if(_interactionCount>0)_stageOutcomeA=1;
+            _playerSaveDirty=YES;
+        }
+        if((controller.pressed&DC_PAD_B)&&_storyPhase==1) {
+            _storyPhase=0;_interactionCompleted=NO;_interactionState.completed=0;
+            _chapterEndAction=0;
+        }
+    }
     BOOL newTouch=touching&&!_inputInitialized;
     BOOL menuActivated=NO;
     if (pcInput.active || (_gameMenuInitialized && touching) || _previousGameMenuTouch) {
@@ -835,7 +860,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         else if(row==4)_chapterEndAction=5;
         else if(row==5)_storyPhase=0;
     }
-    BOOL nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
+    float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
     if(!_editMode) {
         dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated||confirm),.near_target=nearInteraction};
@@ -851,13 +876,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     if(_storyChapter==24 && _interactionCompleted)_gameFinished=YES;
     if(touching) {
-        if(_inputInitialized) {
-            float dx=fmaxf(-.15f,fminf(.15f,x-_lastInputX));
-            float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
-            dc_game_player next;
-            dc_game_input input={.axis_x=dx/.15f,.axis_z=-dz/.15f,.touching=1};
-            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK)[self movePlayerTo:&next];
-        }
+        // A game tap selects/interacts. Dragging that tap must not secretly
+        // translate the player; explicit position adjustment uses its pad.
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else { _inputInitialized=NO; }
     // Controller movement goes directly to the player; it is never a fake drag.
