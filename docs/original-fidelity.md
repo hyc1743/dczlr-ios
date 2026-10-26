@@ -112,3 +112,26 @@ u0=.5/.25/0, u1=u0+.25 (the underlying resource is 384x96). Both that helper
 and FUN_00533940 render the S base followed by a visible N hover overlay.
 The host preserves that composition instead of stretching the entire outfit
 atlas or replacing the base texture on hover.
+
+### Confirmed simulator run
+
+GitHub run 40399442097, implementation commit
+f160ef080a2d5ed04e024d40b214aa60a4af1a46, completed successfully on
+2026-10-27 (Asia/Shanghai). Portable checks, iOS build, generated startup/New
+Game, concurrent PC input, and the bounded real-resource mouse/menu gate all
+passed. Local unittest discovery passed 287 tests. The unsigned IPA job was
+skipped and no release was created.
+
+The iPhone 16 Pro / iOS 18.5 report records game rect (183,0,508,381) points
+inside an 874x402 input surface, matching the control layout with zero key
+circle overlap. The actual camera context GPU capture contains 98,555 pixels
+that differ from the same scene with only main icons. Logs show context index
+6 selected, a separate right dismissal and three openings. These are menu
+shell/input observations; context callback execution remains unimplemented.
+
+Downloaded artifact 12689596700 is retained in
+out/scene-ui-evidence-f160ef0, with its report, native captures and app log.
+The downloaded ZIP passed CRC validation; SHA-256 is
+26b2942da36616eab2f58ff092e8f933166a15dde86098883b15367d034cc09e.
+The layout-review image masks the game area only for reviewing the controls;
+original GPU captures are retained separately and are not modified.
