@@ -42,6 +42,18 @@ DC_API dc_status dc_camera_build(const dc_camera_orbit *orbit,
 DC_API dc_status dc_camera_read_preset(const void *data, size_t length,
     uint32_t record, dc_camera_orbit *out);
 
+/* FUN_0047e110 resource naming for ordinary scene types 4/5/6. This is
+ * independent of a visibility heuristic or the model-placement profile. */
+DC_API dc_status dc_camera_scene_resource(uint32_t scene_type,uint32_t map,uint32_t stage,
+    char *out,size_t capacity);
+/* Numeric retarget bodies FUN_00581380 (primary=1) / FUN_00581af0
+ * (primary=0). Uses the target matrix translation, the original one-degree
+ * yaw probes and one-unit side probes; resets height and reanchors base.
+ * Tracking, target-node selection and controller publication are host work.
+ * Finite affine input with nondegenerate angle vectors is admitted. */
+DC_API dc_status dc_camera_retarget(const dc_camera_orbit *source,const dc_matrix *target,
+    uint32_t primary,dc_camera_orbit *out);
+
 #ifdef __cplusplus
 }
 #endif

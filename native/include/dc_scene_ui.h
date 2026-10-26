@@ -36,6 +36,24 @@ DC_API dc_status dc_scene_context_step(dc_scene_context *menu,float x,float y,ui
 DC_API dc_status dc_scene_context_resource(uint32_t scene_type,uint32_t icon,int32_t resource_id,uint32_t state,char *out,size_t capacity);
 /* FUN_0051a890 selects the stage's quarter of the 384x96 outfit atlas. */
 DC_API dc_status dc_scene_icon_uv(uint32_t stage,uint32_t icon,float *u0,float *u1);
+
+enum dc_scene_action_kind {
+    DC_SCENE_CAMERA_RETARGET_PRIMARY=1,DC_SCENE_CAMERA_RESET_PRIMARY=2,
+    DC_SCENE_CAMERA_RETARGET_SECONDARY=3,DC_SCENE_CAMERA_RESET_SECONDARY=4,
+    DC_SCENE_ENTER_SAVE_MENU=5,DC_SCENE_ENTER_EDIT_MENU=6
+};
+typedef struct dc_scene_action_command { uint32_t kind,target; } dc_scene_action_command;
+typedef struct dc_scene_action_plan {
+    uint32_t camera_mode,secondary_camera_mode,count;
+    dc_scene_action_command commands[2];
+} dc_scene_action_plan;
+/* Original FUN_00539dd0/FUN_0053a7c0 type-4 numeric dispatch. An option is
+ * its context index, never its resource ID or its main icon row. Camera
+ * retargeting and destination scene execution are separate host boundaries.
+ * Commands 1/3 target entries 0/1; commands 2/4 use the current CAM preset.
+ * System options request SAVE/EDIT; neither advances the chapter. */
+DC_API dc_status dc_scene_action_build(uint32_t scene_type,uint32_t icon,uint32_t option,
+    uint32_t camera_mode,uint32_t secondary_camera_mode,dc_scene_action_plan *out);
 #ifdef __cplusplus
 }
 #endif

@@ -73,6 +73,11 @@ static void freeMorphCaches(dc_game_model *slot) {
     float _padCameraYaw,_padCameraPitch,_padCameraZoom;
     float _padCameraPanX,_padCameraPanZ;
     uint32_t _cameraPreset;
+    NSData *_cameraPresetData;
+    dc_camera_orbit _secondaryCamera;
+    dc_matrix _lastCameraTarget;
+    uint32_t _primaryCameraMode,_secondaryCameraMode;
+    uint32_t _cameraActionCount,_cameraResetCount,_cameraRetargetCount,_pendingContextActions;
     BOOL _cameraAutoSelected;
     NSMutableDictionary<NSNumber *, NSValue *> *_cameraFallbacks;
     uint32_t _actorHeadNode;
@@ -137,15 +142,82 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSDictionary *)lastRenderCapture { return _lastRenderCapture; }
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d context_callbacks=pending",
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u context_callbacks=primary-camera-partial",
         _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
-        _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection];
+        _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection,
+        _cameraActionCount,_cameraRetargetCount,_cameraResetCount,_pendingContextActions];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
         _requestedRenderCapture=[name copy];
 }
 - (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
+- (dc_camera_orbit)activeCameraOrbit {
+    dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance*expf(_padCameraZoom),
+        .height=_cameraHeight,.pitch=_cameraPitch+_padCameraPitch,.yaw=_cameraYaw+_padCameraYaw};
+    orbit.base.values[12]=_cameraOriginX+_actor.world.values[12]-_actorOriginX+_padCameraPanX;
+    orbit.base.values[13]=_cameraBase.values[13]+_actor.world.values[13]-_actorOriginY;
+    orbit.base.values[14]=_cameraOriginZ+_actor.world.values[14]-_actorOriginZ+_padCameraPanZ;
+    return orbit;
+}
+- (void)adoptCameraOrbit:(dc_camera_orbit)orbit {
+    _cameraBase=orbit.base;
+    _cameraBase.values[12]-=_actor.world.values[12]-_actorOriginX;
+    _cameraBase.values[13]-=_actor.world.values[13]-_actorOriginY;
+    _cameraBase.values[14]-=_actor.world.values[14]-_actorOriginZ;
+    _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
+    _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
+    _padCameraYaw=_padCameraPitch=_padCameraZoom=_padCameraPanX=_padCameraPanZ=0;
+    _cameraAutoSelected=YES;
+}
+- (NSString *)applyContextSelection:(uint32_t)selection {
+    dc_scene_action_plan plan;
+    dc_status status=dc_scene_action_build(_sceneType,_contextMenu.icon,selection,_primaryCameraMode,_secondaryCameraMode,&plan);
+    if(status==DC_NOT_FOUND){++_pendingContextActions;return nil;}
+    if(status!=DC_OK)return @"Scene context action rejected";
+    if(_contextMenu.icon==3&&selection==0) {
+        /* FUN_005181f0 stores its third face-node lookup at +0x1708:
+         * prefix + _On_namida. FUN_00539dd0 option 0 retargets that node. */
+        uint32_t node=[self findNode:&_face name:[self characterNode:@"a_On_namida"]];dc_matrix target;
+        if(node==UINT32_MAX||dc_model_global(_face.model,node,&target)!=DC_OK){++_pendingContextActions;return nil;}
+        dc_camera_orbit current=[self activeCameraOrbit],next;
+        if(dc_camera_retarget(&current,&target,1,&next)!=DC_OK)return @"Primary camera retarget failed";
+        _lastCameraTarget=target;
+        [self adoptCameraOrbit:next];_primaryCameraMode=plan.camera_mode;++_cameraRetargetCount;++_cameraActionCount;
+#if DEBUG
+        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+            [self requestRenderCapture:@"gameplay-camera-retarget-native.png"];
+#endif
+    } else if(_contextMenu.icon==3&&selection==6) {
+        dc_camera_orbit preset;
+        if(dc_camera_read_preset(_cameraPresetData.bytes,_cameraPresetData.length,_cameraPreset*3,&preset)!=DC_OK)return @"Original camera reset preset unavailable";
+        [self adoptCameraOrbit:preset];_secondaryCamera=preset;
+        _primaryCameraMode=plan.camera_mode;_secondaryCameraMode=plan.secondary_camera_mode;
+        ++_cameraResetCount;++_cameraActionCount;
+#if DEBUG
+        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+            [self requestRenderCapture:@"gameplay-camera-reset-native.png"];
+#endif
+    } else {
+        /* Other target bindings, automatic tracking, secondary-view output
+         * and save/edit destination screens remain separate port work. */
+        ++_pendingContextActions;
+    }
+    return nil;
+}
+- (NSString *)stepContextAtX:(float)x y:(float)y left:(uint32_t)left right:(uint32_t)right {
+    dc_scene_context_event event;
+    if(dc_scene_context_step(&_contextMenu,x,y,left,right,&event)!=DC_OK)return @"Scene context input failed";
+    if(event.close_code) {
+        _contextOpen=NO;
+        if(event.selected>=0) {
+            ++_contextSelections;_lastContextSelection=event.selected;
+            return [self applyContextSelection:(uint32_t)event.selected];
+        }
+        ++_contextDismissals;
+    }
+    return nil;
+}
 - (void)consumeChapterEndAction { _chapterEndAction=0; }
 - (NSString *)characterNode:(NSString *)name {
     return [name hasPrefix:@"a_"]?[NSString stringWithFormat:@"%c%@",_characterPrefix,[name substringFromIndex:1]]:name;
@@ -432,6 +504,9 @@ static void freeMorphCaches(dc_game_model *slot) {
     return triangles;
 }
 - (NSString *)preferredCameraNameForSelector:(uint32_t)selector {
+    char resource[32];
+    if(dc_camera_scene_resource(_sceneType,selector,_storyStage,resource,sizeof(resource))==DC_OK)
+        return [NSString stringWithUTF8String:resource];
     dc_game_map_presentation profile;
     return dc_game_map_presentation_profile(selector,&profile)==DC_OK?
         [NSString stringWithUTF8String:profile.camera]:nil;
@@ -584,7 +659,10 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     _cameraBase=orbit.base;
     _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
-    _cameraAutoSelected=NO;
+    _cameraPresetData=camData;_secondaryCamera=orbit;
+    /* Original 4/5/6 callbacks select their own CAM file. Never replace
+     * that selection by searching for a camera with more visible triangles. */
+    _cameraAutoSelected=_sceneType>=4&&_sceneType<=6;
     _actor.world=_actorWorld;
     _face.world=_actorWorld;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
@@ -888,15 +966,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         float py=((1-y)*.5f*height-(height-768*scale)*.5f)/scale;
         uint32_t left=pcInput.pointer_active||pcInput.mouse[0]?pcInput.mouse[0]:(touching?(_previousGameMenuTouch?1:3):(_previousGameMenuTouch?2:0));
         if(_contextOpen) {
-            dc_scene_context_event event;
-            if(dc_scene_context_step(&_contextMenu,px,py,left,pcInput.mouse[1],&event)!=DC_OK)return @"Scene context input failed";
-            if(event.close_code) {
-                _contextOpen=NO;
-                if(event.selected>=0){++_contextSelections;_lastContextSelection=event.selected;}
-                else ++_contextDismissals;
-                // The original dispatches option callbacks here. Do not replace
-                // them with interaction counters, random clips or chapter skips.
-            }
+            NSString *error=[self stepContextAtX:px y:py left:left right:pcInput.mouse[1]];if(error)return error;
         } else {
             dc_menu_button buttons[DC_GAME_MENU_COUNT];dc_game_menu_profile(buttons,DC_GAME_MENU_COUNT);
             buttons[2].disabled=_stageProgress?0:1;
@@ -907,13 +977,16 @@ static void freeMorphCaches(dc_game_model *slot) {
             if(pcInput.mouse[1]==3&&_mainIconHover>=1&&_mainIconHover<=4) {
                 dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
                 dc_scene_context_input input={.scene_type=_sceneType,.icon=(uint32_t)_mainIconHover,.stage_progress=_stageProgress,
-                    .animation=animation.current,.camera_mode=0,.secondary_camera_mode=0,.x=px,.y=py};
+                    .animation=animation.current,.camera_mode=_primaryCameraMode,.secondary_camera_mode=_secondaryCameraMode,.x=px,.y=py};
                 dc_status status=dc_scene_context_build(&input,&_contextMenu);
                 if(status!=DC_OK&&status!=DC_NOT_FOUND)return @"Scene context profile failed";
                 if(status==DC_OK&&_contextMenu.count){
                     _contextOpen=YES;++_contextOpens;
+                    /* Original update dispatches the newly opened menu in
+                     * the same frame, including simultaneous mouse buttons. */
+                    NSString *error=[self stepContextAtX:px y:py left:left right:pcInput.mouse[1]];if(error)return error;
 #if DEBUG
-                    if(_contextOpens==1&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+                    if(_contextOpen&&_contextOpens==1&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
                         [self requestRenderCapture:@"gameplay-context-native.png"];
 #endif
                 }
@@ -966,7 +1039,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     } else if(!touching) { [self savePlayerState]; }
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     NSString *cameraSelectionError=[self autoSelectCameraAtTick:tick];if(cameraSelectionError)return cameraSelectionError;
-    dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};
     if(controller.pressed&DC_PAD_R3){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
     float cameraX=controller.rx/32767.f,cameraY=controller.ry/32767.f;
     if(pcNum4)cameraX-=1.f;if(pcNum6)cameraX+=1.f;
@@ -983,11 +1055,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     float panX=(pcArrowRight?1.f:0.f)-(pcArrowLeft?1.f:0.f);
     float panZ=(pcArrowDown?1.f:0.f)-(pcArrowUp?1.f:0.f);
     _padCameraPanX+=panX*padDelta*2.0f;_padCameraPanZ+=panZ*padDelta*2.0f;
-    orbit.yaw+=_padCameraYaw;orbit.pitch+=_padCameraPitch;
-    orbit.stored_distance*=expf(_padCameraZoom);
-    orbit.base.values[12]=_cameraOriginX+_actor.world.values[12]-_actorOriginX+_padCameraPanX;
-    orbit.base.values[13]=_cameraBase.values[13]+_actor.world.values[13]-_actorOriginY;
-    orbit.base.values[14]=_cameraOriginZ+_actor.world.values[14]-_actorOriginZ+_padCameraPanZ;
+    dc_camera_orbit orbit=[self activeCameraOrbit];
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
@@ -1051,6 +1119,10 @@ static void freeMorphCaches(dc_game_model *slot) {
                 dc_animation_state pose={0};dc_model_get_animation(_actor.model,&pose);
                 _lastRenderCapture=@{@"file":captureName,@"chapter":@(_storyChapter),@"map":@(_mapSelector),
                     @"stage":@(_storyStage),@"anchor":_anchorName?:@"",@"camera":_cameraSource?:@"",
+                    @"camera_preset":@(_cameraPreset),@"camera_modes":@[@(_primaryCameraMode),@(_secondaryCameraMode)],
+                    @"camera_pose":@[@(orbit.height),@(orbit.stored_distance),@(orbit.pitch),@(orbit.yaw),@(orbit.base.values[12]),@(orbit.base.values[13]),@(orbit.base.values[14])],
+                    @"camera_actions":@(_cameraActionCount),@"camera_resets":@(_cameraResetCount),@"camera_retargets":@(_cameraRetargetCount),
+                    @"camera_target":_cameraRetargetCount?@[@(_lastCameraTarget.values[12]),@(_lastCameraTarget.values[13]),@(_lastCameraTarget.values[14])]:@[],
                     @"width":@(width),@"height":@(height),@"viewport_pixels":@((double)viewport.width*viewport.height),
                     @"scene_ui_draws":@(_sceneUIDraws),@"scene_ui_visible_pixels":@(uiVisible),@"context_visible_pixels":@(contextVisible),@"context_open":@(_contextOpen),@"context_icon":@(_contextMenu.icon),@"context_count":@(_contextMenu.count),
                     @"actor_visible_pixels":@(visible),@"actor_bbox":visible?@[@(minX),@(minY),@(maxX),@(maxY)]:@[],

@@ -11,6 +11,7 @@ import sys
 import time
 import os
 import shutil
+import struct
 import uuid
 
 
@@ -181,14 +182,34 @@ def mouse_input_evidence(log):
         'PORTLAB_INTRO_RECORD=2:0','PORTLAB_SCENE_PRESENTED=gameplay','PORTLAB_GAMEPLAY_SKIN_ADVANCED',
         'PORTLAB_MOUSE_MOVE_DELIVERED','PORTLAB_MOUSE_LEFT_DELIVERED','PORTLAB_MOUSE_RIGHT_DELIVERED',
         'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_CONTEXT_RENDERED',
-        'PORTLAB_MOUSE_CONTEXT_SELECTED','PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_MOUSE_INPUT_PASSED')
+        'PORTLAB_MOUSE_CONTEXT_SELECTED','PORTLAB_CAMERA_RETARGET_APPLIED','PORTLAB_CAMERA_RESET_APPLIED',
+        'PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_MOUSE_INPUT_PASSED')
     for event in required:
         if not re.search(r'(?m)^\S+ '+re.escape(event)+r'(?= |$)',log):raise ValueError('Missing mouse evidence: '+event)
     return {'scope':'bounded input on first real-resource scene','input':'visible relative drag, mouse buttons and Num6/arrow combination',
         'menu':'left click accepted by scene hit test','complete_story':'not tested',
         'right_click_menu_behavior':'initial camera menu GPU visibility, left selection and right dismissal checked',
-        'context_action_callbacks':'not implemented; selection does not certify an executed game action',
+        'context_action_callbacks':'primary target-0 retarget and active CAM reset checked; other actions remain incomplete',
         'original_game_equivalence':'not established','physical_device':'not tested'}
+
+
+def camera_action_evidence(retarget,reset,expected_pose):
+    def pose(frame):
+        values=frame.get('camera_pose',[])
+        if len(values)!=7 or not all(math.isfinite(v) for v in values):raise ValueError('Invalid captured camera pose')
+        if frame.get('actor_visible_pixels',0)<1:raise ValueError('Camera action did not present an actor')
+        return values
+    a=pose(retarget);b=pose(reset);target=retarget.get('camera_target',[])
+    if retarget.get('camera_retargets',0)<1 or reset.get('camera_resets',0)<1:raise ValueError('Missing actual camera actions')
+    if len(target)!=3 or not all(math.isfinite(v) for v in target) or a[0]!=0 or a[1]>=0 or any(abs(x-y)>1e-4 for x,y in zip(a[4:],target)):
+        raise ValueError('Retarget did not reanchor the rendered camera')
+    if len(expected_pose)!=7 or not all(math.isfinite(v) for v in expected_pose) or any(abs(x-y)>1e-4*(1+abs(y)) for x,y in zip(b,expected_pose)):
+        raise ValueError('Reset pose differs from original CAM bytes')
+    if max(abs(x-y) for x,y in zip(a,b))<1e-3:raise ValueError('Camera action captures have identical poses')
+    return {'primary_retarget':'rendered camera reanchored to original target node',
+            'default_reset':'rendered pose matches original CAM bytes',
+            'retarget_pose':a,'reset_pose':b,'expected_reset_pose':list(expected_pose),
+            'remaining':'other camera modes, secondary view and system destination screens not implemented in host'}
 
 
 def black_gutter_evidence(log):
@@ -574,6 +595,15 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         if not context['context_open'] or context['context_icon']!=3 or context['context_count']!=7 or context['context_visible_pixels']<100:
             raise ValueError('Original camera context is not visible in exact GPU capture')
         report['context_gpu_capture']=context
+        for stem in ('gameplay-camera-retarget-native','gameplay-camera-reset-native'):
+            for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(stem+extension),output/(stem+extension))
+        retarget=json.loads((output/'gameplay-camera-retarget-native.json').read_text())
+        reset=json.loads((output/'gameplay-camera-reset-native.json').read_text())
+        from native_core import PPArchive
+        with PPArchive(container/'Documents/game/Data/RPP_03.pp') as pp:
+            index=next(i for i in range(pp.count) if pp.entry(i).name_bytes.decode('ascii')==reset['camera'])
+            cam=pp.read(index);expected=struct.unpack_from('<7f',cam,reset['camera_preset']*84)
+        report['camera_actions']=camera_action_evidence(retarget,reset,expected)
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')

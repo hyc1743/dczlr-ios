@@ -112,13 +112,15 @@ final class SpritePresenter: NSObject {
             // Each stage waits for native state from a presented frame.
             // Select an actual camera context row, dismiss via a fresh right
             // press, then leave the menu open for the final screenshot.
-            let leftPhase = mouseMenuPhase == 0 || mouseMenuPhase == 2
+            let leftPhase = mouseMenuPhase == 0 || mouseMenuPhase == 2 || mouseMenuPhase == 4
             ok = ok && dc_gamepad_test_mouse(0, 0, leftPhase ? 1 : 0, false)
             if mouseMenuPhase == 0 {
                 ok = ok && dc_gamepad_test_mouse(968, 376, 0, pulse)
             } else if mouseMenuPhase == 2 {
+                ok = ok && dc_gamepad_test_mouse(900, 495, 0, pulse)
+            } else if mouseMenuPhase == 4 {
                 ok = ok && dc_gamepad_test_mouse(900, 705, 0, pulse)
-            } else if mouseMenuPhase < 6 {
+            } else if mouseMenuPhase < 8 {
                 ok = ok && dc_gamepad_test_mouse(968, 600, 1, pulse)
             } else {
                 ok = ok && dc_gamepad_test_mouse(0, 0, 1, false)
@@ -275,19 +277,27 @@ final class SpritePresenter: NSObject {
                             self.model.record("Original camera menu rendered with separate GPU visibility evidence", event: "PORTLAB_MOUSE_CONTEXT_RENDERED")
                         }
                         if self.mouseMenuPhase == 1, opened, opens >= 1 { self.mouseMenuPhase = 2 }
-                        if self.mouseMenuPhase == 2, (fields["context_selections"] ?? 0) > 0 {
+                        if self.mouseMenuPhase == 2, (fields["camera_retargets"] ?? 0) > 0 {
                             self.mouseMenuPhase = 3
                             self.mouseEvidence.insert("selection")
-                            self.model.record("Left press selected context index 6; action callback is still pending", event: "PORTLAB_MOUSE_CONTEXT_SELECTED")
+                            self.mouseEvidence.insert("retarget")
+                            self.model.record("Left press selected camera context index 0 and applied its retarget callback", event: "PORTLAB_MOUSE_CONTEXT_SELECTED")
+                            self.model.record("Native primary camera retargeted to the original bound face node", event: "PORTLAB_CAMERA_RETARGET_APPLIED")
                         }
                         if self.mouseMenuPhase == 3, opened, opens >= 2 { self.mouseMenuPhase = 4 }
-                        if self.mouseMenuPhase == 4, (fields["context_dismissals"] ?? 0) > 0 {
+                        if self.mouseMenuPhase == 4, (fields["camera_resets"] ?? 0) > 0 {
                             self.mouseMenuPhase = 5
+                            self.mouseEvidence.insert("reset")
+                            self.model.record("Context index 6 restored the active original CAM preset", event: "PORTLAB_CAMERA_RESET_APPLIED")
+                        }
+                        if self.mouseMenuPhase == 5, opened, opens >= 3 { self.mouseMenuPhase = 6 }
+                        if self.mouseMenuPhase == 6, (fields["context_dismissals"] ?? 0) > 0 {
+                            self.mouseMenuPhase = 7
                             self.mouseEvidence.insert("dismiss")
                             self.model.record("A separate right press dismissed the context menu", event: "PORTLAB_MOUSE_CONTEXT_DISMISSED")
                         }
-                        if self.mouseMenuPhase == 5, opened, opens >= 3 {
-                            self.mouseMenuPhase = 6
+                        if self.mouseMenuPhase == 7, opened, opens >= 4 {
+                            self.mouseMenuPhase = 8
                             self.mouseEvidence.insert("finalcontext")
                         }
                     }
@@ -327,7 +337,7 @@ final class SpritePresenter: NSObject {
                         self.model.record("Relative drag moved the persistent pointer", event: "PORTLAB_MOUSE_MOVE_DELIVERED")
                         self.mouseEvidence.insert("move")
                     }
-                    if self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move", "context", "selection", "dismiss", "finalcontext"]), self.reportedControllerCamera {
+                    if self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move", "context", "selection", "retarget", "reset", "dismiss", "finalcontext"]), self.reportedControllerCamera {
                         if self.mouseEvidence.insert("passed").inserted {
                             self.model.record("Bounded virtual mouse input verified; original scene equivalence remains unverified", event: "PORTLAB_MOUSE_INPUT_PASSED")
                         }

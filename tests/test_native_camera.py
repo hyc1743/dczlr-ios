@@ -16,6 +16,37 @@ class NativeCameraTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.lib=library()
 
+    def test_retarget_matches_original_instruction_vectors_with_math_boundaries(self):
+        from oracle_camera_retarget import cases
+        source=list(cases());fixture=json.loads((ROOT/'tests/fixtures/camera-retarget-original-vectors.json').read_text())
+        self.assertEqual(fixture['cases'],128)
+        for row in fixture['vectors']:
+            orbit,target,primary=source[row['case']];out=CameraOrbit()
+            self.assertEqual(self.lib.dc_camera_retarget(C.byref(orbit),C.byref(target),primary,C.byref(out)),0)
+            actual=list(out.base.values)+[out.stored_distance,out.height,out.pitch,out.yaw]
+            for a,b in zip(actual,row['result']):self.assertLessEqual(abs(a-b),2e-4*(1+abs(b)))
+    def test_retarget_rejects_invalid_values_atomically_and_supports_aliasing(self):
+        source=CameraOrbit(matrix(),-20,2,.1,.3);target=matrix(translation=(3,4,5));expected=CameraOrbit()
+        self.assertEqual(self.lib.dc_camera_retarget(C.byref(source),C.byref(target),1,C.byref(expected)),0)
+        self.assertEqual(self.lib.dc_camera_retarget(C.byref(source),C.byref(target),1,C.byref(source)),0)
+        self.assertEqual(bytes(source),bytes(expected));before=bytes(expected)
+        target.values[12]=float('nan')
+        self.assertEqual(self.lib.dc_camera_retarget(C.byref(source),C.byref(target),1,C.byref(expected)),4)
+        self.assertEqual(bytes(expected),before)
+        self.assertEqual(self.lib.dc_camera_retarget(C.byref(source),C.byref(target),2,C.byref(expected)),4)
+        self.assertEqual(self.lib.dc_camera_retarget(None,C.byref(target),0,C.byref(expected)),1)
+    def test_original_scene_camera_filenames_resolve_for_every_reachable_scene(self):
+        from native_core import StoryChapter,PPArchive
+        expected={3:'home_sh.cam',5:'trai_ch.cam',7:'toil_ta.cam',10:'home_sh.cam',12:'trai_ch.cam',14:'park_tc.cam',17:'home_sh.cam',19:'trai_ch.cam',21:'hote_tb.cam'}
+        names=None
+        if (ROOT/'Data/RPP_03.pp').exists():
+            with PPArchive(ROOT/'Data/RPP_03.pp') as pp:names={pp.entry(i).name_bytes.decode('ascii') for i in range(pp.count)}
+        for chapter,name in expected.items():
+            profile=StoryChapter();self.lib.dc_story_chapter_profile(chapter,C.byref(profile));out=C.create_string_buffer(32)
+            self.assertEqual(self.lib.dc_camera_scene_resource(profile.scene_type,profile.map,profile.stage,out,32),0)
+            self.assertEqual(out.value.decode(),name)
+            if names is not None:self.assertIn(name,names)
+
     def test_bind_pose_compensation_attaches_to_animated_neck_once(self):
         bind=matrix(.3,.9,(0,6.2,-.2));animated=matrix(-.2,1.1,(22,3.7,-.5))
         inverse=Matrix();world=Matrix();attached=Matrix()

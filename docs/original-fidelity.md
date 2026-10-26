@@ -135,3 +135,42 @@ The downloaded ZIP passed CRC validation; SHA-256 is
 26b2942da36616eab2f58ff092e8f933166a15dde86098883b15367d034cc09e.
 The layout-review image masks the game area only for reviewing the controls;
 original GPU captures are retained separately and are not modified.
+
+## Primary camera actions (next implementation)
+
+`dc_scene_action_build` now separates original context indices from resource
+IDs. Isolated execution of FUN_00539dd0 and the type-4 system branch of
+FUN_0053a7c0 matched the native numeric plans on 729 combinations of option,
+mode, stage and active preset. Camera math/reset/publication, sound and cookie
+checking are explicit synthetic boundaries; destination screens do not execute.
+The replayable numeric metadata is in tests/fixtures/scene-action-original-vectors.json.
+System option 0 requests the original save/load screen, and option 1 the edit
+screen. These requests are not chapter advancement or a quick-save substitute.
+
+`dc_camera_retarget` ports the two retarget bodies, FUN_00581380/00581af0.
+128 isolated original-instruction cases with documented Python math boundaries
+match within 0.000004 absolute error. They exercise both controller layouts,
+height, pitch, rotation, distance and target positions. These checks do not
+cover target binding, tracking, collision, original model state or a GPU.
+
+The host now executes primary camera option 0 using the third face-node binding
+from FUN_005181f0 (+0x1708): stage prefix plus `_On_namida`. It applies the
+recovered retarget calculation to the current camera and the bound node's
+world position. Option 6 restores the active original CAM record and resets
+both camera mode flags; the primary view is rendered from that restored pose.
+Other camera options, secondary-view rendering, automatic tracking, character
+and outfit actions, and the save/edit destination screens remain incomplete.
+They are recorded as pending instead of applying fabricated transitions.
+
+FUN_0047e110's resource selection replaces heuristic camera-name guesses for
+scene types 4/5/6. Reachable chapters select home_sh, trai_ch, toil_ta, park_tc
+and hote_tb CAM files, as dictated by the scene/map/stage tables. No camera
+search based on visible triangle counts substitutes a different preset for
+those scene kinds. Their complete scene implementations remain unverified.
+
+Opening the context now processes its input in the same frame, preserving the
+original simultaneous-left/right behavior. The real mouse gate additionally
+requires primary retarget and default-reset callbacks, exact GPU captures of
+each, and a reset pose checked independently against original CAM bytes.
+Local unittest discovery passes 293 tests. GitHub validation for this change
+must complete before treating these new callback captures as observed evidence.

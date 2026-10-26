@@ -3,9 +3,10 @@ import ctypes as C
 from pathlib import Path
 import sys
 import unittest
+import json
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
-from native_core import library,PPArchive
+from native_core import library,PPArchive,SceneActionPlan
 
 class Item(C.Structure):
     _fields_=[('resource_id',C.c_int32),('arrangement',C.c_uint32),('x',C.c_float),('y',C.c_float)]
@@ -31,6 +32,18 @@ class SceneUITests(unittest.TestCase):
                 u0=C.c_float();u1=C.c_float()
                 self.assertEqual(self.lib.dc_scene_icon_uv(stage,row,C.byref(u0),C.byref(u1)),0)
                 self.assertEqual((u0.value,u1.value),(left,left+.25) if row==2 else (0,1))
+    def test_original_camera_and_system_dispatch_vectors(self):
+        evidence=json.loads((ROOT/'tests/fixtures/scene-action-original-vectors.json').read_text())
+        self.assertEqual(evidence['cases'],729)
+        for row in evidence['vectors']:
+            out=SceneActionPlan()
+            self.assertEqual(self.lib.dc_scene_action_build(*row['input'],C.byref(out)),0)
+            self.assertEqual(out.record(),row['result'])
+    def test_unsupported_action_does_not_mutate_the_plan(self):
+        out=SceneActionPlan.from_buffer_copy(bytes([0xa5])*C.sizeof(SceneActionPlan));before=bytes(out)
+        for args,status in (((4,1,0,0,0),6),((5,3,0,0,0),6),((4,3,7,0,0),4),((4,4,2,0,0),4),((4,3,0,3,0),4)):
+            self.assertEqual(self.lib.dc_scene_action_build(*args,C.byref(out)),status)
+            self.assertEqual(bytes(out),before)
     def build(self,icon=3,**kw):
         inp=Input(scene_type=4,icon=icon,animation=1,x=968,y=600)
         for k,v in kw.items():setattr(inp,k,v)

@@ -10,6 +10,32 @@ dc_status dc_scene_icon_uv(uint32_t stage,uint32_t icon,float *u0,float *u1) {
     *u0=left;*u1=icon==2?left+.25f:1.f;return DC_OK;
 }
 
+dc_status dc_scene_action_build(uint32_t type,uint32_t icon,uint32_t option,uint32_t mode,uint32_t secondary,dc_scene_action_plan *out) {
+    if(!out)return DC_ARGUMENT;
+    if(type!=4)return DC_NOT_FOUND;
+    if(icon<1||icon>4||mode>2||secondary>2)return DC_RANGE;
+    if(icon<3)return DC_NOT_FOUND;
+    dc_scene_action_plan plan={.camera_mode=mode,.secondary_camera_mode=secondary};
+    if(icon==4) {
+        if(option>1)return DC_RANGE;
+        plan.commands[plan.count++]=(dc_scene_action_command){option==0?DC_SCENE_ENTER_SAVE_MENU:DC_SCENE_ENTER_EDIT_MENU,0};
+    } else {
+        if(option>6)return DC_RANGE;
+        if(option<3)plan.camera_mode=(mode==2&&option==2)?0:option;
+        else if(option<6)plan.secondary_camera_mode=(secondary==2&&option==5)?0:option%3;
+        else plan.camera_mode=plan.secondary_camera_mode=0;
+        if(option<2)plan.commands[plan.count++]=(dc_scene_action_command){DC_SCENE_CAMERA_RETARGET_PRIMARY,option};
+        else if(option==2)plan.commands[plan.count++]=(dc_scene_action_command){DC_SCENE_CAMERA_RESET_PRIMARY,0};
+        else if(option<5)plan.commands[plan.count++]=(dc_scene_action_command){DC_SCENE_CAMERA_RETARGET_SECONDARY,option%3};
+        else if(option==5)plan.commands[plan.count++]=(dc_scene_action_command){DC_SCENE_CAMERA_RESET_SECONDARY,0};
+        else {
+            plan.commands[plan.count++]=(dc_scene_action_command){DC_SCENE_CAMERA_RESET_PRIMARY,0};
+            plan.commands[plan.count++]=(dc_scene_action_command){DC_SCENE_CAMERA_RESET_SECONDARY,0};
+        }
+    }
+    *out=plan;return DC_OK;
+}
+
 dc_status dc_scene_context_build(const dc_scene_context_input *in,dc_scene_context *out) {
     if(!in||!out)return DC_ARGUMENT;
     if(in->scene_type!=4)return DC_NOT_FOUND;

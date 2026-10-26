@@ -4,13 +4,27 @@ from pathlib import Path
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from check_ios_sprite import controls_visible,black_gutter_evidence,simulator_screenshot
+from check_ios_sprite import controls_visible,black_gutter_evidence,simulator_screenshot,camera_action_evidence
+import copy
 from unittest.mock import patch
 import tempfile
 import subprocess
 
 
 class ControlsEvidenceTests(unittest.TestCase):
+    def test_camera_actions_require_rendered_target_change_and_original_reset_pose(self):
+        retarget={'camera_pose':[0,-20,.3,.5,1,2,3],'camera_target':[1,2,3],'camera_retargets':1,'actor_visible_pixels':100}
+        reset={'camera_pose':[8,-30,.2,0,0,0,0],'camera_resets':1,'actor_visible_pixels':100}
+        expected=list(reset['camera_pose'])
+        self.assertIn('original CAM',camera_action_evidence(retarget,reset,expected)['default_reset'])
+        for bad in ('target','unchanged','wrong_reset','invisible','nan_expected'):
+            a=copy.deepcopy(retarget);b=copy.deepcopy(reset);e=list(expected)
+            if bad=='target':a['camera_target'][0]=7
+            if bad=='unchanged':b['camera_pose']=list(a['camera_pose']);e=list(b['camera_pose'])
+            if bad=='wrong_reset':b['camera_pose'][0]+=1
+            if bad=='invisible':a['actor_visible_pixels']=0
+            if bad=='nan_expected':e[0]=float('nan')
+            with self.assertRaises(ValueError):camera_action_evidence(a,b,e)
     def test_black_gutters_require_matching_render_and_control_rectangles(self):
         log=('2026-10-27T00:00:00Z PORTLAB_GAMEPAD_PRESENTATION bounds=874x402 attached=1 hidden=0 layout=black-gutters-v4 game=185,1,504,378 key_overlap=0\n'
              '2026-10-27T00:00:00Z PORTLAB_RENDER_VIEWPORT input=874x402 game=185,1,504,378\n')

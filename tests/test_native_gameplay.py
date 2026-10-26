@@ -26,6 +26,10 @@ class NativeGameplayTests(unittest.TestCase):
                         with XXModel(pp.read(names[files[0]])) as model:
                             query=bytes(v^255 for v in f'{name}_Kp_kubi2\0'.encode());node=C.c_uint32()
                             self.assertEqual(self.lib.dc_xx_find_node_encoded(model.handle,query,len(query),C.byref(node)),0)
+                    if archive=='RPP_09.pp':
+                        with XXModel(pp.read(names[files[0]])) as model:
+                            query=bytes(v^255 for v in f'{name}_On_namida\0'.encode());node=C.c_uint32()
+                            self.assertEqual(self.lib.dc_xx_find_node_encoded(model.handle,query,len(query),C.byref(node)),0)
         prefix=C.c_char(b'?');self.assertEqual(self.lib.dc_game_actor_prefix(3,C.byref(prefix)),4);self.assertEqual(prefix.value,b'?')
     def test_map_placement_profiles_resolve_actual_anchors_and_cameras(self):
         from native_core import XXModel,Matrix,PPArchive

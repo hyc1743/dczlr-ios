@@ -184,6 +184,14 @@ class GameInteractionInput(C.Structure):
 class GameInteractionResult(C.Structure):
     _fields_=[("begin",C.c_uint32),("restore",C.c_uint32),("completed",C.c_uint32)]
 
+class SceneActionCommand(C.Structure):
+    _fields_=[('kind',C.c_uint32),('target',C.c_uint32)]
+class SceneActionPlan(C.Structure):
+    _fields_=[('camera_mode',C.c_uint32),('secondary_camera_mode',C.c_uint32),('count',C.c_uint32),('commands',SceneActionCommand*2)]
+    def record(self):
+        return {'modes':[self.camera_mode,self.secondary_camera_mode],
+                'commands':[[c.kind,c.target] for c in self.commands[:self.count]]}
+
 
 class StoryChapter(C.Structure):
     _fields_=[("script",C.c_int32),("last_frame",C.c_int32),("map",C.c_int32),("stage",C.c_int32),("scene",C.c_uint32),("scene_type",C.c_uint32)]
@@ -598,6 +606,11 @@ def library():
     lib.dc_camera_build.restype = C.c_int
     lib.dc_camera_read_preset.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(CameraOrbit)]
     lib.dc_camera_read_preset.restype = C.c_int
+    lib.dc_camera_scene_resource.argtypes = [C.c_uint32,C.c_uint32,C.c_uint32,C.c_void_p,C.c_size_t]
+    lib.dc_camera_retarget.argtypes = [C.POINTER(CameraOrbit),C.POINTER(Matrix),C.c_uint32,C.POINTER(CameraOrbit)]
+    lib.dc_camera_retarget.restype = C.c_int
+    lib.dc_scene_action_build.argtypes = [C.c_uint32]*5+[C.POINTER(SceneActionPlan)]
+    lib.dc_scene_action_build.restype = C.c_int
     lib.dc_game_player_step.argtypes=[C.POINTER(GamePlayer),C.POINTER(GameInput),C.c_float,C.POINTER(GamePlayer)]
     lib.dc_game_player_step.restype=C.c_int
     lib.dc_game_player_save.argtypes=[C.POINTER(GamePlayer),C.c_void_p,C.c_size_t]
