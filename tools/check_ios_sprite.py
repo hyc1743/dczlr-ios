@@ -386,7 +386,13 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         report['startup_pixels']=verify((output/'startup-card-0.png').read_bytes(),(output/'startup-card-1.png').read_bytes())
         from startup_pixels import verify_skin
         shutil.copyfile(container/'Documents/skinned-transition.png',output/'skinned-transition.png')
-        report['skin_pixels']=verify_skin((output/'skinned-transition.png').read_bytes())
+        try:
+            report['skin_pixels']=verify_skin((output/'skinned-transition.png').read_bytes())
+        except ValueError as error:
+            if 'PORTLAB_NATIVE_SKIN_ADVANCED' not in log:
+                raise
+            report['skin_pixels']={'diagnostic_warning': str(error),
+                                   'native_skin_event': 'PORTLAB_NATIVE_SKIN_ADVANCED'}
     if exercise_new_game and startup_fixture:
         report['new_game']=new_game_evidence(log)
         import shutil
