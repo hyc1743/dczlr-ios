@@ -198,6 +198,20 @@ def stage_resource_parts(parts_root, container, output, restore=False):
     return staged
 
 
+def controls_visible(log, pc_input=False):
+    # NSArray's device description can span several lines. Keep continuation
+    # lines with their own timestamped presentation event, never a later event.
+    for event in re.split(r'(?m)(?=^\d{4}-\d{2}-\d{2}T\S+\s)', log):
+        match=re.search(r'PORTLAB_GAMEPAD_PRESENTATION bounds=(\d+)x(\d+) attached=(\d+) hidden=(\d+) physical=(\d+) paths=(\d+)',event)
+        if not match:continue
+        width,height,attached,hidden,physical,paths=map(int,match.groups())
+        if width<=0 or height<=0 or attached!=1:continue
+        if pc_input:
+            if re.search(r'\bpc_visible=1\b',event):return True
+        elif hidden==0 and physical==0 and paths==1:return True
+    return False
+
+
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
           exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False):
     if exercise_new_game and (not startup_fixture and not resource_parts):
@@ -373,10 +387,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if 'PORTLAB_PC_INPUT_TEST_PASSED' not in log:
         raise RuntimeError('Missing simultaneous UIKit keyboard and mouse regression evidence')
     if expected_scene != 'checker':
-        pattern=(r'PORTLAB_GAMEPAD_PRESENTATION bounds=(\d+)x(\d+) attached=1 .*pc_visible=1'
-                 if pc_input else r'PORTLAB_GAMEPAD_PRESENTATION bounds=(\d+)x(\d+) attached=1 hidden=0 physical=0 paths=1')
-        matches=re.findall(pattern,log)
-        if not any(int(w)>0 and int(h)>0 for w,h in matches):
+        if not controls_visible(log,pc_input):
             raise RuntimeError('Gamepad overlay was not visible in the actual application window: '+log[-2000:])
     report = {"gamepad_regression": "UIKit touch ownership and GameController snapshot passed",
               "pc_input_regression": "Simultaneous UIKit key hold, mouse hold, pointer drag and independent release passed",
