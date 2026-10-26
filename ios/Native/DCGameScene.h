@@ -23,6 +23,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL controllerMovementAdvanced;
 @property(nonatomic,readonly) BOOL controllerCameraAdvanced;
 @property(nonatomic,readonly) BOOL manualSaveCompleted;
+@property(nonatomic,readonly) NSString *presentationContext;
+@property(nonatomic,readonly,nullable) NSDictionary *lastRenderCapture;
+- (void)requestRenderCapture:(NSString *)name;
 @property(nonatomic,readonly) uint32_t chapter;
 @property(nonatomic,readonly) uint32_t chapterEndAction;
 @property(nonatomic,readonly) uint32_t stageOutcomeA;
@@ -30,7 +33,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t storyStage;
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
-    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage error:(NSString **)error;
+    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage resumeSavedPlayer:(BOOL)resume error:(NSString **)error;
 - (void)detachRenderer;
 - (nullable NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
     width:(uint32_t)width height:(uint32_t)height;

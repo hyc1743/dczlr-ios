@@ -38,6 +38,9 @@ typedef struct prepared_draw {
     VkDeviceSize offset;
     texture *image;
     uint32_t pipeline, filter, alpha_op;
+    uint32_t auto_depth, translucent;
+    size_t original_order;
+    double sort_depth;
 } prepared_draw;
 
 struct dc_vk_sprite {
@@ -880,6 +883,13 @@ dc_status dc_vk_geometry_render(dc_vk_sprite *r, const dc_vk_geometry_item *item
         const uint8_t clear[4], uint8_t *rgba, size_t capacity) {
     return dc_vk_geometry_render_region(r,items,count,clear,rgba,capacity,NULL);
 }
+static int auto_draw_order(const void *aa,const void *bb) {
+    const prepared_draw *a=aa,*b=bb;
+    if(a->translucent!=b->translucent)return a->translucent?1:-1;
+    if(a->translucent&&a->sort_depth!=b->sort_depth)return a->sort_depth>b->sort_depth?-1:1;
+    return a->original_order<b->original_order?-1:a->original_order>b->original_order?1:0;
+}
+
 dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item *items,size_t count,
         const uint8_t clear[4],uint8_t *rgba,size_t capacity,const dc_vk_clip_rect *clip) {
     if (!r || !clear || (!rgba && capacity) || (count && !items)) return DC_ARGUMENT;
@@ -897,22 +907,36 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (!item->vertices || !item->vertex_count || item->vertex_count % 3 || item->vertex_count > 1048576 - total) {
             status = DC_RANGE; break;
         }
-        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_READ_ONLY || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
+        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_AUTO || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
         texture *image = find_texture(r, item->texture);
         if (!image) { status = DC_ARGUMENT; break; }
+        uint32_t translucent=!image->opaque;
+        double sort_depth=0;
         for (size_t j = 0; j < item->vertex_count; ++j) {
             const dc_sprite_vertex *v = &item->vertices[j];
             if (!isfinite(v->x) || !isfinite(v->y) || !isfinite(v->z) ||
                 !isfinite(v->rhw) || v->rhw <= 0 || !isfinite(v->u) || !isfinite(v->v)) { status = DC_FORMAT; break; }
+            translucent|=(v->diffuse>>24)!=255;
+            sort_depth+=(double)v->z;
         }
         if (status != DC_OK) break;
         uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
+        uint32_t depth=item->depth_mode;
+        if(depth==DC_VK_DEPTH_AUTO)depth=translucent?DC_VK_DEPTH_READ_ONLY:DC_VK_DEPTH_WRITE;
         draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
-            .image = image, .pipeline = 3 + blend + 3*item->depth_mode + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
-            .alpha_op = 4};
+            .image = image, .pipeline = 3 + blend + 3*depth + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
+            .alpha_op = 4,.auto_depth=item->depth_mode==DC_VK_DEPTH_AUTO,
+            .translucent=translucent,.original_order=i,.sort_depth=sort_depth/item->vertex_count};
         total += item->vertex_count;
     }
-    if (status == DC_OK) status = render_prepared(r, draws, visible, clear, rgba,clip);
+    if (status == DC_OK) {
+        for(size_t i=0;i<visible;) {
+            if(!draws[i].auto_depth){++i;continue;}
+            size_t end=i+1;while(end<visible&&draws[end].auto_depth)++end;
+            qsort(draws+i,end-i,sizeof(*draws),auto_draw_order);i=end;
+        }
+        status = render_prepared(r, draws, visible, clear, rgba,clip);
+    }
     free(draws);
     return status;
 }

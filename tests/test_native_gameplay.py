@@ -8,6 +8,27 @@ from native_core import library,GamePlayer,GameInput,GameInteractionState,GameIn
 class NativeGameplayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.lib=library()
+    def test_map_placement_profiles_resolve_actual_anchors_and_cameras(self):
+        from native_core import XXModel,Matrix,PPArchive
+        from audit_playable_loop import entry
+        data=ROOT/'Data'
+        if not data.is_dir():self.skipTest('Local resources are supplied only in the private render gate')
+        class Profile(C.Structure):
+            _fields_=[('anchor',C.c_char_p),('camera',C.c_char_p)]
+        self.lib.dc_game_map_presentation_profile.argtypes=[C.c_uint32,C.POINTER(Profile)]
+        identity=Matrix((C.c_float*16)(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1))
+        for selector in (0,1,3,4,5,6,7,8):
+            profile=Profile();self.assertEqual(self.lib.dc_game_map_presentation_profile(selector,C.byref(profile)),0)
+            raw=entry(data/'RPP_10.pp',f'mm00_{selector:02d}.xx')
+            with XXModel(raw) as model:
+                query=bytes(c^255 for c in profile.anchor+b'\0');node=C.c_uint32()
+                self.assertEqual(self.lib.dc_xx_find_node_encoded(model.handle,query,len(query),C.byref(node)),0)
+                world=Matrix();self.assertEqual(self.lib.dc_xx_node_matrix(model.handle,node,C.byref(world)),0)
+                self.assertNotEqual(list(world.values)[12:15],[0,0,0])
+            self.assertIn(len(entry(data/'RPP_03.pp',profile.camera.decode())),(28,252))
+        sentinel=Profile(b'unchanged',b'unchanged')
+        self.assertEqual(self.lib.dc_game_map_presentation_profile(2,C.byref(sentinel)),4)
+        self.assertEqual(sentinel.anchor,b'unchanged')
     def test_touch_step_and_map_bounds(self):
         state=GamePlayer(0,0,-2,2,-3,3,4,0,0);out=GamePlayer();next_state=GamePlayer();inp=GameInput(.5,-1,1)
         self.assertEqual(self.lib.dc_game_player_step(C.byref(state),C.byref(inp),.5,C.byref(out)),0)

@@ -43,6 +43,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     BOOL _titleStateInitialized;
     dc_story_state _story;
     BOOL _storyInitialized;
+    BOOL _resumeNextScene;
     dc_menu_state _titleMenu;
     BOOL _titleMenuInitialized,_previousTitleTouch;
     BOOL _previousGameplayTouch;
@@ -75,6 +76,12 @@ static void dc_write_float_le(uint8_t *out, float value) {
     BOOL _diagnosticMaterialAdvanced;
     BOOL _diagnosticPoseAdvanced;
     dispatch_queue_t _renderQueue;
+    NSString *_gameplayContext,*_renderProbeStatus;
+#if DEBUG
+    uint32_t _probeCase,_probeFrame;
+    NSMutableDictionary<NSString *,NSDictionary *> *_probeCaptures;
+    NSString *_probeWorkerStatus;
+#endif
 }
 + (Class)layerClass { return CAMetalLayer.class; }
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -97,6 +104,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
 - (BOOL)controllerMovementAdvanced { return _gameScene.controllerMovementAdvanced; }
 - (BOOL)controllerCameraAdvanced { return _gameScene.controllerCameraAdvanced; }
 - (BOOL)gameplaySaveCompleted { return _gameScene.manualSaveCompleted; }
+- (NSString *)gameplayContext { return _gameplayContext?:@""; }
+- (NSString *)renderProbeStatus { return _renderProbeStatus?:@""; }
 - (void)releaseRenderer {
     dispatch_async(_renderQueue, ^{
         [self->_gameAudio pause];
@@ -157,8 +166,9 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(_gameScene)return nil;
     if(_gameAudio){NSString *audioError=[_gameAudio prepareGameplayAudio];if(audioError)return audioError;}
     NSString *gameError=nil;
+    BOOL resume=_resumeNextScene;_resumeNextScene=NO;
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter
-        mapSelector:_story.map stage:_story.stage error:&gameError];
+        mapSelector:_story.map stage:_story.stage resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
@@ -251,6 +261,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     [_gameScene detachRenderer];
     _gameScene=nil;
     if(profile.script>=0) {
+        _resumeNextScene=NO;
         NSString *introError=nil;
         _introScene=[[DCIntroScene alloc] initWithDirectory:directory startChapter:chapter error:&introError];
         if(!_introScene)return introError ?: @"Mid-story script entry failed";
@@ -312,6 +323,54 @@ static void dc_write_float_le(uint8_t *out, float value) {
     layer.contentsScale = scale;
     layer.drawableSize = CGSizeMake(ceil(self.bounds.size.width * scale), ceil(self.bounds.size.height * scale));
 }
+#if DEBUG
+- (NSString *)drawRenderProbeFromDirectory:(NSString *)directory {
+    static const uint32_t chapters[]={3,5,7,14,21};
+    const size_t cases=sizeof(chapters)/sizeof(chapters[0]);
+    if(_probeCase>=cases)return nil;
+    if(!_probeCaptures)_probeCaptures=[NSMutableDictionary dictionary];
+    if(_probeFrame==0||!_gameScene) {
+        _probeFrame=0;[self resetStory];_resumeNextScene=NO;
+        NSString *error=[self enterStoryChapter:chapters[_probeCase] directory:directory];
+        if(error)return error;
+    }
+    NSString *sample=nil;
+    if(_probeFrame==0)sample=@"idle";
+    else if(_probeFrame==16)sample=@"interaction";
+    else if(_probeFrame==38)sample=@"restored";
+    if(sample)[_gameScene requestRenderCapture:[NSString stringWithFormat:@"render-c%02u-%@.png",chapters[_probeCase],sample]];
+    dc_pad_frame controller={0};
+    if(_probeFrame==8)controller.buttons=controller.pressed=DC_PAD_A;
+    // A deterministic render checkpoint, separate from the visible-touch
+    // playability test. Slow GPU readback cannot skip the interaction sample.
+    NSString *error=[_gameScene drawAtTick:_probeFrame*33 inputX:0 inputY:0 touching:NO
+        controller:controller pcInput:(dc_pc_frame){0} width:_width height:_height];
+    if(error)return error;
+    NSDictionary *capture=_gameScene.lastRenderCapture;
+    NSString *file=capture[@"file"];
+    if(sample&&file) {
+        NSMutableDictionary *record=[capture mutableCopy];
+        record[@"sample"]=sample;
+        _probeCaptures[file]=record;
+        _probeWorkerStatus=[NSString stringWithFormat:@"chapter=%@ map=%@ sample=%@ pixels=%@ file=%@",
+            record[@"chapter"],record[@"map"],record[@"sample"],record[@"actor_visible_pixels"],file];
+    }
+    _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;
+    if(++_probeFrame>42) {
+        ++_probeCase;_probeFrame=0;
+        if(_probeCase==cases) {
+            NSDictionary *report=@{@"kind":@"deterministic_render_checkpoints",
+                @"playability_certification":@NO,@"captures":_probeCaptures.allValues};
+            NSError *reason=nil;NSData *data=[NSJSONSerialization dataWithJSONObject:report options:NSJSONWritingPrettyPrinted error:&reason];
+            NSURL *documents=[NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+            if(!data||![data writeToURL:[documents URLByAppendingPathComponent:@"render-probe.json"] options:NSDataWritingAtomic error:&reason])
+                return reason.localizedDescription?:@"Render probe report could not be saved";
+            _probeWorkerStatus=@"completed captures=15";
+        }
+    }
+    return nil;
+}
+#endif
 - (NSString *)drawAtX:(float)x y:(float)y time:(double)time
                 layer:(CAMetalLayer *)layer width:(uint32_t)width height:(uint32_t)height
          dataDirectory:(NSString *)directory touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput {
@@ -362,6 +421,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
             if (!_startupScene) return error ?: @"Startup resources could not be loaded";
         }
     }
+#if DEBUG
+    if([NSProcessInfo.processInfo.environment[@"PORTLAB_RENDER_PROBE"] isEqualToString:@"1"]&&directory.length)
+        return [self drawRenderProbeFromDirectory:directory];
+#endif
     if (_startupScene && !_startupScene.finished) {
         double milliseconds = time * 1000.0;
         if (!isfinite(milliseconds) || milliseconds < 0) return @"Invalid startup animation time";
@@ -557,6 +620,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
                     if(!saveAttributes || [saveAttributes[NSFileSize] unsignedLongLongValue] < DC_GAME_PLAYER_SAVE_BYTES)
                         return @"No playable save is available";
                     [self loadStoryFromDirectory:directory];
+                    _resumeNextScene=YES;
                     NSString *enterError=[self enterStoryChapter:_story.chapter directory:directory];
                     if(enterError)return enterError;
                 } else if(command.value==3) {
@@ -816,7 +880,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
             BOOL interactionCompleted=self->_gameScene.interactionCompleted;
             BOOL controlBusy=(scene==DCVulkanSpriteSceneGameplay||scene==DCVulkanSpriteSceneGameComplete) &&
                 (self->_gameScene.interactionActive||self->_gameAudio.gameplayVoiceBusy);
+            NSString *gameContext=self->_gameScene.presentationContext?:@"";
+            NSString *probeStatus=@"";
+#if DEBUG
+            probeStatus=self->_probeWorkerStatus?:@"";
+#endif
             dispatch_async(dispatch_get_main_queue(), ^{
+                self->_gameplayContext=gameContext;self->_renderProbeStatus=probeStatus;
                 dc_gamepad_set_context((uint32_t)scene,interactionCompleted,controlBusy);
                 completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted);
             });

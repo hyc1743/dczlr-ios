@@ -56,6 +56,9 @@ final class SpritePresenter: NSObject {
     private var touchSaveObserved = false
     private var reportedTouchStart = false
     private var reportedTouchPass = false
+    private var lastGameContext: String?
+    private var lastRenderProbeStatus: String?
+    private var renderProbeDone = false
     private var renderPending = false
     private var failed = false
     private let start = ProcessInfo.processInfo.systemUptime
@@ -72,7 +75,7 @@ final class SpritePresenter: NSObject {
     }
 
     func setActive(_ active: Bool) {
-        displayLink?.isPaused = !active || failed
+        displayLink?.isPaused = !active || failed || renderProbeDone
         if !active { view?.releaseRenderer() }
     }
 
@@ -132,7 +135,7 @@ final class SpritePresenter: NSObject {
     }
 
     @objc private func draw() {
-        guard model.active, !failed, !renderPending, let view = view else { return }
+        guard model.active, !failed, !renderProbeDone, !renderPending, let view = view else { return }
         if model.gameResourcesActive {
             let presentation = dc_gamepad_presentation()
             if presentation != reportedGamepadPresentation {
@@ -247,6 +250,20 @@ final class SpritePresenter: NSObject {
             touching: touching, controller: pad, pcInput: pcInput) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
                 guard let self = self else { return }
                 self.renderPending = false
+                if let context = self.view?.gameplayContext, !context.isEmpty, context != self.lastGameContext {
+                    self.lastGameContext = context
+                    self.model.record(context, event: "PORTLAB_GAME_SCENE_CONTEXT")
+                }
+                if let status = self.view?.renderProbeStatus, !status.isEmpty, status != self.lastRenderProbeStatus {
+                    self.lastRenderProbeStatus = status
+                    if status.hasPrefix("completed ") {
+                        self.renderProbeDone = true
+                        self.displayLink?.isPaused = true
+                        self.model.record(status, event: "PORTLAB_RENDER_PROBE_COMPLETED")
+                    } else {
+                        self.model.record(status, event: "PORTLAB_RENDER_CAPTURE")
+                    }
+                }
                 if self.view?.gameplaySaveCompleted == true, !self.touchSaveObserved {
                     self.touchSaveObserved = true
                     self.model.record("The visible save button wrote the native player/story file", event: "PORTLAB_TOUCH_SAVE_COMPLETED")

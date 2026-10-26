@@ -15,6 +15,23 @@ dc_status dc_game_player_step(const dc_game_player *s,const dc_game_input *in,fl
     return DC_OK;
 }
 static uint32_t checksum(const uint8_t *p,size_t n){uint32_t h=2166136261u;for(size_t i=0;i<n;++i)h=(h^p[i])*16777619u;return h;}
+
+dc_status dc_game_map_presentation_profile(uint32_t selector,dc_game_map_presentation *out) {
+    if(!out)return DC_ARGUMENT;
+    static const dc_game_map_presentation profiles[9]={
+        {"m_Nn_yuka_l_a","home_sh.cam"},
+        {"m_Nn_yuka_p_a","hote_5p.cam"},
+        {NULL,NULL},
+        {"m_Nn_yuka_r_a","home_sh.cam"},
+        {"m_Nn_yuka_5_a","roji_5p.cam"},
+        {"m_Nn_yuka_5_a","home_sh.cam"},
+        {"m_Nn_yuka_2b_a","roji_5p.cam"},
+        {"m_Nn_yuka_2b_a","roji_5p.cam"},
+        {"m_Nn_yuka_5_a","home_sh.cam"}
+    };
+    if(selector>=9||!profiles[selector].anchor)return DC_RANGE;
+    *out=profiles[selector];return DC_OK;
+}
 dc_status dc_game_next_map_selector(uint32_t current,uint32_t *next,uint32_t *finished){
     if(!next||!finished)return DC_ARGUMENT;
     static const uint32_t sequence[DC_GAME_MAP_SEQUENCE_COUNT]={0,1,3,4,5,6,7,8};

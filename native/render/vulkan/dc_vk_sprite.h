@@ -44,7 +44,8 @@ enum dc_vk_cull_mode {
 enum dc_vk_depth_mode {
     DC_VK_DEPTH_DISABLED=0,
     DC_VK_DEPTH_WRITE=1, /* LESS_OR_EQUAL test and write. */
-    DC_VK_DEPTH_READ_ONLY=2 /* LESS_OR_EQUAL test without writes. */
+    DC_VK_DEPTH_READ_ONLY=2, /* LESS_OR_EQUAL test without writes. */
+    DC_VK_DEPTH_AUTO=3 /* Opaque write first; translucent read-only, back to front. */
 };
 typedef struct dc_vk_clip_rect { uint32_t x,y,width,height; } dc_vk_clip_rect;
 
@@ -77,6 +78,9 @@ DC_API dc_status dc_vk_sprite_remove_texture(dc_vk_sprite *renderer, uintptr_t h
  * when configured, receives the Vulkan target through a GPU blit and swapchain.
  * Sprite draws always disable depth testing/writes. Geometry explicitly selects
  * disabled/read-write/read-only depth; zero-initialized geometry disables it.
+ * Contiguous AUTO geometry runs render opaque textures/diffuse first, then
+ * translucent draws back-to-front without writing depth. Explicit depth modes
+ * preserve submission order. AUTO uses the uploaded alpha data, not filenames.
  * Every frame establishes a fresh sprite state; min/mag starts at config's
  * explicit inherited value. Hidden value 1 skips an item without resolving it.
  * Semantic/admission errors do not submit a frame or modify output. */

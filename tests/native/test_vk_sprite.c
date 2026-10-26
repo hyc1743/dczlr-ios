@@ -260,9 +260,48 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     depth_items[0].depth_mode=DC_VK_DEPTH_WRITE;depth_items[1].depth_mode=DC_VK_DEPTH_DISABLED;
     OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,255,0,0,255,0));
     memcpy(before,rgba,sizeof(rgba));OK(dc_vk_sprite_get_info(r,&info));frame_count=info.submitted_frames;
-    depth_items[1].depth_mode=3;
+    depth_items[1].depth_mode=4;
     CHECK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba))==DC_FORMAT);
     CHECK(!memcmp(before,rgba,sizeof(rgba)));OK(dc_vk_sprite_get_info(r,&info));CHECK(info.submitted_frames==frame_count);
+    /* A translucent foreground submitted before an opaque actor must not
+     * write depth or hide it. AUTO also catches animated diffuse alpha. */
+    depth_items[0]=(dc_vk_geometry_item){.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
+    depth_items[1]=(dc_vk_geometry_item){.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
+    for(unsigned i=0;i<6;++i)near_quad[i].diffuse=0x80ffffff;
+    OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,4,127,128,0,191,1));
+    swapped=depth_items[0];depth_items[0]=depth_items[1];depth_items[1]=swapped;
+    OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,4,127,128,0,191,1));
+    /* All-zero alpha texels do not create invisible depth occluders. */
+    OK(dc_vk_sprite_remove_texture(r,green_texture));
+    const uint8_t clear_green[4]={0,255,0,0};
+    OK(dc_vk_sprite_upload(r,1,1,clear_green,sizeof(clear_green),&green_texture));
+    for(unsigned i=0;i<6;++i)near_quad[i].diffuse=0xffffffff;
+    depth_items[0]=(dc_vk_geometry_item){.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
+    depth_items[1]=(dc_vk_geometry_item){.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
+    OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,4,255,0,0,255,0));
+    puts("PASS: material alpha sorting, read-only transparency and zero-alpha depth holes");
+    OK(dc_vk_sprite_remove_texture(r,green_texture));
+    const uint8_t white_pixel[4]={255,255,255,255};
+    OK(dc_vk_sprite_upload(r,1,1,white_pixel,sizeof(white_pixel),&green_texture));
+    dc_sprite_vertex middle_quad[6];
+    memcpy(middle_quad,near_quad,sizeof(middle_quad));
+    for(unsigned i=0;i<6;++i) {
+        middle_quad[i].z=.5f;middle_quad[i].diffuse=0x8000ff00;
+        near_quad[i].diffuse=0x800000ff;
+    }
+    dc_vk_geometry_item layers[3]={
+        {.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO},
+        {.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO},
+        {.vertices=middle_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO}};
+    OK(dc_vk_geometry_render(r,layers,3,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,4,63,64,128,159,1));
+    swapped=layers[0];layers[0]=layers[2];layers[2]=swapped;
+    OK(dc_vk_geometry_render(r,layers,3,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,4,63,64,128,159,1));
+    puts("PASS: multiple translucent material layers sort back to front");
     OK(dc_vk_sprite_remove_texture(r,red_texture));OK(dc_vk_sprite_remove_texture(r,green_texture));
     puts("PASS: depth-tested overlapping geometry is submission-order independent");
     dc_vk_sprite_destroy(r);

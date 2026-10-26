@@ -17,7 +17,7 @@ SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-c
           "title": "title-screen background and menu layers", "intro": "first new-game script record and text adapter"}
 GAMEPLAY_SCENES = {"gameplay": "chapter 3 map and actor scene", "gameComplete": "completed chapter 3 map sequence"}
 STORY_SCENES = {"story": "script chapters 0-2, gameplay scene, interaction and chapter 4 script"}
-SCENE_CHOICES = tuple(SCENES) + tuple(GAMEPLAY_SCENES) + tuple(STORY_SCENES)
+SCENE_CHOICES = tuple(SCENES) + tuple(GAMEPLAY_SCENES) + tuple(STORY_SCENES) + ('renderProbe',)
 
 
 def has_session(log,session):
@@ -174,6 +174,8 @@ def pose_advanced(log):
 
 
 def scene_ready(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
+    if expected=='renderProbe':
+        return bool(re.search(r'(?m)^\S+ PORTLAB_RENDER_PROBE_COMPLETED completed captures=15(?= |$)',log)) and 'Vulkan 初始化或绘制失败' not in log
     if expected == 'story':
         return story_present(log)
     if expected in GAMEPLAY_SCENES:
@@ -189,6 +191,9 @@ def scene_ready(log, expected, require_animation=False, require_xa=False, requir
 
 
 def scene_evidence(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
+    if expected=='renderProbe':
+        if not scene_ready(log,expected):raise ValueError('GPU render checkpoints did not complete')
+        return {'render_checkpoints':'completed; per-frame validation follows','physical_iphone':'not tested'}
     if expected not in SCENES and expected not in GAMEPLAY_SCENES and expected not in STORY_SCENES:
         raise ValueError("Unknown expected scene: " + expected)
     if expected == 'story':
@@ -292,7 +297,7 @@ def preserve_gameplay_capture(container, output):
 
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
           exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False,
-          exercise_story=False,touch_controls=False):
+          exercise_story=False,touch_controls=False,render_probe=False):
     if exercise_new_game and (not startup_fixture and not resource_parts):
         raise ValueError('New-game exercise requires generated startup fixture or staged resource parts')
     if exercise_new_game and startup_fixture and expected_scene != 'intro':
@@ -303,6 +308,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         raise ValueError('Story exercise requires resource parts and story target')
     if touch_controls and (not exercise_story or pc_input):
         raise ValueError('Touch controls require the real story route without PC mode')
+    if render_probe and (not resource_parts or expected_scene!='renderProbe' or exercise_story or touch_controls):
+        raise ValueError('Render probe requires real resource parts and its own independent route')
     require_animation = expected_scene == "checker"
     require_xa = expected_scene == "checker"
     require_material = expected_scene == "checker"
@@ -361,7 +368,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         # Both automation routes hand Data to the renderer at launch. Restore
         # it completely before either route can start reading game resources.
         stage_resource_parts(resource_parts, container, output,
-                             restore=exercise_real_gameplay or exercise_story)
+                             restore=exercise_real_gameplay or exercise_story or render_probe)
     launch_environment=dict(os.environ)
     # Hosted simulators can expose a host/virtual gamepad. Isolate this display
     # probe from that device so virtual controls are actually rendered. The
@@ -377,13 +384,14 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_STORY']='1'
     if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
     if touch_controls:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_TOUCH_CONTROLS']='1'
+    if render_probe:launch_environment['SIMCTL_CHILD_PORTLAB_RENDER_PROBE']='1'
     # Cold CoreSimulator may queue the same request for over two minutes.
     # Observe that live command and app-authored evidence concurrently; never
     # issue another launch merely because an observation interval elapsed.
     launch_output=(output/'launch.txt').open('w',encoding='utf-8')
     launch_process=subprocess.Popen(['xcrun','simctl','launch','--terminate-running-process',device,'org.example.portlab'],
         stdout=launch_output,stderr=subprocess.STDOUT,text=True,env=launch_environment)
-    wait_seconds=600 if exercise_story else (300 if startup_fixture else 240)
+    wait_seconds=600 if exercise_story or render_probe else (300 if startup_fixture else 240)
     deadline = time.monotonic() + wait_seconds
     log = ""
     captured=set()
@@ -565,6 +573,16 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         assert lib.dc_game_player_load(saved,len(saved),C.byref(player))==0
         assert lib.dc_story_load(saved[32:],max(0,len(saved)-32),C.byref(story))==0
         report['touch_save']={'bytes':len(saved),'player_record':'valid','story_record':'valid','chapter':story.chapter}
+    if render_probe:
+        source=container/'Documents/render-probe.json'
+        data=json.loads(source.read_text(encoding='utf-8'))
+        shutil.copyfile(source,output/'render-probe.json')
+        for row in data.get('captures',[]):
+            name=row['file']
+            if Path(name).name!=name:raise ValueError('Invalid native frame name')
+            shutil.copyfile(container/'Documents'/name,output/name)
+        from render_probe_evidence import validate
+        report['render_probe']=validate(data,output)
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")
@@ -581,6 +599,7 @@ if __name__ == "__main__":
     parser.add_argument("--exercise-new-game", action="store_true")
     parser.add_argument("--pc-input", action="store_true", help="show and verify the actual keyboard/mouse overlay")
     parser.add_argument("--touch-controls", action="store_true",help="drive visible touch controls through window hit tests and UIKit handlers")
+    parser.add_argument("--render-probe",action="store_true",help="capture and validate idle/interaction/restored GPU frames in each distinct story map")
     parser.add_argument("--resource-parts", type=Path,
                         help="local directory containing DczlrData.manifest.json and all dczdata parts")
     parser.add_argument("--exercise-real-gameplay", action="store_true",
@@ -591,6 +610,6 @@ if __name__ == "__main__":
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input,args.exercise_story,args.touch_controls)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input,args.exercise_story,args.touch_controls,args.render_probe)
     else:
         parser.error("--app is required unless --boot-only is selected")

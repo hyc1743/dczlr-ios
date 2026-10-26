@@ -43,6 +43,13 @@ typedef struct dc_game_menu_activate_result {
 #define DC_GAME_INTERACTION_DELAY_MS 800u
 #define DC_GAME_MENU_COUNT 6u
 #define DC_GAME_STORY_MAP_TABLE_COUNT 22u
+typedef struct dc_game_map_presentation {
+    const char *anchor;
+    const char *camera;
+} dc_game_map_presentation;
+/* Existing floor-placement names and local camera candidates per admitted
+ * map. No identity-origin fallback is an admitted actor placement. */
+DC_API dc_status dc_game_map_presentation_profile(uint32_t selector,dc_game_map_presentation *out);
 DC_API dc_status dc_game_player_step(const dc_game_player *state,const dc_game_input *input,
     float delta_seconds,dc_game_player *out);
 DC_API dc_status dc_game_player_save(const dc_game_player *state,void *bytes,size_t length);
