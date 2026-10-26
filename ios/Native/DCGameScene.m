@@ -26,11 +26,6 @@ typedef struct dc_game_model {
     uint32_t textureCount;
     dc_matrix world;
 } dc_game_model;
-typedef struct dc_scene_ui_item {
-    uintptr_t texture;
-    uint32_t width,height;
-    float x,y;
-} dc_scene_ui_item;
 typedef struct dc_morph_key_cache { uint32_t frame; size_t vectorsOffset; uint32_t count; } dc_morph_key_cache;
 typedef struct dc_morph_track_cache {
     uint32_t meshIndex, indexCount;
@@ -71,8 +66,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_vk_sprite *_renderer;
     dc_game_model _map,_actor;
     dc_game_model _face;
-    dc_scene_ui_item _sceneUi[4];
-    uint32_t _sceneUiCount;
     dc_matrix _cameraBase,_actorWorld;
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginY,_actorOriginZ;
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
@@ -305,28 +298,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     for(NSUInteger i=0;i<span.length;++i)if((uint8_t)(expected[i]^255u)!=raw[i])return NO;
     return YES;
 }
-- (void)freeSceneUi {
-    if(_renderer)for(uint32_t i=0;i<_sceneUiCount;++i)if(_sceneUi[i].texture)dc_vk_sprite_remove_texture(_renderer,_sceneUi[i].texture);
-    memset(_sceneUi,0,sizeof(_sceneUi));_sceneUiCount=0;
-}
-- (void)loadSceneUiFromArchive:(DCArchive *)archive location:(NSString *)location character:(NSString *)character {
-    [self freeSceneUi];
-    NSArray<NSString *> *names=@[[NSString stringWithFormat:@"Hscene_%@.ema",location],
-        [NSString stringWithFormat:@"Hscene_%@.ema",character],@"Hscene_PLAY.ema"];
-    const float xs[]={800,800,800},ys[]={350,455,560};
-    for(NSUInteger i=0;i<names.count && _sceneUiCount<4;++i) {
-        NSData *bytes=nil;NSError *reason=nil;
-        for(uint32_t j=0;j<archive.entryCount;++j)
-            if([[archive asciiNameAtIndex:j] caseInsensitiveCompare:names[i]]==NSOrderedSame) {
-                DCDecodedImage *image=[archive decodeImageAtIndex:j inputLimit:8*1024*1024 outputLimit:64*1024*1024 error:&reason];
-                if(image && dc_vk_sprite_upload(_renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_sceneUi[_sceneUiCount].texture)==DC_OK) {
-                    _sceneUi[_sceneUiCount].width=image.width;_sceneUi[_sceneUiCount].height=image.height;
-                    _sceneUi[_sceneUiCount].x=xs[i];_sceneUi[_sceneUiCount].y=ys[i];++_sceneUiCount;
-                }
-                break;
-            }
-    }
-}
 - (BOOL)openModel:(dc_game_model *)slot staticOnly:(BOOL)staticOnly error:(NSString **)error {
     dc_status status=staticOnly ? dc_model_open_static(slot->xxData.bytes,slot->xxData.length,&slot->model)
         : dc_model_open(slot->xxData.bytes,slot->xxData.length,slot->xaData.bytes,slot->xaData.length,&slot->model);
@@ -499,7 +470,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     _gameMenuInitialized=YES;
     _naturalGameplayRoute=![[[NSProcessInfo processInfo] environment][@"PORTLAB_EXERCISE_REAL_GAMEPLAY"] isEqualToString:@"1"];
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
-    DCArchive *uiArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:nil];
     DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:nil];
      DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:nil];
@@ -596,12 +566,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actorOriginX=_actorWorld.values[12];_actorOriginY=_actorWorld.values[13];_actorOriginZ=_actorWorld.values[14];
     [self computeWalkBounds];
     [self computeActorFloorOffset];
-    if(uiArchive && _sceneType==4) {
-        NSString *location=@"station";
-        switch(_mapSelector){case 1:case 5:location=@"hotel";break;case 3:case 4:location=@"roadside";break;case 6:case 7:location=@"train";break;case 8:location=@"manaka'sroom";break;default:break;}
-        NSString *character=(_storyStage==0?@"manaka":_storyStage==1?@"yuko":@"aoi");
-        [self loadSceneUiFromArchive:uiArchive location:location character:character];
-    }
     _player.x=_actor.world.values[12];_player.z=_actor.world.values[14];
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
     _player.map_selector=_mapSelector;
@@ -620,7 +584,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     /* All draws are blocking and serialized by the view's render queue.
      * Release GPU handles while their renderer is still alive, including
      * partially initialized models; dealloc can then free the CPU data. */
-    [self freeSceneUi];
     dc_game_model *models[]={&_map,&_actor,&_face};
     for(size_t m=0;m<sizeof(models)/sizeof(models[0]);++m) {
         dc_game_model *slot=models[m];
@@ -810,27 +773,6 @@ static void freeMorphCaches(dc_game_model *slot) {
         *triangles+=(uint32_t)(vertexCount/3);
     }
     if(morphVertices){for(uint32_t i=0;i<slot->info.submeshes;++i)free(morphVertices[i]);free(morphVertices);free(morphCounts);}
-    return nil;
-}
-- (NSString *)appendSceneUi:(dc_vk_geometry_item *)draws count:(size_t *)count storage:(NSMutableArray *)storage
-    viewport:(const dc_viewport *)viewport triangles:(uint32_t *)triangles {
-    for(uint32_t i=0;i<_sceneUiCount;++i) {
-        dc_scene_ui_item *ui=&_sceneUi[i];
-        dc_sprite_pose pose={.width=ui->width,.height=ui->height,.x=ui->x,.y=ui->y,.z=.05f,
-            .scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1};
-        dc_sprite_vertex strip[4];
-        if(dc_sprite_build_vertices(&pose,strip)!=DC_OK)return @"Scene UI sprite projection failed";
-        NSMutableData *vertices=[NSMutableData dataWithLength:6*sizeof(dc_sprite_vertex)];
-        dc_sprite_vertex *out=vertices.mutableBytes;out[0]=strip[0];out[1]=strip[1];out[2]=strip[2];
-        out[3]=strip[2];out[4]=strip[1];out[5]=strip[3];
-        /* Sprite coordinates are already in the 1024x768 logical viewport;
-         * convert them into the current letterboxed drawable. */
-        float scale=viewport->width/1024.f,ox=viewport->x,oy=viewport->y;
-        for(uint32_t v=0;v<6;++v){out[v].x=ox+out[v].x*scale;out[v].y=oy+out[v].y*scale;out[v].z=.05f;out[v].rhw=1;}
-        [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=out,.vertex_count=6,
-            .texture=ui->texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_DISABLED,.cull_mode=DC_VK_CULL_NONE};
-        *triangles+=2;
-    }
     return nil;
 }
 - (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
