@@ -38,9 +38,9 @@ Verification:
 - `tools/oracle_story.py` matches the original chapter-end handler
   (FUN_00523380) with the real static tables on 5,760 synthetic cases.
 - `tools/oracle_intro.py` matches the original end-of-script/transition
-  helpers on 567 + 2,568 synthetic descriptor cases; the recovered real
-  descriptor table plugs into the same verified routing and is asserted by
-  `tools/story_cases.py` and the story-loop audit. The chapter-end oracle
+  helpers on 567 + 2,568 synthetic descriptor cases and, with
+  `--real-table`, on 78 + 2,304 reachable cases driven by the recovered
+  real 26-entry chapter descriptor table. The chapter-end oracle
   (5,760 cases) exercises the real table bytes because the original handler
   reads them from the image's own data section.
 - `tools/audit_story_loop.py --data Data` walks all 26 chapters against the

@@ -14,6 +14,7 @@ from unicorn.x86_const import UC_X86_REG_ESP,UC_X86_REG_EIP,UC_X86_REG_EAX,UC_X8
 from oracle_animation import OriginalAnimation,OBJECT,TARGET_SHA256
 from native_core import library
 from intro_cases import finish_cases,transition_cases,native_result
+from intro_cases import real_finish_cases,real_transition_cases
 
 GLOBAL,TABLE=0x87de88,0x78d908
 STUBS={0x420a60:'sprite',0x420e60:'sprite',0x593780:'alpha',0x591cf0:'reset',0x58e500:'font',
@@ -127,9 +128,11 @@ class OriginalIntro(OriginalAnimation):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--exe',type=Path,required=True)
-    p.add_argument('--output',type=Path,required=True);p.add_argument('--vectors',type=Path,required=True);args=p.parse_args()
+    p.add_argument('--output',type=Path,required=True);p.add_argument('--vectors',type=Path,required=True)
+    p.add_argument('--real-table',action='store_true',help='use the recovered real chapter descriptor table');args=p.parse_args()
     original=OriginalIntro(args.exe);lib=library();results={}
-    for name,source,finish in (('finish',finish_cases,True),('transition',transition_cases,False)):
+    sources=('finish',real_finish_cases,True),('transition',real_transition_cases,False) if args.real_table else (('finish',finish_cases,True),('transition',transition_cases,False))
+    for name,source,finish in sources:
         digest=hashlib.sha256();count=0
         for case in source():
             expected=original.run(case,finish);actual=native_result(lib,case,finish)
@@ -137,7 +140,8 @@ def main():
             digest.update((json.dumps({**case,'output':expected},sort_keys=True,separators=(',',':'))+'\n').encode());count+=1
         results[name]={'cases':count,'output_sha256':digest.hexdigest()}
     report={'target_sha256':TARGET_SHA256,'original_function_sha256':original.hashes,'results':results,
-        'coverage':'end-of-script chapter routing and transition dispatcher; synthetic descriptors/callback identities and host operations; selector/backup/progress writes verified',
+        'coverage':('end-of-script chapter routing and transition dispatcher with the recovered real chapter descriptor table (0x0078d908); synthetic callback identities and host operations; selector/backup/progress writes verified'
+            if args.real_table else 'end-of-script chapter routing and transition dispatcher; synthetic descriptors/callback identities and host operations; selector/backup/progress writes verified'),
         'original_game_resources_used':False,'game_playability':'not verified'}
     for path in (args.output,args.vectors):path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')
     print(json.dumps(results))
