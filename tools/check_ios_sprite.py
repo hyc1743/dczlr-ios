@@ -200,6 +200,10 @@ def camera_action_evidence(retarget,reset,expected_pose):
         if frame.get('actor_visible_pixels',0)<1:raise ValueError('Camera action did not present an actor')
         return values
     a=pose(retarget);b=pose(reset);target=retarget.get('camera_target',[])
+    target_matrix=retarget.get('camera_target_matrix',[])
+    if len(target_matrix)!=16 or not all(math.isfinite(v) for v in target_matrix) or [target_matrix[i] for i in (3,7,11,15)]!=[0,0,0,1]:
+        raise ValueError('Retarget used an unevaluated or invalid node matrix')
+    if target_matrix[12:15]!=target:raise ValueError('Retarget position is not the bound world-matrix position')
     if retarget.get('camera_retargets',0)<1 or reset.get('camera_resets',0)<1:raise ValueError('Missing actual camera actions')
     if len(target)!=3 or not all(math.isfinite(v) for v in target) or a[0]!=0 or a[1]>=0 or any(abs(x-y)>1e-4 for x,y in zip(a[4:],target)):
         raise ValueError('Retarget did not reanchor the rendered camera')
@@ -208,7 +212,7 @@ def camera_action_evidence(retarget,reset,expected_pose):
     if max(abs(x-y) for x,y in zip(a,b))<1e-3:raise ValueError('Camera action captures have identical poses')
     return {'primary_retarget':'rendered camera reanchored to original target node',
             'default_reset':'rendered pose matches original CAM bytes',
-            'retarget_pose':a,'reset_pose':b,'expected_reset_pose':list(expected_pose),
+            'retarget_pose':a,'target_world_matrix':target_matrix,'reset_pose':b,'expected_reset_pose':list(expected_pose),
             'remaining':'other camera modes, secondary view and system destination screens not implemented in host'}
 
 

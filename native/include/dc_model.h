@@ -39,6 +39,13 @@ DC_API dc_status dc_model_tick(dc_model *model,uint32_t delta,uint32_t now,const
 DC_API dc_status dc_model_get_info(const dc_model *model,dc_xx_info *out);
 DC_API dc_status dc_model_material(const dc_model *model,uint32_t index,dc_material_value *out);
 DC_API dc_status dc_model_global(const dc_model *model,uint32_t index,dc_matrix *out);
+/* Host query for non-render bindings. Evaluates the current local/extra
+ * matrices along this node's parent chain with the supplied root world,
+ * including render-hidden nodes. Cached render globals, hidden flags and
+ * animation state are unchanged. dc_model_global retains the original
+ * hidden-subtree cache behavior; it may contain no evaluated target yet. */
+DC_API dc_status dc_model_binding_global(const dc_model *model,uint32_t index,
+    const dc_matrix *world,dc_matrix *out);
 DC_API dc_status dc_model_mesh(const dc_model *model,uint32_t index,dc_xx_submesh *out);
 /* After a successful tick, unskinned positions/normals remain node-local;
  * skinned positions and inverse-transpose blended normals are world-space.

@@ -14,12 +14,14 @@ import subprocess
 class ControlsEvidenceTests(unittest.TestCase):
     def test_camera_actions_require_rendered_target_change_and_original_reset_pose(self):
         retarget={'camera_pose':[0,-20,.3,.5,1,2,3],'camera_target':[1,2,3],'camera_retargets':1,'actor_visible_pixels':100}
+        retarget['camera_target_matrix']=[1,0,0,0,0,1,0,0,0,0,1,0,1,2,3,1]
         reset={'camera_pose':[8,-30,.2,0,0,0,0],'camera_resets':1,'actor_visible_pixels':100}
         expected=list(reset['camera_pose'])
         self.assertIn('original CAM',camera_action_evidence(retarget,reset,expected)['default_reset'])
-        for bad in ('target','unchanged','wrong_reset','invisible','nan_expected'):
+        for bad in ('target','zero_matrix','unchanged','wrong_reset','invisible','nan_expected'):
             a=copy.deepcopy(retarget);b=copy.deepcopy(reset);e=list(expected)
             if bad=='target':a['camera_target'][0]=7
+            if bad=='zero_matrix':a['camera_target_matrix']=[0]*16
             if bad=='unchanged':b['camera_pose']=list(a['camera_pose']);e=list(b['camera_pose'])
             if bad=='wrong_reset':b['camera_pose'][0]+=1
             if bad=='invisible':a['actor_visible_pixels']=0

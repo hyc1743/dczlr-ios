@@ -327,6 +327,27 @@ dc_status dc_model_global(const dc_model *m,uint32_t index,dc_matrix *out) {
     *out=m->globals[index];
     return DC_OK;
 }
+
+dc_status dc_model_binding_global(const dc_model *m,uint32_t index,const dc_matrix *world,dc_matrix *out) {
+    if(!m||!world||!output_allowed(m,out,sizeof(*out)))return DC_ARGUMENT;
+    if(index>=m->info.nodes)return DC_RANGE;
+    uint32_t *chain=malloc(m->info.nodes*sizeof(*chain));
+    if(!chain)return DC_MEMORY;
+    size_t count=0;uint32_t at=index;
+    while(at!=DC_SCENE_NO_PARENT) {
+        if(at>=m->info.nodes||count>=m->info.nodes){free(chain);return DC_FORMAT;}
+        chain[count++]=at;at=m->nodes[at].parent;
+    }
+    dc_scene_node *path=malloc(count*sizeof(*path));dc_matrix *globals=calloc(count,sizeof(*globals));
+    if(!path||!globals){free(chain);free(path);free(globals);return DC_MEMORY;}
+    for(size_t i=0;i<count;++i) {
+        path[i]=m->nodes[chain[count-1-i]];
+        path[i].hidden=0;path[i].parent=i?(uint32_t)i-1:DC_SCENE_NO_PARENT;
+    }
+    dc_status status=dc_scene_update(path,count,world,globals,count);
+    if(status==DC_OK)*out=globals[count-1];
+    free(chain);free(path);free(globals);return status;
+}
 dc_status dc_model_mesh(const dc_model *m,uint32_t index,dc_xx_submesh *out) {
     if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
     if (index>=m->info.submeshes) return DC_RANGE;

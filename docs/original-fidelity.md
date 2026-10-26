@@ -174,3 +174,31 @@ requires primary retarget and default-reset callbacks, exact GPU captures of
 each, and a reset pose checked independently against original CAM bytes.
 Local unittest discovery passes 293 tests. GitHub validation for this change
 must complete before treating these new callback captures as observed evidence.
+
+### Hidden target cache correction
+
+Run 40407020843 passed its initial camera gate, but manual artifact review
+found the target position was (0,0,0): the render-hidden face node still had
+its initial identity cache. That run does not certify correct retarget binding.
+The cached-transform API intentionally preserves hidden-subtree globals, so
+changing normal scene traversal would break its separately checked behavior.
+
+The host now uses `dc_model_binding_global`, a separate read-only query that
+evaluates current local/extra matrices along the selected node's parent chain
+under the current root world matrix. It includes render-hidden ancestors and
+leaves visibility, animation and cached render globals unchanged. This query
+is host binding work, not a claim that the original hidden-cache algorithm
+always recomputes those nodes. Tests compare it to visible-node evaluation,
+assert that render caches/visibility stay unchanged, and check the actual
+bound face node for all three original stage resources. Captures now retain
+the complete target world matrix; the verifier rejects missing, nonfinite or
+non-affine matrices. Camera retarget admission also rejects a zero-filled
+non-affine target matrix. The corrected binding requires a new simulator run.
+
+A separate static follow-up finding for the remaining character callbacks:
+FUN_005201e0 constructs 35 effect slots from 30 names starting at VA 0x63c278
+(stride 12) followed by five empty entries. Slot 28 (+0x10dc) is se030.wav,
+not the host's current sorted-list entry. FUN_005358c0 type-4 option 1 arms
++0x185d and, at initial progress zero, plays that slot; FUN_00513690 waits
+for its query to become idle before requesting scene state 2. This route is
+not implemented yet. Metadata only is retained in out/original-effect-slot-table.json.

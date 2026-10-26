@@ -179,7 +179,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         /* FUN_005181f0 stores its third face-node lookup at +0x1708:
          * prefix + _On_namida. FUN_00539dd0 option 0 retargets that node. */
         uint32_t node=[self findNode:&_face name:[self characterNode:@"a_On_namida"]];dc_matrix target;
-        if(node==UINT32_MAX||dc_model_global(_face.model,node,&target)!=DC_OK){++_pendingContextActions;return nil;}
+        if(node==UINT32_MAX||dc_model_binding_global(_face.model,node,&_face.world,&target)!=DC_OK){++_pendingContextActions;return nil;}
         dc_camera_orbit current=[self activeCameraOrbit],next;
         if(dc_camera_retarget(&current,&target,1,&next)!=DC_OK)return @"Primary camera retarget failed";
         _lastCameraTarget=target;
@@ -1123,6 +1123,10 @@ static void freeMorphCaches(dc_game_model *slot) {
                     @"camera_pose":@[@(orbit.height),@(orbit.stored_distance),@(orbit.pitch),@(orbit.yaw),@(orbit.base.values[12]),@(orbit.base.values[13]),@(orbit.base.values[14])],
                     @"camera_actions":@(_cameraActionCount),@"camera_resets":@(_cameraResetCount),@"camera_retargets":@(_cameraRetargetCount),
                     @"camera_target":_cameraRetargetCount?@[@(_lastCameraTarget.values[12]),@(_lastCameraTarget.values[13]),@(_lastCameraTarget.values[14])]:@[],
+                    @"camera_target_matrix":_cameraRetargetCount?@[@(_lastCameraTarget.values[0]),@(_lastCameraTarget.values[1]),@(_lastCameraTarget.values[2]),@(_lastCameraTarget.values[3]),
+                        @(_lastCameraTarget.values[4]),@(_lastCameraTarget.values[5]),@(_lastCameraTarget.values[6]),@(_lastCameraTarget.values[7]),
+                        @(_lastCameraTarget.values[8]),@(_lastCameraTarget.values[9]),@(_lastCameraTarget.values[10]),@(_lastCameraTarget.values[11]),
+                        @(_lastCameraTarget.values[12]),@(_lastCameraTarget.values[13]),@(_lastCameraTarget.values[14]),@(_lastCameraTarget.values[15])]:@[],
                     @"width":@(width),@"height":@(height),@"viewport_pixels":@((double)viewport.width*viewport.height),
                     @"scene_ui_draws":@(_sceneUIDraws),@"scene_ui_visible_pixels":@(uiVisible),@"context_visible_pixels":@(contextVisible),@"context_open":@(_contextOpen),@"context_icon":@(_contextMenu.icon),@"context_count":@(_contextMenu.count),
                     @"actor_visible_pixels":@(visible),@"actor_bbox":visible?@[@(minX),@(minY),@(maxX),@(maxY)]:@[],

@@ -30,6 +30,7 @@ dc_status dc_camera_retarget(const dc_camera_orbit *source,const dc_matrix *targ
     if(!source||!target||!out)return DC_ARGUMENT;
     if(primary>1)return DC_RANGE;
     for(unsigned i=0;i<16;++i)if(!isfinite(target->values[i]))return DC_RANGE;
+    if(target->values[3]!=0||target->values[7]!=0||target->values[11]!=0||target->values[15]!=1)return DC_FORMAT;
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices matrices;
     dc_status status=dc_camera_build(source,&lens,&matrices);if(status!=DC_OK)return status;
     dc_camera_orbit result=*source;

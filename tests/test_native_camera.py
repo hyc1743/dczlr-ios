@@ -35,6 +35,8 @@ class NativeCameraTests(unittest.TestCase):
         self.assertEqual(bytes(expected),before)
         self.assertEqual(self.lib.dc_camera_retarget(C.byref(source),C.byref(target),2,C.byref(expected)),4)
         self.assertEqual(self.lib.dc_camera_retarget(None,C.byref(target),0,C.byref(expected)),1)
+        zero=Matrix();self.assertEqual(self.lib.dc_camera_retarget(C.byref(source),C.byref(zero),1,C.byref(expected)),3)
+        self.assertEqual(bytes(expected),before)
     def test_original_scene_camera_filenames_resolve_for_every_reachable_scene(self):
         from native_core import StoryChapter,PPArchive
         expected={3:'home_sh.cam',5:'trai_ch.cam',7:'toil_ta.cam',10:'home_sh.cam',12:'trai_ch.cam',14:'park_tc.cam',17:'home_sh.cam',19:'trai_ch.cam',21:'hote_tb.cam'}

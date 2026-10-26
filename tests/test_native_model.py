@@ -15,6 +15,45 @@ class NativeModelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.lib=library()
 
+    def test_hidden_binding_evaluates_world_without_populating_render_cache(self):
+        xx=diagnostic_fixture();model=C.c_void_p()
+        self.assertEqual(self.lib.dc_model_open_static(xx,len(xx),C.byref(model)),0)
+        self.addCleanup(self.lib.dc_model_close,model)
+        world=matrix(translation=(20,4,-3));cached=Matrix();binding=Matrix();visible=C.c_uint32()
+        self.assertEqual(self.lib.dc_model_hide_node(model,1,1),0)
+        self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_global(model,1,C.byref(cached)),0)
+        self.assertEqual(list(cached.values),list(matrix().values))
+        self.assertEqual(self.lib.dc_model_binding_global(model,1,C.byref(world),C.byref(binding)),0)
+        self.assertEqual(list(binding.values),list(world.values))
+        after=Matrix();self.lib.dc_model_global(model,1,C.byref(after));self.assertEqual(bytes(after),bytes(cached))
+        self.lib.dc_model_mesh_visible(model,0,C.byref(visible));self.assertEqual(visible.value,0)
+        self.assertEqual(self.lib.dc_model_hide_node(model,1,0),0)
+        self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+        self.lib.dc_model_global(model,1,C.byref(after));self.assertEqual(bytes(after),bytes(binding))
+        snapshot=bytes(binding)
+        self.assertEqual(self.lib.dc_model_binding_global(model,999,C.byref(world),C.byref(binding)),4)
+        self.assertEqual(bytes(binding),snapshot)
+
+    def test_original_face_target_binding_is_a_valid_world_matrix_while_hidden(self):
+        from native_core import PPArchive
+        if not (ROOT/'Data/RPP_09.pp').exists():self.skipTest('private original resource check')
+        world=matrix(translation=(22,3,4))
+        with PPArchive(ROOT/'Data/RPP_09.pp') as pp:
+            names={pp.entry(i).name_bytes.decode('ascii'):i for i in range(pp.count)}
+            for prefix in 'bca':
+                xx=pp.read(names[prefix+'k00_00.xx']);model=C.c_void_p()
+                self.assertEqual(self.lib.dc_model_open_static(xx,len(xx),C.byref(model)),0)
+                try:
+                    with XXModel(xx) as parsed:
+                        query=bytes(v^255 for v in (prefix+'_On_namida\0').encode());node=C.c_uint32()
+                        self.assertEqual(self.lib.dc_xx_find_node_encoded(parsed.handle,query,len(query),C.byref(node)),0)
+                    self.lib.dc_model_hide_node(model,node.value,1);out=Matrix()
+                    self.assertEqual(self.lib.dc_model_binding_global(model,node.value,C.byref(world),C.byref(out)),0)
+                    self.assertEqual(out.values[15],1)
+                    self.assertGreater(abs(out.values[12])+abs(out.values[13])+abs(out.values[14]),1)
+                finally:self.lib.dc_model_close(model)
+
     def open(self,**kwargs):
         xx,xa=fixture(**kwargs);handle=C.c_void_p()
         self.assertEqual(self.lib.dc_model_open(xx,len(xx),xa,len(xa),C.byref(handle)),0)
