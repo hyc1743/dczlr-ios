@@ -124,6 +124,10 @@ class NativePCInputTests(unittest.TestCase):
         self.assertEqual((f.active,f.pointer_active,f.x,f.y),(1,1,.75,.25))
         self.call('source',29,0);f=self.poll()
         self.assertEqual((f.pointer_active,f.x,f.y),(0,.75,.25))
+    def test_virtual_pointer_source_27_is_reported_and_can_release(self):
+        self.call('pointer',27,.1,.9);f=self.poll()
+        self.assertEqual(f.pointer_active,1);self.assertAlmostEqual(f.x,.1);self.assertAlmostEqual(f.y,.9)
+        self.call('source',27,0);self.assertEqual(self.poll().pointer_active,0)
     def test_invalid_setters_are_atomic(self):
         for name,args in [('source',(32,1)),('source',(0,2)),('key',(32,1,1)),
             ('key',(0,256,1)),('key',(0,1,2)),('mouse',(0,3,1)),

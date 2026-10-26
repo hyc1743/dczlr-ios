@@ -26,7 +26,7 @@ dc_status dc_pc_input_source(dc_pc_latch *l,uint32_t id,uint32_t active) {
     if(id>=DC_PC_SOURCE_COUNT||active>1)return DC_RANGE;
     if(!active) {
         memset(&l->sources[id],0,sizeof(l->sources[id]));
-        if(id==29) l->pointer_active=0;
+        if(id==29 || id==27) l->pointer_active=0;
     }
     else l->sources[id].active=1;
     return DC_OK;
@@ -51,7 +51,7 @@ dc_status dc_pc_input_pointer(dc_pc_latch *l,uint32_t id,float x,float y) {
     if(!l)return DC_ARGUMENT;
     if(id>=DC_PC_SOURCE_COUNT||!isfinite(x)||!isfinite(y)||x<0||x>1||y<0||y>1)return DC_RANGE;
     l->sources[id].active=1;l->x=x;l->y=y;
-    if(id==29) l->pointer_active=1;
+    if(id==29 || id==27) l->pointer_active=1;
     return DC_OK;
 }
 dc_status dc_pc_input_motion(dc_pc_latch *l,uint32_t id,int32_t dx,int32_t dy,int32_t wheel) {

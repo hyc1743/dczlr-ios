@@ -8,6 +8,7 @@ static dc_pc_latch pcState;
 static BOOL pcInitialized, pcActive = YES;
 static __weak DCPCInputView *pcView;
 static const uint32_t kVirtualSource = 28;
+static const uint32_t kVirtualPointerSource = 27;
 static BOOL virtualKeys[DC_PC_KEY_COUNT],virtualMouse[DC_PC_MOUSE_COUNT];
 static void virtualSourceActivityLocked(void) {
     BOOL active=NO;
@@ -84,7 +85,20 @@ dc_pc_frame dc_pc_input_read(void) {
 + (void)clearVirtualInput {
     pthread_mutex_lock(&pcMutex);pcInitialize();
     memset(virtualKeys,0,sizeof(virtualKeys));memset(virtualMouse,0,sizeof(virtualMouse));
-    dc_pc_input_source(&pcState,kVirtualSource,0);pthread_mutex_unlock(&pcMutex);
+    dc_pc_input_source(&pcState,kVirtualSource,0);
+    dc_pc_input_source(&pcState,kVirtualPointerSource,0);
+    pthread_mutex_unlock(&pcMutex);
+}
++ (void)setVirtualPointerX:(float)x y:(float)y {
+    if(!isfinite(x)||!isfinite(y)||x<0||x>1||y<0||y>1)return;
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    dc_pc_input_pointer(&pcState,kVirtualPointerSource,x,y);
+    pthread_mutex_unlock(&pcMutex);
+}
++ (void)clearVirtualPointer {
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    dc_pc_input_source(&pcState,kVirtualPointerSource,0);
+    pthread_mutex_unlock(&pcMutex);
 }
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
@@ -276,6 +290,7 @@ dc_pc_frame dc_pc_input_read(void) {
     pthread_mutex_lock(&pcMutex); pcInitialize();
     memset(virtualKeys,0,sizeof(virtualKeys));memset(virtualMouse,0,sizeof(virtualMouse));
     dc_pc_input_clear(&pcState);
+    dc_pc_input_source(&pcState,kVirtualPointerSource,0);
     if (_enabled && pcActive) { dc_pc_input_source(&pcState,29,1); dc_pc_input_pointer(&pcState,29,(float)_cursor.x,(float)_cursor.y); }
     pthread_mutex_unlock(&pcMutex);
 }

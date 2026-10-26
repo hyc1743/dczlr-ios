@@ -145,23 +145,22 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
         _mouseRight=[self mouseButton:@"\u53f3\u952e" index:1];
         _wheelUp=[self mouseButton:@"\u6eda+" index:2];
         _wheelDown=[self mouseButton:@"\u6eda-" index:3];
-        _keyPanel=[UIView new];_keyPanel.hidden=YES;_keyPanel.layer.cornerRadius=16;
-        _keyPanel.backgroundColor=[UIColor colorWithWhite:.03 alpha:.94];
-        _keyPanel.layer.borderWidth=1;_keyPanel.layer.borderColor=[UIColor colorWithWhite:1 alpha:.35].CGColor;
+        _keyPanel=[UIView new];_keyPanel.hidden=YES;_keyPanel.layer.cornerRadius=18;
+        _keyPanel.backgroundColor=[UIColor colorWithWhite:.96 alpha:.96];
+        _keyPanel.layer.borderWidth=1;_keyPanel.layer.borderColor=[UIColor colorWithWhite:.65 alpha:.8].CGColor;
         [self addSubview:_keyPanel];_virtualKeys=[NSMutableArray array];
-        NSArray *keyTitles=@[@"Esc",@"F1",@"F4",@"1",@"2",@"3",@"4",@"V",
-            @"Z \u5de6",@"X \u53f3",@"A \u6eda+",@"S \u6eda-",@"C \u62cd",@"Alt",@"Home",@"End",
-            @"Pg\u2191",@"Pg\u2193",@"Num8",@"Num4",@"Num2",@"Num6",@"\u2191",@"\u2190",
-            @"\u2193",@"\u2192",@"Alt+F4"];
-        const uint32_t keyCodes[]={1,0x3b,0x3e,2,3,4,5,0x2f,0x2c,0x2d,0x1e,0x1f,0x2e,0x38,
-            0xc7,0xcf,0xc9,0xd1,0x48,0x4b,0x50,0x4d,0xc8,0xcb,0xd0,0xcd,0x1000};
+        NSArray *keyTitles=@[@"Esc",@"V",@"F1",@"1",@"2",@"3",@"4",
+            @"Z",@"X",@"A",@"S",@"C",@"Home",@"End",@"Pg\u2191",@"Pg\u2193",
+            @"Num8",@"Num4",@"Num2",@"Num6",@"\u2191",@"\u2190",@"\u2193",@"\u2192"];
+        const uint32_t keyCodes[]={1,0x2f,0x3b,2,3,4,5,0x2c,0x2d,0x1e,0x1f,0x2e,
+            0xc7,0xcf,0xc9,0xd1,0x48,0x4b,0x50,0x4d,0xc8,0xcb,0xd0,0xcd};
         for(NSUInteger i=0;i<keyTitles.count;++i) {
             UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
             [button setTitle:keyTitles[i] forState:UIControlStateNormal];
-            [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+            [button setTitleColor:[UIColor colorWithWhite:.98 alpha:1] forState:UIControlStateNormal];
             button.titleLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-            button.backgroundColor=[UIColor colorWithWhite:.16 alpha:.92];button.layer.cornerRadius=7;
-            button.layer.borderWidth=1;button.layer.borderColor=[UIColor colorWithRed:.05 green:.75 blue:.8 alpha:.8].CGColor;
+            button.backgroundColor=[UIColor colorWithWhite:.52 alpha:.96];button.layer.cornerRadius=27;
+            button.layer.borderWidth=1;button.layer.borderColor=[UIColor colorWithWhite:.7 alpha:.9].CGColor;
             button.tag=(NSInteger)keyCodes[i];button.exclusiveTouch=NO;
             [button addTarget:self action:@selector(virtualKeyDown:) forControlEvents:UIControlEventTouchDown];
             [button addTarget:self action:@selector(virtualKeyUp:) forControlEvents:UIControlEventTouchUpInside|UIControlEventTouchUpOutside|UIControlEventTouchCancel];
@@ -234,7 +233,7 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
 }
 - (void)toggleKeyPanel {
     [self reset];_keyPanelVisible=!_keyPanelVisible;_keyPanel.hidden=!_keyPanelVisible;
-    [_keyButton setTitle:_keyPanelVisible?@"\u5173\u95ed\u952e\u4f4d":@"\u952e\u4f4d" forState:UIControlStateNormal];
+    [_keyButton setTitle:@"\u952e\u4f4d" forState:UIControlStateNormal];
     [self setNeedsLayout];
 }
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
@@ -281,16 +280,16 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
      * save/menu buttons occupy the entire top-left action cluster. */
     _keyButton.frame=CGRectMake((self.bounds.size.width-72)*.5,insets.top+6,72,44);
     CGFloat mouseW=62,mouseH=36,mouseX=CGRectGetMaxX(self.bounds)-insets.right-mouseW;
-    _mouseLeft.frame=CGRectMake(mouseX,insets.top+8,mouseW,mouseH);
-    _mouseRight.frame=CGRectMake(mouseX-mouseW-6,insets.top+8,mouseW,mouseH);
-    _wheelUp.frame=CGRectMake(mouseX,insets.top+50,mouseW,mouseH);
-    _wheelDown.frame=CGRectMake(mouseX-mouseW-6,insets.top+50,mouseW,mouseH);
-    CGFloat keyPanelWidth=MIN(620.0,MAX(360.0,self.bounds.size.width-24)),keyPanelHeight=218;
+    _wheelUp.frame=CGRectMake(mouseX,insets.top+8,mouseW,mouseH);
+    _wheelDown.frame=CGRectMake(mouseX,insets.top+50,mouseW,mouseH);
+    _mouseLeft.frame=CGRectMake(mouseX,insets.top+92,mouseW,mouseH);
+    _mouseRight.frame=CGRectMake(mouseX,insets.top+134,mouseW,mouseH);
+    CGFloat keyPanelWidth=MIN(680.0,MAX(420.0,self.bounds.size.width-24)),keyPanelHeight=252;
     _keyPanel.frame=CGRectMake((self.bounds.size.width-keyPanelWidth)*.5,insets.top+56,keyPanelWidth,keyPanelHeight);
-    CGFloat keyGap=6,keyWidth=(keyPanelWidth-7*keyGap-20)/8.0,keyHeight=34;
+    CGFloat keyGap=8,keyWidth=54,keyHeight=54;
     for(NSUInteger i=0;i<_virtualKeys.count;++i) {
         NSUInteger row=i/8,col=i%8;
-        _virtualKeys[i].frame=CGRectMake(10+col*(keyWidth+keyGap),12+row*(keyHeight+keyGap),keyWidth,keyHeight);
+        _virtualKeys[i].frame=CGRectMake(18+col*(keyWidth+keyGap),12+row*(keyHeight+keyGap),keyWidth,keyHeight);
     }
     _menuOverlay.frame=self.bounds;
     CGFloat panelHeight=360,panelWidth=260;
@@ -334,6 +333,13 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     virtualState.ry=(int32_t)fmaxf(-32767,fminf(32767,(float)lookY+state.pad.ry));
     if(inputActive)dc_pad_touches(&inputState,state.touches,state.touch_count);
     publishLocked();pthread_mutex_unlock(&inputMutex);
+    if(state.touch_count) {
+        /* The open area is a virtual mouse surface. It moves the pointer but
+         * never presses a mouse button; left/right are separate tap controls. */
+        [DCPCInputView setVirtualPointerX:state.touches[0].x y:state.touches[0].y];
+    } else {
+        [DCPCInputView clearVirtualPointer];
+    }
     dc_touch_clear_motion(&_touch);
     [self refresh];
 }
@@ -419,7 +425,7 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     for(UIButton *button in @[_mouseLeft,_mouseRight,_wheelUp,_wheelDown])
         button.backgroundColor=[UIColor colorWithWhite:.08 alpha:.78];
     for(UIButton *button in _virtualKeys)
-        button.backgroundColor=[UIColor colorWithWhite:.16 alpha:.92];
+        button.backgroundColor=[UIColor colorWithWhite:.52 alpha:.96];
     pthread_mutex_lock(&inputMutex);
     memset(&virtualState,0,sizeof(virtualState));inputState.pending&=physicalState.buttons;
     pthread_mutex_unlock(&inputMutex);

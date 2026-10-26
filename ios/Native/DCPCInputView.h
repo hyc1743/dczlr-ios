@@ -16,6 +16,8 @@ void dc_pc_input_set_active(BOOL active);
 + (void)setVirtualMouseButton:(uint32_t)button down:(BOOL)down;
 + (void)pulseVirtualWheel:(int32_t)delta;
 + (void)pulseVirtualAltF4;
++ (void)setVirtualPointerX:(float)x y:(float)y;
++ (void)clearVirtualPointer;
 + (void)clearVirtualInput;
 + (nullable NSString *)verifyInput NS_SWIFT_NAME(verifyInput());
 @end
