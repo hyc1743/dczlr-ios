@@ -750,11 +750,11 @@ static void freeMorphCaches(dc_game_model *slot) {
     // rotation and quickly throws the room out of view.
     orbit.yaw = _cameraYaw + _padCameraYaw;
     orbit.pitch = fmaxf(-1.45f, fminf(1.45f, _cameraPitch + _padCameraPitch));
-    orbit.stored_distance = _cameraDistance * expf(_padCameraZoom);
-    // CAM stores the orbit height as a downward target offset. The scene
-    // adapter uses a world-up camera, so invert it at the presentation edge;
-    // the portable CAM decoder remains byte-for-byte faithful.
-    orbit.height = -orbit.height;
+    // CAM stores the controller's distance argument. The original orbit
+    // initializer negates that argument before building the world matrix;
+    // apply that sign conversion only at this scene boundary.
+    orbit.stored_distance = -_cameraDistance * expf(_padCameraZoom);
+    orbit.height = _cameraHeight;
     float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
     float followZ=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[14]-_actorOriginZ));
     orbit.base.values[12]=_cameraOriginX+followX*.65f;
