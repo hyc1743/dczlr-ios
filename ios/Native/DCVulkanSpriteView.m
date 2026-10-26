@@ -432,7 +432,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
         }
     }
-    dc_vk_sprite_item draws[5] = {0};
+    dc_vk_sprite_item draws[8] = {0};
     size_t drawCount = 0;
     BOOL animationMoved = NO;
     BOOL materialMoved = NO;
