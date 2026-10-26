@@ -237,6 +237,14 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     [_keyButton setTitle:_keyPanelVisible?@"\u5173\u95ed\u952e\u4f4d":@"\u952e\u4f4d" forState:UIControlStateNormal];
     [self setNeedsLayout];
 }
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit=[super hitTest:point withEvent:event];
+    /* The full-screen PC adapter is hidden in touch mode, but UIKit can
+     * still return it during synthetic hit tests while a layout is changing.
+     * Keep the parent as the owner for the transparent pointer surface. */
+    if(hit==nil||hit==self||hit==_pcInput)return self;
+    return hit;
+}
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
 - (void)applyInputMode {
     [self reset];_controls.hidden=_pcMode;_touchMode.hidden=!_pcMode;
