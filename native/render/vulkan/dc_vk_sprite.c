@@ -70,7 +70,7 @@ struct dc_vk_sprite {
     VkDescriptorPool descriptor_pool;
     VkPipelineLayout pipeline_layout;
     VkShaderModule modules[2];
-    VkPipeline pipelines[12];
+    VkPipeline pipelines[36];
     VkSampler samplers[2];
     host_buffer readback, vertices;
     texture *textures;
@@ -236,7 +236,7 @@ void dc_vk_sprite_destroy(dc_vk_sprite *r) {
         if (r->swapchain) vkDestroySwapchainKHR(r->device, r->swapchain, NULL);
         if (r->textures)
             for (uint32_t i = 0; i < r->max_textures; ++i) drop_texture(r, &r->textures[i]);
-        for (uint32_t i = 0; i < 12; ++i)
+        for (uint32_t i = 0; i < 36; ++i)
             if (r->pipelines[i]) vkDestroyPipeline(r->device, r->pipelines[i], NULL);
         for (uint32_t i = 0; i < 2; ++i) {
             if (r->modules[i]) vkDestroyShaderModule(r->device, r->modules[i], NULL);
@@ -633,12 +633,16 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
     const VkBlendFactor sources[] = {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ZERO};
     const VkBlendFactor destinations[] = {VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_COLOR};
-    for (uint32_t i = 0; i < 12; ++i) {
-        uint32_t blend_index = i % 3;
-        depth.depthTestEnable = i>=6;
-        depth.depthWriteEnable = i>=6 && i<9;
-        assembly.topology = i < 3 ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-        assembly.primitiveRestartEnable = i < 3;
+    for (uint32_t i = 0; i < 36; ++i) {
+        uint32_t base=i%12,cull=i/12,blend_index=base%3;
+        raster.cullMode=cull?VK_CULL_MODE_BACK_BIT:VK_CULL_MODE_NONE;
+        /* Projected XY uses a top-left origin. Keep winding names at the API
+         * boundary in framebuffer coordinates, verified by the pixel gate. */
+        raster.frontFace=cull==DC_VK_FRONT_NEGATIVE_AREA?VK_FRONT_FACE_COUNTER_CLOCKWISE:VK_FRONT_FACE_CLOCKWISE;
+        depth.depthTestEnable = base>=6;
+        depth.depthWriteEnable = base>=6 && base<9;
+        assembly.topology = base < 3 ? VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP : VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        assembly.primitiveRestartEnable = base < 3;
         VkPipelineColorBlendAttachmentState blend = {.blendEnable = VK_TRUE,
             .srcColorBlendFactor = sources[blend_index], .dstColorBlendFactor = destinations[blend_index], .colorBlendOp = VK_BLEND_OP_ADD,
             .srcAlphaBlendFactor = sources[blend_index],
@@ -893,7 +897,7 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (!item->vertices || !item->vertex_count || item->vertex_count % 3 || item->vertex_count > 1048576 - total) {
             status = DC_RANGE; break;
         }
-        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_READ_ONLY) { status = DC_FORMAT; break; }
+        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_READ_ONLY || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
         texture *image = find_texture(r, item->texture);
         if (!image) { status = DC_ARGUMENT; break; }
         for (size_t j = 0; j < item->vertex_count; ++j) {
@@ -904,7 +908,7 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (status != DC_OK) break;
         uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
         draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
-            .image = image, .pipeline = 3 + blend + 3*item->depth_mode, .filter = item->point_filter ? 0 : 1,
+            .image = image, .pipeline = 3 + blend + 3*item->depth_mode + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
             .alpha_op = 4};
         total += item->vertex_count;
     }

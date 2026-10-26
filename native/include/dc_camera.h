@@ -19,6 +19,10 @@ typedef struct dc_camera_matrices {
     dc_matrix world, view, projection, view_projection;
 } dc_camera_matrices;
 
+/* Shared row-vector affine inverse for camera and bind-pose attachment.
+ * Failure preserves output; in-place inversion is supported. */
+DC_API dc_status dc_matrix_inverse_affine(const dc_matrix *source, dc_matrix *out);
+
 /* Row vectors, RH D3D depth [0,1]. Reconstructs the matrix part of the two
  * original orbit controllers (0x4656c0/0x4790d0) and lens (0x407020).
  * world = Tz(-stored_distance) * Rx(pitch) * Ry(yaw) * Ty(height) * base.

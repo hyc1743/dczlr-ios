@@ -28,14 +28,19 @@ typedef struct dc_vk_sprite_item {
 } dc_vk_sprite_item;
 /* Preprojected, non-indexed triangle-list vertices. RGB and alpha modulate
  * texture with diffuse; blend modes 0/3 standard, 1 additive, 2 modulation.
- * Explicit unlit one-texture profile; no culling/skinning/effect claim.
+ * Explicit unlit one-texture profile; optional framebuffer winding culling.
  * Positive rhw enables perspective-correct interpolation through the shader. */
 typedef struct dc_vk_geometry_item {
     const dc_sprite_vertex *vertices;
     size_t vertex_count;
     uintptr_t texture;
-    uint8_t blend_mode, hidden, point_filter, depth_mode;
+    uint8_t blend_mode, hidden, point_filter, depth_mode, cull_mode;
 } dc_vk_geometry_item;
+enum dc_vk_cull_mode {
+    DC_VK_CULL_NONE=0,
+    DC_VK_FRONT_NEGATIVE_AREA=1,
+    DC_VK_FRONT_POSITIVE_AREA=2
+};
 enum dc_vk_depth_mode {
     DC_VK_DEPTH_DISABLED=0,
     DC_VK_DEPTH_WRITE=1, /* LESS_OR_EQUAL test and write. */
@@ -51,7 +56,7 @@ typedef struct dc_vk_sprite_info {
 } dc_vk_sprite_info;
 
 /* Serial, blocking Vulkan backend with optional Apple surface presentation.
- * Scope: RGBA8, D32 depth cleared to1 each frame, no culling, one repeated texture stage, one mip,
+ * Scope: RGBA8, D32 depth cleared to1 each frame, explicit winding culling, one repeated texture stage, one mip,
  * observed sprite blend modes. Unsupported effective state fails explicitly.
  * A visible textured draw requires a live texture handle. Alpha-op DISABLE is
  * accepted only for opaque texture + opaque diffuse; other transparency uses

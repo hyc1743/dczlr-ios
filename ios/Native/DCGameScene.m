@@ -1,5 +1,6 @@
 #import "DCGameScene.h"
 #import "DCArchive.h"
+#import <ImageIO/ImageIO.h>
 #include "dc_camera.h"
 #include "dc_eyeneck.h"
 #include "dc_gameplay.h"
@@ -64,13 +65,16 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_game_model _map,_actor;
     dc_game_model _face;
     dc_matrix _cameraBase,_actorWorld;
-    float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginZ;
+    float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginY,_actorOriginZ;
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
     float _padCameraYaw,_padCameraPitch,_padCameraZoom;
     uint32_t _cameraPreset;
     BOOL _cameraAutoSelected;
     NSMutableDictionary<NSNumber *, NSValue *> *_cameraFallbacks;
     uint32_t _actorHeadNode;
+    dc_matrix _faceBindInverse;
+    float _actorRootFloorOffset;
+    BOOL _captureGameplayFrame,_capturedGameplayFrame;
     uint32_t _lastTick; BOOL _tickInitialized;
     float _lastInputX,_lastInputY; BOOL _inputInitialized;
     dc_menu_state _gameMenu; BOOL _gameMenuInitialized,_previousGameMenuTouch;
@@ -124,6 +128,59 @@ static void freeMorphCaches(dc_game_model *slot) {
         if([decoded isEqualToString:name]) return i;
     }
     return UINT32_MAX;
+}
+
+- (BOOL)updateFaceAttachment {
+    dc_matrix target;
+    return _actorHeadNode!=UINT32_MAX &&
+        dc_model_global(_actor.model,_actorHeadNode,&target)==DC_OK &&
+        dc_matrix_multiply(&_faceBindInverse,&target,&_face.world)==DC_OK;
+}
+
+- (void)applyInitialVisibility {
+    // Original 0x5181f0 hides alternate outfits and facial effect meshes.
+    NSArray<NSString *> *actorNames=@[@"a_On_wanpiHEC",@"a_On_wanpiEHM",@"a_On_wanpiHHM",
+        @"a_On_wanpiEHU",@"a_On_wanpiHHU",@"a_On_wanpiEHC",@"a_On_wanpiHHC",
+        @"a_On_skartHF",@"a_On_skartHB",@"a_On_skartHA",@"a_On_buraH",
+        @"a_On_pantuH",@"a_On_pantuH3",@"a_On_pantuH2",@"a_On_sune_L",@"a_On_sune_R",
+        @"a_On_neko_vive",@"a_On_tori_vive"];
+    NSArray<NSString *> *faceNames=@[@"a_On_nekomimi",@"a_On_kuchsiru_F",@"a_On_kuchsiru_ita",
+        @"a_On_kuchsiru_o",@"a_On_namida"];
+    for(NSString *name in actorNames){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+    for(NSString *name in faceNames){uint32_t node=[self findNode:&_face name:name];if(node!=UINT32_MAX)dc_model_hide_node(_face.model,node,1);}
+}
+
+- (void)computeActorFloorOffset {
+    _actorRootFloorOffset=0;
+    if(dc_model_tick(_actor.model,0,0,&_actor.world)!=DC_OK)return;
+    float lowest=FLT_MAX;
+    for(uint32_t i=0;i<_actor.info.submeshes;++i) {
+        uint32_t visible=0,space=0;dc_xx_submesh mesh;dc_matrix global;dc_material_value material;
+        if(dc_model_mesh_visible(_actor.model,i,&visible)!=DC_OK||!visible||
+           dc_model_mesh(_actor.model,i,&mesh)!=DC_OK||dc_model_material(_actor.model,mesh.material,&material)!=DC_OK||material.components[3]<=0||
+           dc_model_vertex_space(_actor.model,i,&space)!=DC_OK||dc_model_global(_actor.model,mesh.node,&global)!=DC_OK)continue;
+        dc_mesh_vertex *vertices=calloc(mesh.vertex_count?mesh.vertex_count:1,sizeof(*vertices));
+        if(!vertices)continue;
+        if(dc_model_load_vertices(_actor.model,i,vertices,mesh.vertex_count)==DC_OK) {
+            for(uint32_t j=0;j<mesh.vertex_count;++j){float *p=vertices[j].position;
+                float y=space==DC_MODEL_SPACE_WORLD?p[1]:p[0]*global.values[1]+p[1]*global.values[5]+p[2]*global.values[9]+global.values[13];
+                lowest=fminf(lowest,y);
+            }
+        }
+        free(vertices);
+    }
+    float floorY;
+    if(lowest!=FLT_MAX && [self surfaceYAtX:_actor.world.values[12] z:_actor.world.values[14] nearY:lowest result:&floorY])
+        _actorRootFloorOffset=_actor.world.values[13]-floorY;
+}
+
+- (BOOL)movePlayerTo:(const dc_game_player *)next {
+    float currentFloor=_actor.world.values[13]-_actorRootFloorOffset,floorY;
+    if(![self surfaceYAtX:next->x z:next->z nearY:currentFloor result:&floorY] || fabsf(floorY-currentFloor)>2.f)return NO;
+    _player=*next;_playerSaveDirty=YES;
+    _actor.world.values[12]=next->x;_actor.world.values[14]=next->z;
+    _actor.world.values[13]=floorY+_actorRootFloorOffset;
+    return YES;
 }
 
 - (uint32_t)placementNodeFromPLST:(NSData *)data model:(dc_game_model *)slot {
@@ -270,8 +327,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSData *data=[NSData dataWithContentsOfFile:path];if(data.length<DC_GAME_PLAYER_SAVE_BYTES)return;
     dc_game_player loaded;if(dc_game_player_load(data.bytes,data.length,&loaded)!=DC_OK)return;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,loaded.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,loaded.z));
-    float loadedFloor=0;
-    if(![self surfaceYAtX:_player.x z:_player.z nearY:_actor.world.values[13] result:&loadedFloor])return;
     if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_player.map_selector=loaded.map_selector;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_interactionState=(dc_game_interaction_state){.interaction_count=loaded.interaction_count,.completed=loaded.interaction_count>0};_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
 }
 - (void)savePlayerState {
@@ -313,7 +368,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_viewport viewport={0,0,1024,768,0,1};
     dc_matrix mapWorld=_map.world,actorWorld=_actor.world;
     if(dc_model_tick(_map.model,0,tick,&mapWorld)!=DC_OK||dc_model_tick(_actor.model,0,tick,&actorWorld)!=DC_OK)return @"Camera fallback model tick failed";
-    if(_face.model && _actorHeadNode!=UINT32_MAX){dc_matrix head;if(dc_model_global(_actor.model,_actorHeadNode,&head)!=DC_OK||dc_model_tick(_face.model,0,tick,&head)!=DC_OK)return @"Camera fallback face tick failed";}
+    if(_face.model && (![self updateFaceAttachment] || dc_model_tick(_face.model,0,tick,&_face.world)!=DC_OK))return @"Camera fallback face tick failed";
     dc_camera_orbit current={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};dc_camera_matrices currentMatrices;
     if(dc_camera_build(&current,&lens,&currentMatrices)!=DC_OK)return @"Camera fallback build failed";
     uint32_t currentMap=[self projectedTrianglesForModel:_map.model camera:&currentMatrices viewport:&viewport];
@@ -375,7 +430,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));_player.map_selector=nextSelector;_playerSaveDirty=YES;
     _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
-    _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
+    _actorOriginX=_actorWorld.values[12];_actorOriginY=_actorWorld.values[13];_actorOriginZ=_actorWorld.values[14];
+    [self computeActorFloorOffset];
     _face.world=_actor.world;
     _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;_interactionState.active=0;_interactionState.completed=0;
     _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};_previousGameMenuTouch=NO;
@@ -383,6 +439,9 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
+#if DEBUG
+    _captureGameplayFrame=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_GAMEPLAY"] isEqualToString:@"1"];
+#endif
     _cameraFallbacks=[NSMutableDictionary dictionary];
     _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};
     _gameMenuInitialized=YES;
@@ -414,6 +473,17 @@ static void freeMorphCaches(dc_game_model *slot) {
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Nz_kubi2"];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:@"a_Kp_kubi2"];
+    // PLST attaches sourceBind * inverse(targetBind) to targetAnimatedWorld.
+    // All face meshes descend from the source node, so compensate its model
+    // world with the full actor target bind inverse before applying animation.
+    dc_model *bindModel=NULL;dc_matrix identity=gameIdentity(),targetBind;
+    dc_status bindStatus=dc_model_open_static(_actor.xxData.bytes,_actor.xxData.length,&bindModel);
+    if(bindStatus==DC_OK)bindStatus=dc_model_tick(bindModel,0,0,&identity);
+    if(bindStatus==DC_OK)bindStatus=dc_model_global(bindModel,_actorHeadNode,&targetBind);
+    if(bindStatus==DC_OK)bindStatus=dc_matrix_inverse_affine(&targetBind,&_faceBindInverse);
+    dc_model_close(bindModel);
+    if(bindStatus!=DC_OK){if(error)*error=@"Face bind-pose attachment failed";return nil;}
+    [self applyInitialVisibility];
     dc_eyeneck_info eyesInfo,neckInfo;dc_eyeneck_span eyesRight,eyesLeft,neckHead;
     if(_face.model && _eyesData && _neckData && (dc_eyeneck_probe(_eyesData.bytes,_eyesData.length,&eyesInfo)!=DC_OK ||
        dc_eyeneck_probe(_neckData.bytes,_neckData.length,&neckInfo)!=DC_OK ||
@@ -454,40 +524,18 @@ static void freeMorphCaches(dc_game_model *slot) {
         orbit=(dc_camera_orbit){.base=gameIdentity(),.stored_distance=-1.5f};
     _cameraBase=orbit.base;
     _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
-    // The first playable room uses a close follow camera after the title
-    // transition. The archive preset is the wide room survey camera; feeding
-    // that distance directly leaves the player outside the room on iOS.
-    if (_mapSelector == 0) {
-        // The first map's archived home camera is a wide survey view. The
-        // playable entry uses the actor anchor as its orbit target.
-        _cameraBase = gameIdentity();
-        _cameraBase.values[12] = _actorWorld.values[12];
-        _cameraBase.values[14] = _actorWorld.values[14];
-        _cameraDistance = 12.0f;
-        _cameraHeight = 4.0f;
-        _cameraPitch = -0.8f;
-        _cameraYaw = 0.0f;
-        _cameraOriginX = _cameraBase.values[12];
-        _cameraOriginZ = _cameraBase.values[14];
-        _cameraAutoSelected = YES;
-    }
-    if (_mapSelector != 0) _cameraAutoSelected=NO;
+    _cameraAutoSelected=NO;
     _actor.world=_actorWorld;
     _face.world=_actorWorld;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
-    _actorOriginX=_actorWorld.values[12];_actorOriginZ=_actorWorld.values[14];
+    _actorOriginX=_actorWorld.values[12];_actorOriginY=_actorWorld.values[13];_actorOriginZ=_actorWorld.values[14];
     [self computeWalkBounds];
+    [self computeActorFloorOffset];
     _player.x=_actor.world.values[12];_player.z=_actor.world.values[14];
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
     [self loadPlayerState];
     uint32_t savedMap=_player.map_selector;while(_mapSelector<savedMap){NSString *advanceError=[self advanceToNextMap];if(advanceError)break;}
-    _loaded=YES;
-    const char *startMap=getenv("PORTLAB_START_MAP");
-    if(startMap && atoi(startMap)==1) {
-        NSString *advanceError=[self advanceToNextMap];
-        if(advanceError) { if(error)*error=advanceError; return nil; }
-    }
-    return self;
+    _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
     if(_renderer)for(uint32_t i=0;i<slot->textureCount;++i)if(slot->textures[i])dc_vk_sprite_remove_texture(_renderer,slot->textures[i]);
@@ -667,12 +715,12 @@ static void freeMorphCaches(dc_game_model *slot) {
             status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){free(indices);for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh clip query failed";}
             if(!vertexCount){free(indices);continue;}
             NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);free(indices);if(status!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh projection failed";}
-            [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE};*triangles+=(uint32_t)(vertexCount/3);continue;
+            [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE,.cull_mode=DC_VK_FRONT_NEGATIVE_AREA};*triangles+=(uint32_t)(vertexCount/3);continue;
         }
         status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){return @"Game mesh clip query failed";}if(!vertexCount)continue;
         NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);if(status!=DC_OK)return @"Game mesh projection failed";
         [storage addObject:vertices];
-        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE};
+        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_WRITE,.cull_mode=DC_VK_FRONT_NEGATIVE_AREA};
         *triangles+=(uint32_t)(vertexCount/3);
     }
     if(morphVertices){for(uint32_t i=0;i<slot->info.submeshes;++i)free(morphVertices[i]);free(morphVertices);free(morphCounts);}
@@ -730,8 +778,7 @@ static void freeMorphCaches(dc_game_model *slot) {
             float dz=fmaxf(-.15f,fminf(.15f,y-_lastInputY));
             dc_game_player next;
             dc_game_input input={.axis_x=dx/.15f,.axis_z=-dz/.15f,.touching=1};
-            float floorY=0;
-            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK && [self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY]){_player=next;_playerSaveDirty=YES;_actor.world.values[12]=next.x;_actor.world.values[14]=next.z;_actor.world.values[13]=floorY;}
+            if(dc_game_player_step(&_player,&input,.1f,&next)==DC_OK)[self movePlayerTo:&next];
         }
         _lastInputX=x;_lastInputY=y;_inputInitialized=YES;
     } else { _inputInitialized=NO; }
@@ -747,12 +794,9 @@ static void freeMorphCaches(dc_game_model *slot) {
         dc_game_player next;
         dc_game_input movement={.axis_x=moveX,.axis_z=moveZ,.touching=1};
         float speed=(controller.buttons&DC_PAD_L3)?2.f:1.f;
-        float floorY=0;
-        if(dc_game_player_step(&_player,&movement,padDelta*speed,&next)==DC_OK && [self surfaceYAtX:next.x z:next.z nearY:_actor.world.values[13] result:&floorY]) {
-            if(next.x!=_player.x || next.z!=_player.z)_controllerMovementAdvanced=YES;
-            _player=next;_playerSaveDirty=YES;
-            _actor.world.values[12]=next.x;_actor.world.values[14]=next.z;
-            _actor.world.values[13]=floorY;
+        if(dc_game_player_step(&_player,&movement,padDelta*speed,&next)==DC_OK) {
+            BOOL changed=next.x!=_player.x || next.z!=_player.z;
+            if([self movePlayerTo:&next] && changed)_controllerMovementAdvanced=YES;
         }
     } else if(!touching) { [self savePlayerState]; }
     if((requestNextMap || (!_naturalGameplayRoute&&_interactionCompleted&&!_mapAdvanced))){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
@@ -764,24 +808,15 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(padDelta>0 && (cameraX!=0 || cameraY!=0))_controllerCameraAdvanced=YES;
     if(controller.buttons&DC_PAD_L)cameraX-=1;
     if(controller.buttons&DC_PAD_R)cameraX+=1;
-    _padCameraYaw=fmaxf(-1.45f,fminf(1.45f,_padCameraYaw+cameraX*padDelta*1.5f));
+    _padCameraYaw=remainderf(_padCameraYaw+cameraX*padDelta*1.5f,6.2831853f);
     _padCameraPitch=fmaxf(-.7f,fminf(.7f,_padCameraPitch+cameraY*padDelta));
     float zoom=((controller.buttons&DC_PAD_ZR)?1.f:0.f)-((controller.buttons&DC_PAD_ZL)?1.f:0.f);
     _padCameraZoom=fmaxf(-.7f,fminf(1.f,_padCameraZoom+zoom*padDelta));
-    // _padCamera* are offsets from the map's original camera. Applying the
-    // accumulated offset to the already offset orbit every frame compounds the
-    // rotation and quickly throws the room out of view.
-    orbit.yaw = _cameraYaw + _padCameraYaw;
-    orbit.pitch = fmaxf(-1.45f, fminf(1.45f, _cameraPitch + _padCameraPitch));
-    // CAM stores the controller's distance argument. The original orbit
-    // initializer negates that argument before building the world matrix;
-    // apply that sign conversion only at this scene boundary.
-    orbit.stored_distance = -_cameraDistance * expf(_padCameraZoom);
-    orbit.height = _cameraHeight;
-    float followX=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[12]-_actorOriginX));
-    float followZ=fmaxf(-40.0f,fminf(40.0f,_actor.world.values[14]-_actorOriginZ));
-    orbit.base.values[12]=_cameraOriginX+followX*.65f;
-    orbit.base.values[14]=_cameraOriginZ+followZ*.65f;
+    orbit.yaw+=_padCameraYaw;orbit.pitch+=_padCameraPitch;
+    orbit.stored_distance*=expf(_padCameraZoom);
+    orbit.base.values[12]=_cameraOriginX+_actor.world.values[12]-_actorOriginX;
+    orbit.base.values[13]=_cameraBase.values[13]+_actor.world.values[13]-_actorOriginY;
+    orbit.base.values[14]=_cameraOriginZ+_actor.world.values[14]-_actorOriginZ;
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
@@ -790,11 +825,28 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;
     if(!failure && _face.model) {
-        if(_actorHeadNode!=UINT32_MAX && dc_model_global(_actor.model,_actorHeadNode,&_face.world)!=DC_OK)
+        if(![self updateFaceAttachment])
             failure=@"Game face anchor lookup failed";
         if(!failure)failure=[self append:&_face delta:0 tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     }
-    if(!failure) { uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f)),right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f)),bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));dc_vk_clip_rect clip={left,top,right-left,bottom-top};uint8_t clear[4]={0,0,0,255};if(dc_vk_geometry_render_region(_renderer,draws,count,clear,NULL,0,&clip)!=DC_OK)failure=@"Game Vulkan draw failed";}
+    if(!failure) {
+        uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f)),right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f)),bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));
+        dc_vk_clip_rect clip={left,top,right-left,bottom-top};uint8_t clear[4]={0,0,0,255};
+        BOOL capture=_captureGameplayFrame&&!_capturedGameplayFrame;
+        NSMutableData *pixels=capture?[NSMutableData dataWithLength:(size_t)width*height*4]:nil;
+        if(dc_vk_geometry_render_region(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length,&clip)!=DC_OK)failure=@"Game Vulkan draw failed";
+        if(!failure&&capture) {
+            CGColorSpaceRef color=CGColorSpaceCreateDeviceRGB();CGDataProviderRef provider=CGDataProviderCreateWithCFData((__bridge CFDataRef)pixels);
+            CGImageRef image=CGImageCreate(width,height,8,32,width*4,color,kCGBitmapByteOrderDefault|kCGImageAlphaPremultipliedLast,provider,NULL,false,kCGRenderingIntentDefault);
+            CGDataProviderRelease(provider);CGColorSpaceRelease(color);
+            NSURL *documents=[NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].firstObject;
+            NSURL *url=[documents URLByAppendingPathComponent:@"gameplay-first-native.png"];
+            CGImageDestinationRef destination=image?CGImageDestinationCreateWithURL((__bridge CFURLRef)url,CFSTR("public.png"),1,NULL):NULL;
+            BOOL saved=NO;if(destination){CGImageDestinationAddImage(destination,image,NULL);saved=CGImageDestinationFinalize(destination);CFRelease(destination);}
+            if(image)CGImageRelease(image);
+            if(saved)_capturedGameplayFrame=YES;else failure=@"Initial gameplay frame capture failed";
+        }
+    }
     free(draws);return failure;
 }
 @end

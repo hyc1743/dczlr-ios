@@ -170,6 +170,18 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
     CHECK(pixel(rgba,2,2,255,0,0,255,0));
     CHECK(pixel(rgba,7,7,20,40,60,100,0));
+    geometry.cull_mode=DC_VK_FRONT_POSITIVE_AREA;
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,2,2,255,0,0,255,0));
+    geometry.cull_mode=DC_VK_FRONT_NEGATIVE_AREA;
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,2,2,20,40,60,100,0));
+    dc_sprite_vertex winding=triangle[1];triangle[1]=triangle[2];triangle[2]=winding;
+    OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,2,2,255,0,0,255,0));
+    winding=triangle[1];triangle[1]=triangle[2];triangle[2]=winding;
+    geometry.cull_mode=DC_VK_CULL_NONE;
+    puts("PASS: framebuffer winding, opposite front faces and two-sided reset");
     triangle[1].rhw=4;
     OK(dc_vk_geometry_render(r,&geometry,1,clear,rgba,sizeof(rgba)));
     CHECK(pixel(rgba,2,2,0,255,0,255,0)); /* Positive rhw changes UV interpolation. */

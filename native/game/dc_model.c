@@ -349,6 +349,12 @@ dc_status dc_model_mesh_visible(const dc_model *m,uint32_t mesh,uint32_t *out) {
     }
     *out=1;return DC_OK;
 }
+dc_status dc_model_hide_node(dc_model *m,uint32_t node,uint32_t hidden) {
+    if(!m)return DC_ARGUMENT;
+    if(node>=m->info.nodes||hidden>1)return DC_RANGE;
+    m->nodes[node].hidden=(uint8_t)hidden;
+    return DC_OK;
+}
 dc_status dc_model_load_vertices(const dc_model *m,uint32_t mesh,dc_mesh_vertex *out,size_t capacity) {
     if (!m) return DC_ARGUMENT;
     if (mesh>=m->info.submeshes) return DC_RANGE;

@@ -97,3 +97,26 @@ def verify_skin(data):
     return {'method':'exact GPU readback after changed world-space skin sample; generated textured-surface color presence',
         'width':width,'height':height,'red_surface_pixels':red,'nonblack_letterbox_pixels':outside,
         'original_skin_or_image_equivalence':'not established'}
+
+
+def verify_gameplay_actor(data):
+    """Bounded visual gate for the deterministic first-map blue-outfit actor.
+
+    Event markers do not prove that geometry survived occlusion. Check that the
+    known outfit occupies a character-sized screen area with plausible height.
+    This is a visibility check, not an original-game image-equivalence claim.
+    """
+    width,height,channels,pixels=decode(data)
+    scale=min(width/1024,height/768);ox=(width-1024*scale)/2;oy=(height-768*scale)/2
+    hits=0;first=height;last=-1
+    for y in range(int(oy+100*scale),min(height,int(oy+740*scale))):
+        for x in range(max(0,int(ox+280*scale)),min(width,int(ox+740*scale))):
+            at=(y*width+x)*channels;r,g,b=pixels[at:at+3]
+            if b>r+20 and g>r+10 and b>=g-8:
+                hits+=1;first=min(first,y);last=max(last,y)
+    area=1024*768*scale*scale
+    if not area*.01<hits<area*.25 or last-first<160*scale:
+        raise ValueError(f'First gameplay actor is absent, occluded or fragmented: outfit_pixels={hits}, span={last-first}')
+    return {'method':'first native GPU frame; bounded outfit area and height',
+            'outfit_pixels':hits,'vertical_span':last-first,'width':width,'height':height,
+            'original_image_equivalence':'not established'}

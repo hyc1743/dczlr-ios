@@ -261,13 +261,12 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     # probe from that device so virtual controls are actually rendered. The
     # override is compiled out of Release; physical mapping has its own test.
     launch_environment['SIMCTL_CHILD_PORTLAB_TEST_VIRTUAL_CONTROLS']='1'
-    if os.environ.get('PORTLAB_START_MAP'):
-        launch_environment['SIMCTL_CHILD_PORTLAB_START_MAP']=os.environ['PORTLAB_START_MAP']
     session=uuid.uuid4().hex
     launch_environment['SIMCTL_CHILD_PORTLAB_LAUNCH_ID']=session
     if startup_fixture:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_STARTUP']='1'
     if exercise_new_game:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_NEW_GAME']='1'
     if exercise_real_gameplay:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_REAL_GAMEPLAY']='1'
+    if exercise_real_gameplay:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
     # Cold CoreSimulator may queue the same request for over two minutes.
     # Observe that live command and app-authored evidence concurrently; never
     # issue another launch merely because an observation interval elapsed.
@@ -388,13 +387,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
         report['startup_pixels']=verify((output/'startup-card-0.png').read_bytes(),(output/'startup-card-1.png').read_bytes())
         from startup_pixels import verify_skin
         shutil.copyfile(container/'Documents/skinned-transition.png',output/'skinned-transition.png')
-        try:
-            report['skin_pixels']=verify_skin((output/'skinned-transition.png').read_bytes())
-        except ValueError as error:
-            if 'PORTLAB_NATIVE_SKIN_ADVANCED' not in log:
-                raise
-            report['skin_pixels']={'diagnostic_warning': str(error),
-                                   'native_skin_event': 'PORTLAB_NATIVE_SKIN_ADVANCED'}
+        report['skin_pixels']=verify_skin((output/'skinned-transition.png').read_bytes())
     if exercise_new_game and startup_fixture:
         report['new_game']=new_game_evidence(log)
         import shutil
@@ -408,6 +401,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             'gameplay_evidence': 'validated by expected scene and gameplay markers'
         }
     if exercise_real_gameplay and resource_parts:
+        import shutil
+        shutil.copyfile(container/'Documents/gameplay-first-native.png',output/'gameplay-first-native.png')
+        from startup_pixels import verify_gameplay_actor
+        report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
         if not all(event in log for event in ('PORTLAB_GAMEPAD_MOVEMENT_ADVANCED', 'PORTLAB_GAMEPAD_CAMERA_ADVANCED')):
             raise RuntimeError('Controller input did not advance both native movement and camera')
         report['real_resource_gameplay'] = {

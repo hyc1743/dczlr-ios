@@ -269,6 +269,14 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     dc_vk_clip_rect draw_clip={left,top,right-left,bottom-top};
     status=dc_vk_geometry_render_region(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length,&draw_clip);
     if (status!=DC_OK) return [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
+    if(captureSkin) {
+        // A moving skin can be fully faded out in the first transition frame.
+        // Capture a visible sample, rather than certifying an empty readback.
+        const uint8_t *rgba=pixels.bytes;size_t red=0;
+        for(uint32_t y=(uint32_t)(height*.35);y<(uint32_t)(height*.65);++y)
+            for(uint32_t x=(uint32_t)(width*.2);x<(uint32_t)(width*.8);++x){const uint8_t *p=rgba+((size_t)y*width+x)*4;red+=p[0]>p[1]+35&&p[0]>p[2]+25;}
+        if(red<MAX((size_t)64,(size_t)((double)width*height*.0001)))captureSkin=NO;
+    }
     if(skinMoved)_skinAdvanced=YES;
     if(skinSample)_skinSample=skinSample;
     _cardReady=stableCard;

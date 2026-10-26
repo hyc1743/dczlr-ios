@@ -22,7 +22,9 @@ dc_status dc_camera_read_preset(const void *data, size_t length, uint32_t record
     return DC_OK;
 }
 
-static dc_status inverse_affine(const dc_matrix *source, dc_matrix *out) {
+dc_status dc_matrix_inverse_affine(const dc_matrix *source, dc_matrix *out) {
+    if(!source||!out)return DC_ARGUMENT;
+    for(unsigned j=0;j<16;++j)if(!isfinite(source->values[j]))return DC_RANGE;
     const float *m=source->values;
     if (m[3]!=0 || m[7]!=0 || m[11]!=0 || m[15]!=1) return DC_FORMAT;
     double a=m[0], b=m[1], c=m[2], d=m[4], e=m[5], f=m[6],
@@ -69,7 +71,7 @@ dc_status dc_camera_build(const dc_camera_orbit *orbit, const dc_camera_lens *le
     if (status==DC_OK) status=dc_matrix_multiply(&tz,&rotation,&translated);
     if (status==DC_OK) status=dc_matrix_multiply(&translated,&ty,&lifted);
     if (status==DC_OK) status=dc_matrix_multiply(&lifted,&orbit->base,&result.world);
-    if (status==DC_OK) status=inverse_affine(&result.world,&result.view);
+    if (status==DC_OK) status=dc_matrix_inverse_affine(&result.world,&result.view);
     if (status!=DC_OK) return status;
     float aspect=(float)((double)lens->viewport_width/lens->viewport_height);
     float ys=(float)(1.0/tan((double)lens->fov_y*.5));

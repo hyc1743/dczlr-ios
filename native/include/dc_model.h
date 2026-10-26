@@ -49,6 +49,8 @@ DC_API dc_status dc_model_load_vertices(const dc_model *model,uint32_t mesh,dc_m
 /* Hierarchical hidden flags only; material alpha/effects are separate draw
  * admission. Projection itself remains a low-level operation without culling. */
 DC_API dc_status dc_model_mesh_visible(const dc_model *model,uint32_t mesh,uint32_t *out);
+/* Runtime node visibility; descendants inherit the hidden flag. */
+DC_API dc_status dc_model_hide_node(dc_model *model,uint32_t node,uint32_t hidden);
 DC_API dc_status dc_model_project(const dc_model *model,uint32_t mesh,const dc_matrix *view_projection,
     const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity);
 /* Same world/local vertex-space selection with six-plane clipping and a

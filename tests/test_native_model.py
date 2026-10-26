@@ -72,6 +72,19 @@ class NativeModelTests(unittest.TestCase):
         visible=C.c_uint32(123);self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,0)
         self.assertEqual(self.lib.dc_model_mesh_visible(model,1,C.byref(visible)),4);self.assertEqual(visible.value,0)
 
+    def test_outfit_parent_visibility_is_inherited_and_reversible(self):
+        model,xx,xa=self.open();world=matrix();visible=C.c_uint32()
+        self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_hide_node(model,0,1),0)
+        self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,0)
+        self.assertEqual(self.lib.dc_model_tick(model,33,33,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,0)
+        self.assertEqual(self.lib.dc_model_hide_node(model,0,0),0)
+        self.assertEqual(self.lib.dc_model_tick(model,33,66,C.byref(world)),0)
+        self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,1)
+        self.assertEqual(self.lib.dc_model_hide_node(model,0,2),4)
+        self.assertEqual(self.lib.dc_model_hide_node(model,0xffffffff,1),4)
+
     def test_static_model_uses_baseline_and_world_without_inventing_animation(self):
         xx=diagnostic_fixture();m=C.c_void_p()
         self.assertEqual(self.lib.dc_model_open_static(xx,len(xx),C.byref(m)),0)

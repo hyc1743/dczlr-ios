@@ -7,7 +7,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
-from native_core import library,CameraOrbit,CameraLens,CameraMatrices
+from native_core import library,CameraOrbit,CameraLens,CameraMatrices,Matrix
 from scene_cases import matrix
 from camera_cases import cases
 
@@ -15,6 +15,18 @@ from camera_cases import cases
 class NativeCameraTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.lib=library()
+
+    def test_bind_pose_compensation_attaches_to_animated_neck_once(self):
+        bind=matrix(.3,.9,(0,6.2,-.2));animated=matrix(-.2,1.1,(22,3.7,-.5))
+        inverse=Matrix();world=Matrix();attached=Matrix()
+        self.assertEqual(self.lib.dc_matrix_inverse_affine(C.byref(bind),C.byref(inverse)),0)
+        self.assertEqual(self.lib.dc_matrix_multiply(C.byref(inverse),C.byref(animated),C.byref(world)),0)
+        self.assertEqual(self.lib.dc_matrix_multiply(C.byref(bind),C.byref(world),C.byref(attached)),0)
+        for a,b in zip(attached.values,animated.values):self.assertAlmostEqual(a,b,places=5)
+        before=bytes(inverse);singular=matrix();singular.values[0]=0
+        self.assertEqual(self.lib.dc_matrix_inverse_affine(C.byref(singular),C.byref(inverse)),4)
+        self.assertEqual(bytes(inverse),before)
+        self.assertEqual(self.lib.dc_matrix_inverse_affine(None,C.byref(inverse)),1)
 
     def test_original_orbit_and_projection_reference(self):
         source=list(cases())
