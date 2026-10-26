@@ -454,6 +454,13 @@ static void freeMorphCaches(dc_game_model *slot) {
         orbit=(dc_camera_orbit){.base=gameIdentity(),.stored_distance=-1.5f};
     _cameraBase=orbit.base;
     _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
+    // The first playable room uses a close follow camera after the title
+    // transition. The archive preset is the wide room survey camera; feeding
+    // that distance directly leaves the player outside the room on iOS.
+    if (_mapSelector == 0 && fabsf(_cameraDistance) > 24.0f) {
+        _cameraDistance = 12.0f;
+        _cameraHeight = 0.0f;
+    }
     _cameraAutoSelected=NO;
     _actor.world=_actorWorld;
     _face.world=_actorWorld;
