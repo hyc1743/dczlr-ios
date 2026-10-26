@@ -277,9 +277,9 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     if(_scene==2)next.controls[DC_TOUCH_BACK]=(dc_touch_rect){0};
     _touch.layout=next;_controls.frame=self.bounds;_pcInput.frame=self.bounds;
     _touchMode.frame=CGRectMake(insets.left+8,insets.top+6,76,44);
-    /* Keep the key panel trigger clear of the title/game save button at
-     * x=82..146; its own touch target must never steal a game action. */
-    _keyButton.frame=CGRectMake(insets.left+174,insets.top+6,72,44);
+    /* Keep the key panel trigger in the unused top-center strip; the game
+     * save/menu buttons occupy the entire top-left action cluster. */
+    _keyButton.frame=CGRectMake((self.bounds.size.width-72)*.5,insets.top+6,72,44);
     CGFloat mouseW=62,mouseH=36,mouseX=CGRectGetMaxX(self.bounds)-insets.right-mouseW;
     _mouseLeft.frame=CGRectMake(mouseX,insets.top+8,mouseW,mouseH);
     _mouseRight.frame=CGRectMake(mouseX-mouseW-6,insets.top+8,mouseW,mouseH);
