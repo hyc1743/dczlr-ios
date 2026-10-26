@@ -6,6 +6,7 @@
 #include "dc_gameplay.h"
 #include "dc_menu.h"
 #include "dc_model.h"
+#include "dc_story.h"
 #include "dc_xl.h"
 #include <math.h>
 #include <float.h>
@@ -82,9 +83,12 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_game_player _player;
     BOOL _playerSaveDirty;
     dc_game_interaction_state _interactionState;
+    dc_game_menu_activate_state _activateState;
     BOOL _interactionActive;uint32_t _interactionStartTick;
     uint32_t _interactionCount;BOOL _interactionCompleted;
-    BOOL _mapAdvanced;uint32_t _mapSelector;
+    uint32_t _storyChapter,_storyStage,_storyPhase,_mapSelector;
+    uint32_t _stageOutcomeA,_stageOutcomeB,_chapterEndAction;
+    BOOL _editMode;
     BOOL _gameFinished;
     NSString *_pendingVoiceName;
     BOOL _naturalGameplayRoute;
@@ -101,10 +105,36 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (uint32_t)interactionCount { return _interactionCount; }
 - (BOOL)interactionCompleted { return _interactionCompleted; }
 - (BOOL)gameFinished { return _gameFinished; }
+- (uint32_t)chapter { return _storyChapter; }
+- (uint32_t)chapterEndAction { return _chapterEndAction; }
+- (uint32_t)stageOutcomeA { return _stageOutcomeA; }
+- (uint32_t)stageOutcomeB { return _stageOutcomeB; }
+- (uint32_t)storyStage { return _storyStage; }
 - (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
 - (BOOL)controllerMovementAdvanced { return _controllerMovementAdvanced; }
 - (BOOL)controllerCameraAdvanced { return _controllerCameraAdvanced; }
 - (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
+- (void)consumeChapterEndAction { _chapterEndAction=0; }
+- (void)applyOutfitVariant:(uint32_t)variant {
+    /* Original 0x5181f0-style outfit selection through hidden alternate
+     * outfit meshes. Variant 1 shows the skirt set instead of the dress,
+     * variant 2 removes the bra, variant 3 removes the panties; any other
+     * variant restores the default visibility. */
+    NSArray<NSString *> *dress=@[@"a_On_wanpiEHC",@"a_On_wanpiEHM",@"a_On_wanpiHHM",
+        @"a_On_wanpiEHU",@"a_On_wanpiHHU",@"a_On_wanpiHHC"];
+    NSArray<NSString *> *skirt=@[@"a_On_skartHF",@"a_On_skartHB",@"a_On_skartHA"];
+    NSArray<NSString *> *bra=@[@"a_On_buraH"];
+    NSArray<NSString *> *panty=@[@"a_On_pantuH",@"a_On_pantuH3",@"a_On_pantuH2"];
+    for(NSString *name in dress){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?1:0);}
+    for(NSString *name in skirt){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?0:1);}
+    for(NSString *name in bra){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==2?1:0);}
+    for(NSString *name in panty){uint32_t node=[self findNode:&_actor name:name];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==3?1:0);}
+    _storyPhase=0;_interactionCompleted=NO;_chapterEndAction=0;
+}
+- (void)setEditMode:(BOOL)editMode {
+    _editMode=editMode;
+    if(editMode)_storyPhase=0;
+}
 
 - (NSString *)decodedName:(const uint8_t *)raw length:(size_t)length {
     if (!raw || !length || length > 1024) return nil;
@@ -327,14 +357,23 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSData *data=[NSData dataWithContentsOfFile:path];if(data.length<DC_GAME_PLAYER_SAVE_BYTES)return;
     dc_game_player loaded;if(dc_game_player_load(data.bytes,data.length,&loaded)!=DC_OK)return;
     _player.x=fmaxf(_player.min_x,fminf(_player.max_x,loaded.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,loaded.z));
-    if(loaded.speed>0)_player.speed=loaded.speed;_player.interaction_count=loaded.interaction_count;_player.map_selector=loaded.map_selector;_interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;_interactionState=(dc_game_interaction_state){.interaction_count=loaded.interaction_count,.completed=loaded.interaction_count>0};_actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
+    if(loaded.speed>0)_player.speed=loaded.speed;
+    _player.interaction_count=loaded.interaction_count;_player.map_selector=_mapSelector;
+    _interactionCount=loaded.interaction_count;_interactionCompleted=loaded.interaction_count>0;
+    _interactionState=(dc_game_interaction_state){.interaction_count=loaded.interaction_count,.completed=loaded.interaction_count>0};
+    _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
 }
 - (void)savePlayerState {
     if(!_playerSaveDirty)return;
     NSMutableData *data=[NSMutableData dataWithLength:DC_GAME_PLAYER_SAVE_BYTES];
     if(dc_game_player_save(&_player,data.mutableBytes,data.length)!=DC_OK)return;
+    NSString *path=[_directory stringByAppendingPathComponent:@"save/player.state"];
+    NSData *existing=[NSData dataWithContentsOfFile:path];
+    NSMutableData *combined=[NSMutableData dataWithData:data];
+    if(existing.length>DC_GAME_PLAYER_SAVE_BYTES)
+        [combined appendBytes:(const uint8_t *)existing.bytes+DC_GAME_PLAYER_SAVE_BYTES length:existing.length-DC_GAME_PLAYER_SAVE_BYTES];
     NSString *directory=[_directory stringByAppendingPathComponent:@"save"];[[NSFileManager defaultManager] createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:nil error:nil];
-    [data writeToFile:[directory stringByAppendingPathComponent:@"player.state"] options:NSDataWritingAtomic error:nil];_playerSaveDirty=NO;
+    [combined writeToFile:path options:NSDataWritingAtomic error:nil];_playerSaveDirty=NO;
 }
 - (BOOL)surfaceYAtX:(float)x z:(float)z nearY:(float)nearY result:(float *)result {
     BOOL found=NO;float best=0,bestDistance=FLT_MAX;
@@ -392,53 +431,13 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(found){_cameraBase=best.base;_cameraDistance=best.stored_distance;_cameraHeight=best.height;_cameraPitch=best.pitch;_cameraYaw=best.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];[_cameraFallbacks setObject:[NSValue valueWithBytes:&best objCType:@encode(dc_camera_orbit)] forKey:@(_mapSelector)];}
     _cameraAutoSelected=YES;return found?nil:@"No camera preset projects the actor";
 }
-- (NSString *)advanceToNextMap {
-    if(_mapAdvanced)return nil;
-    uint32_t nextSelector=UINT32_MAX,finished=0;
-    if(dc_game_next_map_selector(_mapSelector,&nextSelector,&finished)!=DC_OK)return @"Current map is outside the playable sequence";
-    if(finished){_mapAdvanced=YES;_gameFinished=YES;_interactionCompleted=YES;_playerSaveDirty=YES;return nil;}
-    NSError *reason=nil;DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
-    if(!archive)return reason.localizedDescription ?: @"Map archive could not be opened";
-    NSString *nextName=[NSString stringWithFormat:@"mm00_%02u.xx",nextSelector];
-    NSData *nextData=[self entry:nextName archive:archive error:nil];
-    if(!nextData)return @"Next map resource is unavailable";
-    NSString *nextAnimationName=[NSString stringWithFormat:@"mn00_%02u.xa",nextSelector];
-    NSData *nextAnimation=[self entry:nextAnimationName archive:archive error:nil];
-    NSString *nextMapLightName=[NSString stringWithFormat:@"mp00_%02u.xl",nextSelector];
-    NSData *nextMapLightData=[self entry:nextMapLightName archive:archive error:nil];
-    dc_xl_info nextMapLightInfo={0};dc_xl_light nextMapLight={0};
-    if(nextMapLightData && dc_xl_probe(nextMapLightData.bytes,nextMapLightData.length,&nextMapLightInfo)==DC_OK &&
-       nextMapLightInfo.lights && dc_xl_light_at(nextMapLightData.bytes,nextMapLightData.length,0,&nextMapLight)!=DC_OK)
-        nextMapLightData=nil;
-    DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
-    NSData *nextLightData=lightArchive ? [self lightEntryForSelector:nextSelector archive:lightArchive] : nil;
-    dc_xl_info nextLightInfo={0};dc_xl_light nextLight={0};
-    if(nextLightData && (dc_xl_probe(nextLightData.bytes,nextLightData.length,&nextLightInfo)!=DC_OK ||
-       !nextLightInfo.lights || dc_xl_light_at(nextLightData.bytes,nextLightData.length,0,&nextLight)!=DC_OK))
-        nextLightData=nil;
-    dc_game_model nextMap={0};nextMap.xxData=nextData;nextMap.xaData=nextAnimation;nextMap.world=gameIdentity();
-    NSString *error=nil;if(![self openModel:&nextMap staticOnly:(nextAnimation==nil) error:&error]){[self detachModel:&nextMap];return error ?: @"Next map could not be loaded";}
-    [self detachModel:&_map];_map=nextMap;_lightData=nextLightData;_lightInfo=nextLightInfo;_mapLight=nextLight;
-    _mapVariantLightData=nextMapLightData;_mapVariantLightInfo=nextMapLightInfo;_mapVariantLight=nextMapLight;
-    _map.world=gameIdentity();_mapSelector=nextSelector;
-    const char *anchors[]={(nextSelector==1?"m_Nn_yuka_p_a":nextSelector==3?"m_Nn_yuka_r_a":nextSelector==4?"m_Nn_yuka_5_a":nextSelector==5?"m_Nn_yuka_5_a":nextSelector==6?"m_Nn_yuka_2b_a":"m_Nn_yuka_5_a"),"m_Nn_yuka_3_a","m_Nn_yuka_2f_a"};
-    for(unsigned candidate=0;candidate<3;++candidate)for(uint32_t i=1;i<_map.info.nodes;++i){dc_xx_node node;if(dc_xx_node_at(_map.xx,i,&node)!=DC_OK)continue;const uint8_t *raw=(const uint8_t *)_map.xxData.bytes+node.name.offset;size_t n=0;while(n<node.name.length&&raw[n]!=255)++n;char decoded[40];if(n>=sizeof(decoded))continue;for(size_t j=0;j<n;++j)decoded[j]=(char)(raw[j]^255);decoded[n]=0;if(!strcmp(decoded,anchors[candidate])){dc_xx_node_matrix(_map.xx,i,&_actorWorld);_actor.world=_actorWorld;candidate=3;break;}}
-    [self computeWalkBounds];
-    const char *cameraName=nextSelector==1?"home_2f.cam":nextSelector==3?"home_3f.cam":nextSelector==4?"home_4f.cam":nextSelector==5?"home_5p.cam":"home_5p.cam";
-    NSData *cameraData=[self entry:[NSString stringWithUTF8String:cameraName] archive:[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_03.pp"]] error:nil] error:nil];
-    if(cameraData){dc_camera_orbit nextCamera;if(dc_camera_read_preset(cameraData.bytes,cameraData.length,0,&nextCamera)==DC_OK){_cameraBase=nextCamera.base;_cameraDistance=nextCamera.stored_distance;_cameraHeight=nextCamera.height;_cameraPitch=nextCamera.pitch;_cameraYaw=nextCamera.yaw;_cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];}}
-    _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;
-    _player.x=fmaxf(_player.min_x,fminf(_player.max_x,_player.x));_player.z=fmaxf(_player.min_z,fminf(_player.max_z,_player.z));_player.map_selector=nextSelector;_playerSaveDirty=YES;
-    _actor.world.values[12]=_player.x;_actor.world.values[14]=_player.z;
-    _actorOriginX=_actorWorld.values[12];_actorOriginY=_actorWorld.values[13];_actorOriginZ=_actorWorld.values[14];
-    [self computeActorFloorOffset];
-    _face.world=_actor.world;
-    _mapAdvanced=NO;_interactionCompleted=NO;_interactionActive=NO;_interactionState.active=0;_interactionState.completed=0;
-    _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};_previousGameMenuTouch=NO;
-    _cameraAutoSelected=NO;return nil;
-}
-- (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error {
+- (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
+    _storyChapter=chapter;_storyPhase=0;
+    dc_story_chapter profile;
+    if(dc_story_chapter_profile(chapter,&profile)!=DC_OK) { if(error)*error=@"Story chapter profile rejected";return nil; }
+    if(profile.map<0||profile.stage<0) { if(error)*error=@"Story chapter has no map selector";return nil; }
+    _mapSelector=(uint32_t)profile.map;_storyStage=(uint32_t)profile.stage;
 #if DEBUG
     _captureGameplayFrame=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_GAMEPLAY"] isEqualToString:@"1"];
 #endif
@@ -452,7 +451,7 @@ static void freeMorphCaches(dc_game_model *slot) {
      DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:nil];
      DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
      if(!mapArchive || !actorArchive || !faceArchive) { if(error)*error=reason.localizedDescription;return nil; }
-    _map.xxData=[self entry:@"mm00_00.xx" archive:mapArchive error:error];
+    _map.xxData=[self entry:[NSString stringWithFormat:@"mm00_%02u.xx",_mapSelector] archive:mapArchive error:error];
     _actor.xxData=[self entry:@"am00_01.xx" archive:actorArchive error:error];
     _actor.xaData=[self entry:@"an00_02.xa" archive:actorArchive error:error];
     NSData *actorPlacement=[self entry:@"am00_01.plst" archive:actorArchive error:nil];
@@ -500,8 +499,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         [self findNode:&_actor name:@"a_Kp_kubi2"]==UINT32_MAX)) {
          if(error)*error=@"Eyes/neck auxiliary binding failed";return nil;
      }
-    [self loadMapVariantLightForSelector:0 archive:mapArchive error:nil];
-    if(lightArchive) [self loadLightForSelector:0 archive:lightArchive error:nil];
+    [self loadMapVariantLightForSelector:_mapSelector archive:mapArchive error:nil];
+    if(lightArchive) [self loadLightForSelector:_mapSelector archive:lightArchive error:nil];
     for(uint32_t mesh=0;mesh<_actor.info.submeshes;++mesh) {
         uint32_t space=DC_MODEL_SPACE_LOCAL;
         if(dc_model_vertex_space(_actor.model,mesh,&space)!=DC_OK) { if(error)*error=@"Actor skin profile query failed";return nil; }
@@ -533,8 +532,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     [self computeActorFloorOffset];
     _player.x=_actor.world.values[12];_player.z=_actor.world.values[14];
     _player.min_x=_walkMinX;_player.max_x=_walkMaxX;_player.min_z=_walkMinZ;_player.max_z=_walkMaxZ;_player.speed=8;
+    _player.map_selector=_mapSelector;
     [self loadPlayerState];
-    uint32_t savedMap=_player.map_selector;while(_mapSelector<savedMap){NSString *advanceError=[self advanceToNextMap];if(advanceError)break;}
     _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
@@ -757,27 +756,76 @@ static void freeMorphCaches(dc_game_model *slot) {
                          (int32_t)lrintf(screenY-menuOffsetY),menuScale,menuInput,
                          &menuResult)!=DC_OK)
             return @"Game menu input update failed";
-        menuActivated=menuResult==1 && _gameMenu.selected==1;
+        menuActivated=menuResult==1 && _gameMenu.selected>=1 && _gameMenu.selected<=5;
     }
+    /* Original shared menu activation dispatch (0x00532240, chapter type 4).
+       Row 2 starts a touch interaction, row 4 finishes the scene, rows 1/3/5
+       trigger alternate events; a row-1 activation only keeps the scene when
+       the interaction counter exceeds one. */
+    BOOL pressEdge=(touching&&!_previousGameMenuTouch)||(pcInput.active&&pcInput.mouse[0]==3);
+    BOOL releaseEdge=(!touching&&_previousGameMenuTouch)||(pcInput.active&&pcInput.mouse[0]==2);
     _previousGameMenuTouch=touching;
-    /* A completed interaction needs an explicit follow-up activation before
-       loading the next map on the normal player route.  The audit route keeps
-       its bounded automatic progression below. */
-    BOOL requestNextMap=(menuActivated||confirm) && _interactionCompleted && !_mapAdvanced;
-    float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
-    BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    if (menuActivated && nearInteraction && !_interactionCompleted && _mapSelector==0)
-        _pendingVoiceName=@"ast001_01.wav";
-    dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated||confirm),.near_target=nearInteraction};
-    dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
-    if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
-    if(interactionResult.begin) {
-        if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
-    } else if(interactionResult.restore) {
-        if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction animation restore failed";
+    dc_game_menu_activate_input activateInput={
+        .scene_type=4,
+        .selected_row=menuActivated?(uint32_t)_gameMenu.selected:UINT32_MAX,
+        .interaction_count=_interactionCount,
+        .press_edge=pressEdge,
+        .release_edge=releaseEdge
+    };
+    dc_game_menu_activate_result activateResult;
+    if(dc_game_menu_activate(&activateInput,&_activateState,&activateResult)!=DC_OK)return @"Game menu activation update failed";
+    if(_editMode) {
+        if(activateResult.handled) {
+            uint32_t row=activateInput.selected_row;
+            if(row>=1&&row<=3)[self applyOutfitVariant:row];
+            else if(row==4)_chapterEndAction=6;
+            else if(row==5)[self applyOutfitVariant:0];
+        }
+    } else if(activateResult.handled && _storyPhase==0) {
+        switch(activateResult.kind) {
+        case DC_GAME_MENU_EVENT_TOUCH: {
+            if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
+            _interactionCount++;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;
+            _stageOutcomeB=1;
+            _pendingVoiceName=@"ast001_01.wav";
+            break;
+        }
+        case DC_GAME_MENU_EVENT_FINISH:
+            _interactionCompleted=YES;_storyPhase=1;
+            if(_interactionCount>0)_stageOutcomeA=1;
+            _playerSaveDirty=YES;
+            break;
+        case DC_GAME_MENU_EVENT_OTHER:
+            _interactionCount++;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;
+            break;
+        default: break;
+        }
+    } else if(activateResult.handled && _storyPhase==1) {
+        /* Chapter-end choice follows the original chapter-end handler action
+           codes: row 1 advance, row 2 save menu, row 3 edit, row 4 fade,
+           row 5 returns to the scene. */
+        uint32_t row=activateResult.kind==DC_GAME_MENU_EVENT_MISS?UINT32_MAX:activateInput.selected_row;
+        if(row==1)_chapterEndAction=2;
+        else if(row==2)_chapterEndAction=4;
+        else if(row==3)_chapterEndAction=3;
+        else if(row==4)_chapterEndAction=5;
+        else if(row==5)_storyPhase=0;
     }
-    _interactionState=interactionNext;_interactionActive=_interactionState.active;_interactionStartTick=_interactionState.start_tick;_interactionCount=_interactionState.interaction_count;
-    if(interactionResult.completed){_interactionCompleted=YES;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;}
+    BOOL nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
+    BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
+    if(!_editMode) {
+        dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated||confirm),.near_target=nearInteraction};
+        dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
+        if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
+        if(interactionResult.begin) {
+            if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
+        } else if(interactionResult.restore) {
+            if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction animation restore failed";
+        }
+        _interactionState=interactionNext;_interactionActive=_interactionState.active;_interactionStartTick=_interactionState.start_tick;_interactionCount=_interactionState.interaction_count;
+        if(interactionResult.completed){_interactionCompleted=YES;_storyPhase=1;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;}
+    }
+    if(_storyChapter==24 && _interactionCompleted)_gameFinished=YES;
     if(touching) {
         if(_inputInitialized) {
             float dx=fmaxf(-.15f,fminf(.15f,x-_lastInputX));
@@ -805,7 +853,6 @@ static void freeMorphCaches(dc_game_model *slot) {
             if([self movePlayerTo:&next] && changed)_controllerMovementAdvanced=YES;
         }
     } else if(!touching) { [self savePlayerState]; }
-    if((requestNextMap || (!_naturalGameplayRoute&&_interactionCompleted&&!_mapAdvanced))){NSString *mapError=[self advanceToNextMap];if(mapError)return mapError;}
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     NSString *cameraSelectionError=[self autoSelectCameraAtTick:tick];if(cameraSelectionError)return cameraSelectionError;
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};

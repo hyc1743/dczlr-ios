@@ -9,6 +9,7 @@ struct VulkanSurface: UIViewRepresentable {
     func makeUIView(context: Context) -> DCVulkanSpriteView {
         let view = DCVulkanSpriteView(frame: .zero)
         let realGameplay = ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1"
+            || ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_STORY"] == "1"
         view.startupDataDirectory = (model.resourcesReady || realGameplay) ? model.gameDataDirectory.path : nil
         context.coordinator.attach(view)
         return view
@@ -16,6 +17,7 @@ struct VulkanSurface: UIViewRepresentable {
 
     func updateUIView(_ view: DCVulkanSpriteView, context: Context) {
         let realGameplay = ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1"
+            || ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_STORY"] == "1"
         view.startupDataDirectory = (model.resourcesReady || realGameplay) ? model.gameDataDirectory.path : nil
         context.coordinator.setActive(model.active)
     }
@@ -105,6 +107,45 @@ final class SpritePresenter: NSObject {
             pointerY = Float(1 - 2 * py / view.bounds.height)
             touching = elapsed >= 6 && elapsed < 6.4
         }
+        if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_STORY"] == "1" {
+            if lastReportedScene == .title, let titleTime = testTitleTime {
+                // Same New Game activation as the generated-resource exercise.
+                let elapsed = CACurrentMediaTime() - titleTime
+                let scale = min(view.bounds.width / 1024, view.bounds.height / 768)
+                let px = (view.bounds.width - 1024 * scale) / 2 + 830 * scale
+                let py = (view.bounds.height - 768 * scale) / 2 + 424 * scale
+                pointerX = Float(2 * px / view.bounds.width - 1)
+                pointerY = Float(1 - 2 * py / view.bounds.height)
+                touching = elapsed >= 6 && elapsed < 6.4
+            } else if lastReportedScene == .intro {
+                // Advance every numbered script chapter with a short tap.
+                let elapsed = CACurrentMediaTime() - (testIntroTime ?? CACurrentMediaTime())
+                touching = elapsed.truncatingRemainder(dividingBy: 1.0) < 0.18
+            } else if lastReportedScene == .gameplay {
+                if testGameplayTime == nil { testGameplayTime = CACurrentMediaTime() }
+                let elapsed = CACurrentMediaTime() - (testGameplayTime ?? CACurrentMediaTime())
+                let cycle = elapsed.truncatingRemainder(dividingBy: 6.0)
+                let scale = min(view.bounds.width / 1024, view.bounds.height / 768)
+                let px: CGFloat
+                let py: CGFloat
+                if cycle < 2 {
+                    // Touch interaction row 2 at (968, 488).
+                    px = (view.bounds.width - 1024 * scale) / 2 + 968 * scale
+                    py = (view.bounds.height - 768 * scale) / 2 + 488 * scale
+                } else if cycle < 4 {
+                    // Finish row 4 at (968, 712).
+                    px = (view.bounds.width - 1024 * scale) / 2 + 968 * scale
+                    py = (view.bounds.height - 768 * scale) / 2 + 712 * scale
+                } else {
+                    // Chapter-end advance row 1 at (968, 376).
+                    px = (view.bounds.width - 1024 * scale) / 2 + 968 * scale
+                    py = (view.bounds.height - 768 * scale) / 2 + 376 * scale
+                }
+                pointerX = Float(2 * px / view.bounds.width - 1)
+                pointerY = Float(1 - 2 * py / view.bounds.height)
+                touching = cycle.truncatingRemainder(dividingBy: 1.0) < 0.22
+            }
+        }
         if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_NEW_GAME"] == "1",
            let introTime = testIntroTime, lastReportedScene == .intro, introChapter == 0 {
             let elapsed = CACurrentMediaTime() - introTime
@@ -120,6 +161,7 @@ final class SpritePresenter: NSObject {
         }
         if ProcessInfo.processInfo.environment["PORTLAB_EXERCISE_REAL_GAMEPLAY"] == "1",
            lastReportedScene == .gameplay {
+            if !wasGameplay { testGameplayTime = nil }
             if testGameplayTime == nil { testGameplayTime = CACurrentMediaTime() }
             let elapsed = CACurrentMediaTime() - (testGameplayTime ?? CACurrentMediaTime())
             let px = view.bounds.midX
@@ -139,6 +181,7 @@ final class SpritePresenter: NSObject {
             if !reportedControllerMovement { pad.lx = 12000 }
             if !reportedControllerCamera { pad.rx = 10000 }
         }
+        wasGameplay = lastReportedScene == .gameplay
         view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
             touching: touching, controller: pad, pcInput: pcInput) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
                 guard let self = self else { return }

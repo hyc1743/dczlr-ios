@@ -85,3 +85,31 @@ dc_status dc_game_player_load(const void *bytes,size_t length,dc_game_player *ou
     *out=next;
     return DC_OK;
 }
+
+dc_status dc_game_menu_activate(const dc_game_menu_activate_input *input,
+        dc_game_menu_activate_state *state,dc_game_menu_activate_result *result){
+    /* Numeric row dispatch from the original shared menu activation helper
+     * 0x00532240, chapter type 4 branch (the 0x00512cc0 gameplay scene). */
+    if(!input||!state||!result)return DC_ARGUMENT;
+    if(overlap(input,sizeof(*input),result,sizeof(*result))||
+       overlap(state,sizeof(*state),result,sizeof(*result)))return DC_ARGUMENT;
+    if(input->scene_type!=4||(input->selected_row!=UINT32_MAX&&input->selected_row>5)||
+       input->interaction_count==UINT32_MAX)return DC_RANGE;
+    dc_game_menu_activate_state next=*state;
+    dc_game_menu_activate_result event={0};
+    /* Release edge flips the toggle flag when it is armed. */
+    if(next.toggle_active&&input->release_edge)next.toggle_active=0;
+    if(input->press_edge) {
+        if((int32_t)input->selected_row==-1) {
+            event.handled=1;event.stay=1;event.kind=DC_GAME_MENU_EVENT_MISS;
+        } else {
+            uint32_t row=(uint32_t)input->selected_row;
+            if(row==4)event.kind=DC_GAME_MENU_EVENT_FINISH;
+            else if(row==2)event.kind=DC_GAME_MENU_EVENT_TOUCH;
+            else event.kind=DC_GAME_MENU_EVENT_OTHER;
+            event.stay=(row==1&&input->interaction_count>1)?1:2;
+            event.handled=1;
+        }
+    }
+    *state=next;*result=event;return DC_OK;
+}

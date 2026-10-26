@@ -185,6 +185,49 @@ class GameInteractionResult(C.Structure):
     _fields_=[("begin",C.c_uint32),("restore",C.c_uint32),("completed",C.c_uint32)]
 
 
+class GameMenuActivateInput(C.Structure):
+    _fields_=[("scene_type",C.c_uint32),("selected_row",C.c_uint32),("interaction_count",C.c_uint32),("press_edge",C.c_uint32),("release_edge",C.c_uint32)]
+
+
+class GameMenuActivateState(C.Structure):
+    _fields_=[("toggle_active",C.c_uint32)]
+
+
+class GameMenuActivateResult(C.Structure):
+    _fields_=[("handled",C.c_uint32),("stay",C.c_uint32),("kind",C.c_uint32)]
+
+
+class StoryChapter(C.Structure):
+    _fields_=[("script",C.c_int32),("last_frame",C.c_int32),("map",C.c_int32),("stage",C.c_int32),("scene",C.c_uint32),("scene_type",C.c_uint32)]
+
+
+class StoryStage(C.Structure):
+    _fields_=[("flag_a",C.c_uint32),("flag_b",C.c_uint32),("progress",C.c_uint32)]
+
+
+class StoryState(C.Structure):
+    _fields_=[("chapter",C.c_uint32),("map",C.c_uint32),("stage",C.c_uint32),("stages",StoryStage*3),("unlocked",C.c_uint32)]
+
+
+class StoryOutcomes(C.Structure):
+    _fields_=[("a",C.c_int32*3),("b",C.c_int32*3)]
+
+
+class StoryCommand(C.Structure):
+    _fields_=[("kind",C.c_uint32),("value",C.c_uint32)]
+
+
+class StoryPlan(C.Structure):
+    _fields_=[("next",StoryState),("commands",StoryCommand*8),("count",C.c_uint32),("departed",C.c_uint32)]
+
+    def record(self):
+        return {'state':[self.next.chapter,self.next.map,self.next.stage,
+                         [[self.next.stages[i].flag_a,self.next.stages[i].flag_b,self.next.stages[i].progress] for i in range(3)],
+                         self.next.unlocked],
+                'commands':[[c.kind,c.value] for c in self.commands[:self.count]],
+                'departed':self.departed}
+
+
 class MeshVertex(C.Structure):
     _fields_ = [("position", C.c_float*3), ("normal", C.c_float*3), ("uv", C.c_float*2)]
 
@@ -394,11 +437,11 @@ def library():
     command = compiler_command()
     sources = [ROOT / "native/resource/dc_pp.c", ROOT / "native/resource/dc_image.c", ROOT / "native/resource/dc_xa.c", ROOT / "native/resource/dc_xx.c", ROOT / "native/resource/dc_script.c", ROOT / "native/resource/dc_xl.c", ROOT / "native/resource/dc_eyeneck.c",
                ROOT / "native/render/dc_mesh.c", ROOT / "native/render/dc_mesh_clip.c", ROOT / "native/render/dc_sprite.c", ROOT / "native/render/dc_sprite_vertices.c",
-               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c", ROOT / "native/game/dc_camera.c", ROOT / "native/game/dc_gameplay.c", ROOT / "native/game/dc_gamepad.c"]
+               ROOT / "native/game/dc_startup.c", ROOT / "native/game/dc_animation.c", ROOT / "native/game/dc_material.c", ROOT / "native/game/dc_pose.c", ROOT / "native/game/dc_scene.c", ROOT / "native/game/dc_model.c", ROOT / "native/game/dc_menu.c", ROOT / "native/game/dc_save.c", ROOT / "native/game/dc_text.c", ROOT / "native/game/dc_skin.c", ROOT / "native/game/dc_camera.c", ROOT / "native/game/dc_gameplay.c", ROOT / "native/game/dc_gamepad.c", ROOT / "native/game/dc_story.c"]
     sources.append(ROOT / "native/game/dc_pc_input.c")
     inputs = sources + [ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h", ROOT / "native/include/dc_story.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     for path in inputs:
         digest.update(path.read_bytes())
@@ -574,6 +617,20 @@ def library():
     lib.dc_game_menu_profile.restype=C.c_int
     lib.dc_game_interaction_step.argtypes=[C.POINTER(GameInteractionState),C.POINTER(GameInteractionInput),C.POINTER(GameInteractionState),C.POINTER(GameInteractionResult)]
     lib.dc_game_interaction_step.restype=C.c_int
+    lib.dc_game_menu_activate.argtypes=[C.POINTER(GameMenuActivateInput),C.POINTER(GameMenuActivateState),C.POINTER(GameMenuActivateResult)]
+    lib.dc_game_menu_activate.restype=C.c_int
+    lib.dc_story_chapter_profile.argtypes=[C.c_uint32,C.POINTER(StoryChapter)]
+    lib.dc_story_chapter_profile.restype=C.c_int
+    lib.dc_story_advance.argtypes=[C.POINTER(StoryState),C.POINTER(StoryOutcomes),C.POINTER(StoryPlan)]
+    lib.dc_story_advance.restype=C.c_int
+    lib.dc_story_menu_action.argtypes=[C.POINTER(StoryState),C.c_uint32,C.POINTER(StoryPlan)]
+    lib.dc_story_menu_action.restype=C.c_int
+    lib.dc_story_script_finish.argtypes=[C.POINTER(StoryState),C.POINTER(StoryPlan)]
+    lib.dc_story_script_finish.restype=C.c_int
+    lib.dc_story_save.argtypes=[C.POINTER(StoryState),C.c_void_p,C.c_size_t]
+    lib.dc_story_save.restype=C.c_int
+    lib.dc_story_load.argtypes=[C.c_void_p,C.c_size_t,C.POINTER(StoryState)]
+    lib.dc_story_load.restype=C.c_int
     lib.dc_xa_pose_track_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XAPoseTrack)]
     lib.dc_xa_pose_track_at.restype = C.c_int
     lib.dc_xa_load_pose_keys.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(PoseKey), C.c_size_t]

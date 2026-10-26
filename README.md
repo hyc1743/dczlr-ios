@@ -24,15 +24,18 @@ local archives, follows the original two-card action planner, and presents title
 layers after its normal waits. CPU scene state survives renderer resize and
 background GPU recreation. Title music and selection sound use archive-backed
 AVAudioPlayer; pointer hover and selection use the reconstructed menu helper.
-Existing save prefixes supply title unlock flags. The native chapter-3 path now
-loads the real map chain, actor, PLST neck attachment, face morphs, movement,
-collision, interaction timing, save/load and title resume routing. The first
-observed gameplay menu route now uses the original six-row hit table and chains
-the first two verified map-0 voice records. Normal gameplay advances maps only
-after explicit player activation. The local `tools/native_playable_session.py`
-runner exercises that route with real resources, model/audio probes and file
-saves across all eight maps. Apple rendering execution and the remaining
-event/script/audio routing remain to be verified.
+Existing save prefixes supply title unlock flags. The original 26-chapter story
+dispatcher is integrated: numbered script chapters alternate with gameplay,
+watch, night and ending scene chapters through the recovered static tables.
+The chapter-end menu follows the original action codes (advance, edit,
+save menu, fade), gameplay rows follow the original shared menu activation
+dispatch, and the story state persists in the host save record. The first
+observed gameplay menu route uses the original six-row hit table and chains
+the first two verified map-0 voice records. The local
+`tools/native_playable_session.py` runner exercises that route with real
+resources, model/audio probes and file saves across all eight maps. Apple
+rendering execution and the remaining event/script/audio routing remain to
+be verified.
 
 Public CI uses entirely generated fixtures. The inspected app stage, source
 `f199ad8`, passed 146 portable tests, 107 ARM64 native tests, compilation of 16
@@ -54,6 +57,7 @@ unfinished; these numeric/reader results do not make gameplay available.
 
 Implementation and verification details:
 
+- [Story dispatch and chapter-end menu](docs/story-dispatch.md)
 - [Keyboard/mouse controls](docs/windows-controls.md), [original Windows input evidence](docs/windows-input-evidence.md), [gamepad layout](docs/gamepad.md)
 - [Current runtime completeness audit](docs/runtime-completeness.md)
 - [Model runtime, startup connection and triangle geometry](docs/model-runtime.md)

@@ -16,7 +16,8 @@ import uuid
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
           "title": "title-screen background and menu layers", "intro": "first new-game script record and text adapter"}
 GAMEPLAY_SCENES = {"gameplay": "chapter 3 map and actor scene", "gameComplete": "completed chapter 3 map sequence"}
-SCENE_CHOICES = tuple(SCENES) + tuple(GAMEPLAY_SCENES)
+STORY_SCENES = {"story": "script chapters 0-2, gameplay scene, interaction and chapter 4 script"}
+SCENE_CHOICES = tuple(SCENES) + tuple(GAMEPLAY_SCENES) + tuple(STORY_SCENES)
 
 
 def has_session(log,session):
@@ -94,6 +95,39 @@ def gameplay_evidence(log, require_complete=True, require_skin=True):
     }
 
 
+def story_evidence(log):
+    scenes = gameplay_scenes(log)
+    if not scenes or scenes[0] != "gameplay":
+        raise ValueError("Story gameplay scene was not presented")
+    interactions = re.findall(r"(?m)^\S+ PORTLAB_GAME_INTERACTION_COMPLETED(?= |$)", log)
+    if not interactions:
+        raise ValueError("No completed story interaction was reported")
+    records = re.findall(r"(?m)^\S+ PORTLAB_INTRO_RECORD=(\d+:\d+)(?= |$)", log)
+    chapter4 = [record for record in records if record.startswith("4:")]
+    if not chapter4:
+        raise ValueError("Chapter 4 script did not follow the first gameplay scene")
+    skin = bool(re.search(r"(?m)^\S+ PORTLAB_GAMEPLAY_SKIN_ADVANCED(?= |$)", log))
+    if not skin:
+        raise ValueError("Real gameplay actor skinning was not reported")
+    return {
+        "scenes": scenes,
+        "completed_interactions": len(interactions),
+        "story_loop": "script chapters 0-2, first gameplay scene, interaction and the follow-up chapter 4 script were exercised",
+        "actor_skinning": "real actor skinning advanced and was presented",
+        "chapter4_records": chapter4[:4],
+        "complete_story": "not exercised by this bounded route",
+        "physical_iphone": "not tested",
+    }
+
+
+def story_present(log):
+    try:
+        story_evidence(log)
+        return True
+    except ValueError:
+        return False
+
+
 def animation_advanced(log):
     return bool(re.search(r"(?m)^\S+ PORTLAB_NATIVE_ANIMATION_ADVANCED(?= |$)", log))
 
@@ -115,6 +149,8 @@ def pose_advanced(log):
 
 
 def scene_ready(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
+    if expected == 'story':
+        return story_present(log)
     observed = gameplay_scenes(log) if expected in GAMEPLAY_SCENES else presented_scenes(log)
     return (expected in observed and (not require_animation or animation_advanced(log))
             and (not require_xa or xa_fixture_loaded(log)) and (not require_material or material_advanced(log))
@@ -122,8 +158,12 @@ def scene_ready(log, expected, require_animation=False, require_xa=False, requir
 
 
 def scene_evidence(log, expected, require_animation=False, require_xa=False, require_material=False, require_xx=False, require_pose=False):
-    if expected not in SCENES and expected not in GAMEPLAY_SCENES:
+    if expected not in SCENES and expected not in GAMEPLAY_SCENES and expected not in STORY_SCENES:
         raise ValueError("Unknown expected scene: " + expected)
+    if expected == 'story':
+        if not scene_ready(log, expected):
+            raise ValueError("Expected story loop was not reported: " + expected)
+        return story_evidence(log)
     observed = gameplay_scenes(log) if expected in GAMEPLAY_SCENES else presented_scenes(log)
     if not scene_ready(log, expected, require_animation, require_xa, require_material, require_xx, require_pose):
         raise ValueError("Expected scene/animation/XA/material/XX/pose pipeline was not reported: " + expected)
@@ -213,13 +253,16 @@ def controls_visible(log, pc_input=False):
 
 
 def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
-          exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False):
+          exercise_new_game=False, resource_parts=None, exercise_real_gameplay=False, pc_input=False,
+          exercise_story=False):
     if exercise_new_game and (not startup_fixture and not resource_parts):
         raise ValueError('New-game exercise requires generated startup fixture or staged resource parts')
     if exercise_new_game and startup_fixture and expected_scene != 'intro':
         raise ValueError('Generated startup fixture new-game exercise requires intro target')
     if exercise_real_gameplay and (not resource_parts or expected_scene not in ('gameplay', 'gameComplete')):
         raise ValueError('Real gameplay exercise requires resource parts and gameplay target')
+    if exercise_story and (not resource_parts or expected_scene != 'story'):
+        raise ValueError('Story exercise requires resource parts and story target')
     require_animation = expected_scene == "checker"
     require_xa = expected_scene == "checker"
     require_material = expected_scene == "checker"
@@ -282,6 +325,8 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if exercise_new_game:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_NEW_GAME']='1'
     if exercise_real_gameplay:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_REAL_GAMEPLAY']='1'
     if exercise_real_gameplay:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
+    if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_EXERCISE_STORY']='1'
+    if exercise_story:launch_environment['SIMCTL_CHILD_PORTLAB_CAPTURE_GAMEPLAY']='1'
     # Cold CoreSimulator may queue the same request for over two minutes.
     # Observe that live command and app-authored evidence concurrently; never
     # issue another launch merely because an observation interval elapsed.
@@ -310,13 +355,17 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             if exercise_real_gameplay and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
                 run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
                 captured.add('gameplay-first')
+            if exercise_story and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
+                run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
+                captured.add('gameplay-first')
+            story_ok = not exercise_story or story_present(log)
             scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
             audio_ok=not startup_fixture or bool(re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log))
             if startup_fixture:audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_NATIVE_SKIN_ADVANCED(?= |$)',log))
             if exercise_new_game and startup_fixture:
                 audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_AUDIO_ADVANCED(?= |$)',log))
                 audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_INTRO_RECORD=1:0(?= |$)',log))
-            if (scene_ok and audio_ok) or "Vulkan 初始化或绘制失败" in log:
+            if (scene_ok and audio_ok and story_ok) or "Vulkan 初始化或绘制失败" in log:
                 break
         time.sleep(1)
     launch_pending=launch_process.poll() is None
@@ -430,6 +479,17 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             'interaction_input': 'automated touch pulses through the normal input adapter',
             'scene_evidence': 'expected gameplay/gameComplete marker and gameplay interaction evidence'
         }
+    if exercise_story and resource_parts:
+        import shutil
+        shutil.copyfile(container/'Documents/gameplay-first-native.png',output/'gameplay-first-native.png')
+        from startup_pixels import verify_gameplay_actor
+        report['initial_actor_visibility']=verify_gameplay_actor((output/'gameplay-first-native.png').read_bytes())
+        report['real_resource_story'] = {
+            'resources': 'local dczdata parts staged and imported',
+            'interaction_input': 'automated touch pulses through the normal input adapter',
+            'story_evidence': 'expected script->gameplay->interaction->chapter-4 script markers'
+        }
+        report['story']=story_evidence(log)
     (output / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))
     run("xcrun", "simctl", "terminate", device, "org.example.portlab")
@@ -449,10 +509,12 @@ if __name__ == "__main__":
                         help="local directory containing DczlrData.manifest.json and all dczdata parts")
     parser.add_argument("--exercise-real-gameplay", action="store_true",
                         help="automatically pulse interaction input after staging real resource parts")
+    parser.add_argument("--exercise-story", action="store_true",
+                        help="automatically drive the original script/scene story loop after staging real resource parts")
     args = parser.parse_args()
     if args.boot_only:
         print(json.dumps(select_device(args.output, args.runtime)))
     elif args.app:
-        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input)
+        check(args.app, args.output, args.runtime, args.expected_scene,args.startup_fixture,args.exercise_new_game,args.resource_parts,args.exercise_real_gameplay,args.pc_input,args.exercise_story)
     else:
         parser.error("--app is required unless --boot-only is selected")

@@ -56,6 +56,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
 }
 - (uint32_t)frame { return _text.frame<0 ? 0 : (uint32_t)_text.frame; }
 - (uint32_t)chapter { return _flow.chapter; }
+- (uint32_t)pendingChapter { return _pendingChapter; }
 - (NSString *)presentationState {
     return _hasTextPlan && _textTexture ? [NSString stringWithFormat:@"%u:%u:%u",_flow.chapter,self.frame,_text.fade_index] : @"";
 }
@@ -67,7 +68,11 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     return _musicAdvanced && _voiceAdvanced && _soundAdvanced;
 }
 - (instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error {
+    return [self initWithDirectory:directory startChapter:0 error:error];
+}
+- (instancetype)initWithDirectory:(NSString *)directory startChapter:(uint32_t)startChapter error:(NSString **)error {
     if(!(self=[super init]))return nil;
+    if(startChapter>=DC_INTRO_CHAPTERS) { if(error)*error=@"Story chapter is outside the script table";return nil; }
     _directory=[directory copy];
     _captureEnabled=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_STARTUP"] isEqualToString:@"1"];
     _gameState=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
@@ -78,8 +83,14 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     _scripts=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_16.pp"]] error:&reason];
     _images=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
     if(!_scripts || !_images) {if(error)*error=reason.localizedDescription;return nil;}
-    _flow=(dc_intro_state){.waiting=1};
-    NSString *failure=[self loadChapter:0];
+    if(startChapter) {
+        /* Mid-story entry: the transition host is not needed; the chapter
+         * script starts immediately and the chapter-end routing advances. */
+        _flow=(dc_intro_state){.chapter=startChapter,.waiting=0};
+    } else {
+        _flow=(dc_intro_state){.waiting=1};
+    }
+    NSString *failure=[self loadChapter:startChapter];
     if(failure) {if(error)*error=failure;return nil;}
     return self;
 }

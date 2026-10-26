@@ -180,17 +180,16 @@ jobs:
         with:
           name: PortLab-simulator-pc-input
           path: out/ios-pc-input/
-      - name: Exercise real resource gameplay on simulator
+      - name: Exercise the original story loop on simulator
         if: inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != ''
         timeout-minutes: 12
         run: |
           python3 tools/check_ios_sprite.py \
             --app ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app \
-            --runtime iOS-18-5 --expected-scene gameComplete \
-            --exercise-new-game \
-            --exercise-real-gameplay \
+            --runtime iOS-18-5 --expected-scene story \
+            --exercise-story \
             --resource-parts "${DCZLR_RESOURCE_PARTS:-$RUNNER_TEMP/dczlr-resource-parts}" \
-            --output out/ios-real-gameplay
+            --output out/ios-real-story
       - name: Upload simulator Vulkan execution evidence
         if: always()
         uses: actions/upload-artifact@v4
