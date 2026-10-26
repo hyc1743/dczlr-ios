@@ -291,6 +291,9 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
                     if scene not in captured:
                         run('xcrun','simctl','io',device,'screenshot',str(output/('startup-'+scene+'.png')),timeout=30)
                         captured.add(scene)
+            if exercise_real_gameplay and 'gameplay' in gameplay_scenes(log) and 'gameplay-first' not in captured:
+                run('xcrun','simctl','io',device,'screenshot',str(output/'gameplay-first.png'),timeout=30)
+                captured.add('gameplay-first')
             scene_ok=scene_ready(log, expected_scene, require_animation, require_xa, require_material, require_xx, require_pose)
             audio_ok=not startup_fixture or bool(re.search(r'(?m)^\S+ PORTLAB_TITLE_AUDIO_ADVANCED(?= |$)',log))
             if startup_fixture:audio_ok=audio_ok and bool(re.search(r'(?m)^\S+ PORTLAB_NATIVE_SKIN_ADVANCED(?= |$)',log))
