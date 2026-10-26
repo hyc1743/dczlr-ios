@@ -373,9 +373,11 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(!isfinite(sceneMilliseconds) || sceneMilliseconds<0)return @"Invalid scene animation time";
     uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
     if(_gameScene && (controller.pressed&DC_PAD_MINUS)) {
+        [_gameScene detachRenderer];
         _gameScene=nil;
         [_introScene detachRenderer];_introScene=nil;
         _titleStateInitialized=NO;_titleMenuInitialized=NO;
+        _galleryMode=NO;
         _previousTitleTouch=NO;_previousGameplayTouch=NO;
         showTitle=titleReady;
     }
