@@ -11,7 +11,7 @@ NS_ASSUME_NONNULL_BEGIN
 dc_pad_frame dc_gamepad_read(void);
 NSString *dc_gamepad_presentation(void);
 void dc_gamepad_set_active(BOOL active);
-void dc_gamepad_set_context(uint32_t scene,BOOL completed);
+void dc_gamepad_set_context(uint32_t scene,BOOL completed,BOOL busy);
 /* Debug-only input into the visible control's hit test and UIKit handlers.
  * Returns NO in Release; it never writes controller axes directly. */
 BOOL dc_gamepad_test_hold(uint32_t control,float x,float y,BOOL down);

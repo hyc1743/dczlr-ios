@@ -381,6 +381,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(!isfinite(sceneMilliseconds) || sceneMilliseconds<0)return @"Invalid scene animation time";
     uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
     if(_gameScene && (controller.pressed&DC_PAD_MINUS)) {
+        [_gameAudio cancelGameplayVoice];
         [_gameScene detachRenderer];
         _gameScene=nil;
         [_introScene detachRenderer];_introScene=nil;
@@ -647,6 +648,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
         }
     } else {
         if(_gameScene) {
+            if(controller.pressed&DC_PAD_B)[_gameAudio cancelGameplayVoice];
             dc_pad_frame gameController=controller;
             BOOL suppressInput=_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch;
             if(_suppressGameplayTouch) gameController=(dc_pad_frame){0};
@@ -812,8 +814,10 @@ static void dc_write_float_le(uint8_t *out, float value) {
             BOOL skinAdvanced=self->_startupScene.skinAdvanced;
             BOOL gameplaySkinAdvanced=self->_gameScene.actorSkinAdvanced;
             BOOL interactionCompleted=self->_gameScene.interactionCompleted;
+            BOOL controlBusy=(scene==DCVulkanSpriteSceneGameplay||scene==DCVulkanSpriteSceneGameComplete) &&
+                (self->_gameScene.interactionActive||self->_gameAudio.gameplayVoiceBusy);
             dispatch_async(dispatch_get_main_queue(), ^{
-                dc_gamepad_set_context((uint32_t)scene,interactionCompleted);
+                dc_gamepad_set_context((uint32_t)scene,interactionCompleted,controlBusy);
                 completion(error, device, scene, advanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted);
             });
         }

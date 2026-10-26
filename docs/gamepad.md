@@ -1,7 +1,8 @@
 # iOS controls
 
-The default input mode is now keyboard and mouse. Use the top-left mode
-button to switch to this inherited gamepad layout. See
+The default input mode is the game-specific touch interface described in
+[Touch controls](touch-controls.md). The earlier console layout below is
+historical; it is no longer the on-screen interface. See
 [Windows-style controls](windows-controls.md) for pointer, mouse buttons,
 keyboard shortcuts, concurrent input and the boundaries of the scene adapter.
 

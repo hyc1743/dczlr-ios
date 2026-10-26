@@ -104,6 +104,7 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (uint32_t)visibleActorTriangles { return _visibleActorTriangles; }
 - (uint32_t)interactionCount { return _interactionCount; }
 - (BOOL)interactionCompleted { return _interactionCompleted; }
+- (BOOL)interactionActive { return _interactionActive; }
 - (BOOL)gameFinished { return _gameFinished; }
 - (uint32_t)chapter { return _storyChapter; }
 - (uint32_t)chapterEndAction { return _chapterEndAction; }

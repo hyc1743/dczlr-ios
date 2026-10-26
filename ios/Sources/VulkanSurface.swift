@@ -88,7 +88,7 @@ final class SpritePresenter: NSObject {
     // Drive the visible controls' hit tests and UIKit ownership handlers.
     // No pad axes, button bits or renderer pointer values are fabricated here.
     private func driveTouchRoute() -> Bool {
-        func hold(_ control: Int32, _ down: Bool, _ x: Float = 0, _ y: Float = 0) -> Bool {
+        func hold(_ control: Int, _ down: Bool, _ x: Float = 0, _ y: Float = 0) -> Bool {
             dc_gamepad_test_hold(UInt32(control), x, y, down)
         }
         let now = CACurrentMediaTime()

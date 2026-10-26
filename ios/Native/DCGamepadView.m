@@ -75,7 +75,7 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
 #endif
 
 @interface DCGamepadView ()
-- (void)setScene:(uint32_t)scene completed:(BOOL)completed;
+- (void)setScene:(uint32_t)scene completed:(BOOL)completed busy:(BOOL)busy;
 - (void)padsChanged;
 @end
 
@@ -84,7 +84,7 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     CGSize _lastSize;
     UIEdgeInsets _lastInsets;
     uint32_t _scene;
-    BOOL _completed,_pcMode,_positionMode;
+    BOOL _completed,_pcMode,_positionMode,_busy;
     NSMutableSet<UITouch *> *_fingers;
     CALayer *_controls;
     CAShapeLayer *_keys[DC_TOUCH_COUNT],*_knobs[2];
@@ -168,10 +168,10 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     if(!_pcMode)[_pcInput reset]; // Clear an earlier active pointer source too.
 }
 - (void)useTouchMode { _pcMode=NO;[self applyInputMode]; }
-- (void)setScene:(uint32_t)scene completed:(BOOL)completed {
-    if(_scene==scene&&_completed==completed)return;
+- (void)setScene:(uint32_t)scene completed:(BOOL)completed busy:(BOOL)busy {
+    if(_scene==scene&&_completed==completed&&_busy==busy)return;
     BOOL changed=_scene!=scene;
-    _scene=scene;_completed=completed;
+    _scene=scene;_completed=completed;_busy=busy;
     if(changed){[self reset];_positionMode=NO;_menuOverlay.hidden=YES;}
     [self setNeedsLayout];[self layoutIfNeeded];
 }
@@ -212,10 +212,11 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
         CGPoint c=center(r);
         if(i==DC_TOUCH_MOVE)c.y=r.y-16;
         NSString *text=names[i];
-        if(i==DC_TOUCH_PRIMARY)text=game?(_completed?@"下一章":@"交互"):(_scene==2?@"确认":@"继续");
+        if(i==DC_TOUCH_PRIMARY)text=game?(_busy?@"请稍候":_completed?@"下一章":@"交互"):(_scene==2?@"确认":@"继续");
         if(i==DC_TOUCH_BACK)text=game?(_completed?@"留在本段":@"取消操作"):@"跳过";
         if(i==DC_TOUCH_NEXT)text=@"结束本段";
         textAt(_labels[i],text,c,i==DC_TOUCH_PRIMARY?18:14,MAX(90,r.width));
+        _keys[i].opacity=_labels[i].opacity=(_busy&&(i==DC_TOUCH_PRIMARY||i==DC_TOUCH_NEXT))?.45:1;
     }
     [CATransaction commit];[self refresh];
 }
@@ -381,9 +382,9 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
 @end
 
 NSString *dc_gamepad_presentation(void) { return currentView?[currentView presentationState]:@"not-created"; }
-void dc_gamepad_set_context(uint32_t scene,BOOL completed) {
+void dc_gamepad_set_context(uint32_t scene,BOOL completed,BOOL busy) {
     NSCAssert(NSThread.isMainThread,@"Touch context must update on the main thread");
-    [currentView setScene:scene completed:completed];
+    [currentView setScene:scene completed:completed busy:busy];
 }
 void dc_gamepad_set_active(BOOL active) {
     NSCAssert(NSThread.isMainThread,@"Touch lifecycle must update on the main thread");
@@ -416,7 +417,7 @@ BOOL dc_gamepad_test_menu_action(uint32_t index) {
     __block NSString *failure=nil;
     void (^check)(BOOL,NSString *)=^(BOOL ok,NSString *name){if(!ok&&!failure)failure=name;};
     DCGamepadView *v=[[DCGamepadView alloc] initWithFrame:CGRectMake(0,0,956,440)];
-    [v useTouchMode];[v setScene:6 completed:NO];[v layoutIfNeeded];dc_gamepad_read();dc_pc_input_read();
+    [v useTouchMode];[v setScene:6 completed:NO busy:NO];[v layoutIfNeeded];dc_gamepad_read();dc_pc_input_read();
     check(!v->_pcMode&&!dc_pc_input_read().active,@"Touch default releases the old PC pointer");
     check(v->_touch.layout.controls[DC_TOUCH_MOVE].width==0,@"Point-and-interact layout is the default");
     v->_positionMode=YES;[v setNeedsLayout];[v layoutIfNeeded];

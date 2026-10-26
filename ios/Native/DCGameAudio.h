@@ -7,6 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL musicAdvanced;
 @property(nonatomic,readonly) BOOL selectionBusy;
 - (BOOL)gameplayVoiceBusy;
+- (void)cancelGameplayVoice;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;
 - (nullable NSString *)startTitleMusic;
 - (nullable NSString *)prepareGameplayAudio;

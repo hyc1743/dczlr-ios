@@ -17,6 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t visibleActorTriangles;
 @property(nonatomic,readonly) uint32_t interactionCount;
 @property(nonatomic,readonly) BOOL interactionCompleted;
+@property(nonatomic,readonly) BOOL interactionActive;
 @property(nonatomic,readonly) BOOL gameFinished;
 @property(nonatomic,readonly) BOOL actorSkinAdvanced;
 @property(nonatomic,readonly) BOOL controllerMovementAdvanced;
