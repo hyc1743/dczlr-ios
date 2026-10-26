@@ -186,6 +186,8 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     if(dc_touch_make_layout(self.bounds.size.width,self.bounds.size.height,
         insets.left,insets.top,insets.right,insets.bottom,game?(_positionMode?3:1):0,&next)!=DC_OK)return;
     if(game&&_completed)next.controls[DC_TOUCH_NEXT]=(dc_touch_rect){0};
+    // Title has no skip/cancel consumer. Only show actions its handler uses.
+    if(_scene==2)next.controls[DC_TOUCH_BACK]=(dc_touch_rect){0};
     _touch.layout=next;_controls.frame=self.bounds;_pcInput.frame=self.bounds;
     _touchMode.frame=CGRectMake(insets.left+8,insets.top+6,76,44);
     _menuOverlay.frame=self.bounds;
@@ -417,7 +419,9 @@ BOOL dc_gamepad_test_menu_action(uint32_t index) {
     __block NSString *failure=nil;
     void (^check)(BOOL,NSString *)=^(BOOL ok,NSString *name){if(!ok&&!failure)failure=name;};
     DCGamepadView *v=[[DCGamepadView alloc] initWithFrame:CGRectMake(0,0,956,440)];
-    [v useTouchMode];[v setScene:6 completed:NO busy:NO];[v layoutIfNeeded];dc_gamepad_read();dc_pc_input_read();
+    [v useTouchMode];[v layoutIfNeeded];
+    check(v->_touch.layout.controls[DC_TOUCH_BACK].width==0,@"Title does not expose an unused skip button");
+    [v setScene:6 completed:NO busy:NO];[v layoutIfNeeded];dc_gamepad_read();dc_pc_input_read();
     check(!v->_pcMode&&!dc_pc_input_read().active,@"Touch default releases the old PC pointer");
     check(v->_touch.layout.controls[DC_TOUCH_MOVE].width==0,@"Point-and-interact layout is the default");
     v->_positionMode=YES;[v setNeedsLayout];[v layoutIfNeeded];
