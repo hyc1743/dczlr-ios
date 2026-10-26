@@ -240,16 +240,17 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(profile.stage>=0)_story.stage=(uint32_t)profile.stage;
     _storyInitialized=YES;
     [self saveStoryToDirectory:directory];
+    /* Consume the completed script before installing its destination. Keeping
+     * it here would re-enter this chapter on every subsequent draw. */
+    [_introScene detachRenderer];
+    _introScene=nil;
+    [_gameScene detachRenderer];
+    _gameScene=nil;
     if(profile.script>=0) {
         NSString *introError=nil;
-        [_introScene detachRenderer];
-        [_gameScene detachRenderer];
-        _gameScene=nil;
         _introScene=[[DCIntroScene alloc] initWithDirectory:directory startChapter:chapter error:&introError];
         if(!_introScene)return introError ?: @"Mid-story script entry failed";
     } else {
-        [_gameScene detachRenderer];
-        _gameScene=nil;
         NSString *gameError=[self startGameSceneFromDirectory:directory];
         if(gameError)return gameError;
         _previousGameplayTouch=NO;
@@ -433,6 +434,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
         _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
         }
     }
+    /* A completed script may have installed a game scene during this draw. */
+    showTitle=titleReady && !_gameScene;
     dc_vk_sprite_item draws[8] = {0};
     size_t drawCount = 0;
     BOOL animationMoved = NO;

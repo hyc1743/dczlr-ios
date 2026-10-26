@@ -293,8 +293,16 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(status!=DC_OK || info.rgba_bytes>64*1024*1024) { if(error)*error=@"Game texture profile rejected"; return NO; }
         NSMutableData *pixels=[NSMutableData dataWithLength:info.rgba_bytes];
         status=dc_xx_image_decode(slot->xx,i,pixels.mutableBytes,pixels.length,&info);
-        if(status==DC_OK)status=dc_vk_sprite_upload(_renderer,info.width,info.height,pixels.bytes,pixels.length,&slot->textures[i]);
-        if(status!=DC_OK) { if(error)*error=@"Game texture upload failed"; return NO; }
+        if(status!=DC_OK) {
+            if(error)*error=[NSString stringWithFormat:@"Game texture %u decode failed: status=%d",i,status];
+            return NO;
+        }
+        status=dc_vk_sprite_upload(_renderer,info.width,info.height,pixels.bytes,pixels.length,&slot->textures[i]);
+        if(status!=DC_OK) {
+            if(error)*error=[NSString stringWithFormat:@"Game texture %u upload failed (%ux%u, %zu bytes): status=%d, %s",
+                i,info.width,info.height,(size_t)pixels.length,status,dc_vk_sprite_error(_renderer)];
+            return NO;
+        }
     }
     slot->world=gameIdentity();
     return YES;
@@ -540,13 +548,26 @@ static void freeMorphCaches(dc_game_model *slot) {
     _loaded=YES;return self;
 }
 - (void)detachModel:(dc_game_model *)slot {
-    if(_renderer)for(uint32_t i=0;i<slot->textureCount;++i)if(slot->textures[i])dc_vk_sprite_remove_texture(_renderer,slot->textures[i]);
+    if(_renderer && slot->textures)for(uint32_t i=0;i<slot->textureCount;++i)if(slot->textures[i])dc_vk_sprite_remove_texture(_renderer,slot->textures[i]);
     freeMorphCaches(slot);
     free(slot->textures);slot->textures=NULL;slot->textureCount=0;
     if(slot->model)dc_model_close(slot->model);if(slot->xx)dc_xx_close(slot->xx);
     slot->model=NULL;slot->xx=NULL;
 }
-- (void)detachRenderer { _renderer=NULL; }
+- (void)detachRenderer {
+    /* All draws are blocking and serialized by the view's render queue.
+     * Release GPU handles while their renderer is still alive, including
+     * partially initialized models; dealloc can then free the CPU data. */
+    dc_game_model *models[]={&_map,&_actor,&_face};
+    for(size_t m=0;m<sizeof(models)/sizeof(models[0]);++m) {
+        dc_game_model *slot=models[m];
+        if(slot->textures)for(uint32_t i=0;i<slot->textureCount;++i) {
+            if(_renderer && slot->textures[i])dc_vk_sprite_remove_texture(_renderer,slot->textures[i]);
+            slot->textures[i]=0;
+        }
+    }
+    _renderer=NULL;
+}
 - (void)dealloc { [self savePlayerState];free(_surfaces);[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face]; }
 
 - (uint32_t)textureFor:(dc_game_model *)slot mesh:(const dc_xx_submesh *)mesh {
