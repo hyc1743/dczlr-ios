@@ -31,6 +31,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t stageOutcomeA;
 @property(nonatomic,readonly) uint32_t stageOutcomeB;
 @property(nonatomic,readonly) uint32_t storyStage;
+@property(nonatomic,readonly) uint32_t sceneKind;
+@property(nonatomic,readonly) uint32_t sceneType;
+@property(nonatomic,readonly) BOOL interactiveScene;
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
     mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage resumeSavedPlayer:(BOOL)resume error:(NSString **)error;

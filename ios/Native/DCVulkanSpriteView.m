@@ -231,6 +231,17 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     [_gameScene consumeChapterEndAction];
     return nil;
 }
+- (NSString *)handleNonGameplayScene:(DCGameScene *)scene directory:(NSString *)directory
+    controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput {
+    /* Keep the original scene kind visible to the host. These callbacks are
+     * intentionally separate from chapter-3 gameplay; until their exact
+     * native scene routines are wired, input must not be reinterpreted as a
+     * gameplay touch/menu action. */
+    (void)directory;(void)controller;(void)pcInput;
+    if(scene.sceneKind==DC_STORY_SCENE_ENDING && scene.interactionCompleted)
+        return nil;
+    return nil;
+}
 - (NSString *)playPendingGameplayVoice {
     NSString *name=[_gameScene takePendingVoiceName];
     if (!name) return nil;
@@ -764,6 +775,10 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             if(voiceFailure)return voiceFailure;
             NSString *transitionFailure=[self handleGameplayTransitionFromDirectory:directory];
             if(transitionFailure)return transitionFailure;
+            if(!_gameScene.interactiveScene) {
+                NSString *sceneFailure=[self handleNonGameplayScene:_gameScene directory:directory controller:gameController pcInput:gamePC];
+                if(sceneFailure)return sceneFailure;
+            }
             _previousGameplayTouch=gameTouch;
             _presentedScene=_gameScene.gameFinished ? DCVulkanSpriteSceneGameComplete : DCVulkanSpriteSceneGameplay;
             ++_presentedFrames;

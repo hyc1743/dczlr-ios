@@ -92,6 +92,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     BOOL _interactionActive;uint32_t _interactionStartTick;
     uint32_t _interactionCount;BOOL _interactionCompleted;
     uint32_t _storyChapter,_storyStage,_storyPhase,_mapSelector;
+    uint32_t _sceneKind,_sceneType;
     uint32_t _stageOutcomeA,_stageOutcomeB,_chapterEndAction;
     BOOL _editMode;
     BOOL _gameFinished;
@@ -116,6 +117,9 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (uint32_t)stageOutcomeA { return _stageOutcomeA; }
 - (uint32_t)stageOutcomeB { return _stageOutcomeB; }
 - (uint32_t)storyStage { return _storyStage; }
+- (uint32_t)sceneKind { return _sceneKind; }
+- (uint32_t)sceneType { return _sceneType; }
+- (BOOL)interactiveScene { return _sceneType==4; }
 - (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
 - (BOOL)controllerMovementAdvanced { return _controllerMovementAdvanced; }
 - (BOOL)controllerCameraAdvanced { return _controllerCameraAdvanced; }
@@ -123,8 +127,8 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSDictionary *)lastRenderCapture { return _lastRenderCapture; }
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
-    return [NSString stringWithFormat:@"chapter=%u map=%u stage=%u anchor=%@ camera=%@ resumed=%d",
-        _storyChapter,_mapSelector,_storyStage,_anchorName,_cameraSource,_resumedPlayer];
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u anchor=%@ camera=%@ resumed=%d",
+        _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_anchorName,_cameraSource,_resumedPlayer];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
@@ -456,6 +460,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     /* Scene chapters carry their own selectors; the ending scene keeps the
      * previous map/stage from the story state. */
     _mapSelector=profile.map>=0 ? (uint32_t)profile.map : (mapSelector<=8 ? mapSelector : 0);
+    _sceneKind=profile.scene;_sceneType=profile.scene_type;
     _storyStage=profile.stage>=0 ? (uint32_t)profile.stage : (stage<=2 ? stage : 0);
 #if DEBUG
     _captureGameplayFrame=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_GAMEPLAY"] isEqualToString:@"1"];
@@ -773,6 +778,7 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
+    BOOL gameplayScene=(_sceneType==4);
     BOOL pcHome=(pcInput.keys[0xc7]&1)!=0,pcEnd=(pcInput.keys[0xcf]&1)!=0;
     BOOL pcPageUp=(pcInput.keys[0xc9]&1)!=0,pcPageDown=(pcInput.keys[0xd1]&1)!=0;
     BOOL pcNum8=(pcInput.keys[0x48]&1)!=0,pcNum4=(pcInput.keys[0x4b]&1)!=0;
@@ -781,8 +787,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     BOOL pcArrowDown=(pcInput.keys[0xd0]&1)!=0,pcArrowRight=(pcInput.keys[0xcd]&1)!=0;
     if(pcInput.keys[0x2e]==3)[self requestRenderCapture:@"gameplay-capture.png"];
     float padDelta=_tickInitialized?fminf((tick-_lastTick)/1000.f,.1f):0;
-    BOOL confirm=(controller.pressed&DC_PAD_A)!=0;
-    BOOL next=(controller.pressed&DC_PAD_PLUS)!=0;
     if(controller.pressed&DC_PAD_B){
         touching=NO;_inputInitialized=NO;
         if(_interactionState.active) {
@@ -790,26 +794,18 @@ static void freeMorphCaches(dc_game_model *slot) {
             if(dc_model_request(_actor.model,1,tick)!=DC_OK)return @"Game interaction cancel failed";
         }
     }
-    if(controller.pressed&DC_PAD_X){_playerSaveDirty=YES;_manualSaveCompleted=[self savePlayerState];}
+    if(gameplayScene && controller.pressed&DC_PAD_X){_playerSaveDirty=YES;_manualSaveCompleted=[self savePlayerState];}
     if(controller.pressed&DC_PAD_Y){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
-    // Touch controls use game actions, independent of the invisible PC menu.
-    // Confirm after completion advances; Next ends this segment first.
-    if(!_editMode) {
-        if((confirm||next)&&(_storyPhase==1||_interactionCompleted)) {
-            _chapterEndAction=2;confirm=NO;
-        } else if(next) {
-            _interactionCompleted=YES;_storyPhase=1;
-            if(_interactionCount>0)_stageOutcomeA=1;
-            _playerSaveDirty=YES;
-        }
-        if((controller.pressed&DC_PAD_B)&&_storyPhase==1) {
-            _storyPhase=0;_interactionCompleted=NO;_interactionState.completed=0;
-            _chapterEndAction=0;
-        }
+    /* Scene progression is driven by the original menu row dispatch below.
+     * A generic A/Plus press must never skip an interaction or advance the
+     * chapter by itself; the old host shortcut made the port diverge from the
+     * original route whenever a touch landed outside a menu row. */
+    if(gameplayScene && (controller.pressed&DC_PAD_B)&&_storyPhase==1) {
+        _storyPhase=0;_interactionCompleted=NO;_interactionState.completed=0;
+        _chapterEndAction=0;
     }
-    BOOL newTouch=touching&&!_inputInitialized;
     BOOL menuActivated=NO;
-    if (pcInput.active || (_gameMenuInitialized && touching) || _previousGameMenuTouch) {
+    if (gameplayScene && (pcInput.active || (_gameMenuInitialized && touching) || _previousGameMenuTouch)) {
         float menuScale=fminf((float)width/1024.0f,(float)height/768.0f);
         float menuOffsetX=((float)width-1024.0f*menuScale)*.5f;
         float menuOffsetY=((float)height-768.0f*menuScale)*.5f;
@@ -840,22 +836,23 @@ static void freeMorphCaches(dc_game_model *slot) {
     BOOL releaseEdge=(!touching&&_previousGameMenuTouch)||(pcInput.active&&pcInput.mouse[0]==2);
     _previousGameMenuTouch=touching;
     dc_game_menu_activate_input activateInput={
-        .scene_type=4,
+        .scene_type=_sceneType,
         .selected_row=menuActivated?(uint32_t)_gameMenu.selected:UINT32_MAX,
         .interaction_count=_interactionCount,
         .press_edge=pressEdge,
         .release_edge=releaseEdge
     };
     dc_game_menu_activate_result activateResult;
-    if(dc_game_menu_activate(&activateInput,&_activateState,&activateResult)!=DC_OK)return @"Game menu activation update failed";
-    if(_editMode) {
+    if(gameplayScene && dc_game_menu_activate(&activateInput,&_activateState,&activateResult)!=DC_OK)
+        return @"Game menu activation update failed";
+    if(gameplayScene && _editMode) {
         if(activateResult.handled) {
             uint32_t row=activateInput.selected_row;
             if(row>=1&&row<=3)[self applyOutfitVariant:row];
             else if(row==4)_chapterEndAction=6;
             else if(row==5)[self applyOutfitVariant:0];
         }
-    } else if(activateResult.handled && _storyPhase==0) {
+    } else if(gameplayScene && activateResult.handled && _storyPhase==0) {
         switch(activateResult.kind) {
         case DC_GAME_MENU_EVENT_TOUCH: {
             if(dc_model_request(_actor.model,2,tick)!=DC_OK)return @"Game interaction animation request failed";
@@ -874,7 +871,7 @@ static void freeMorphCaches(dc_game_model *slot) {
             break;
         default: break;
         }
-    } else if(activateResult.handled && _storyPhase==1) {
+    } else if(gameplayScene && activateResult.handled && _storyPhase==1) {
         /* Chapter-end choice follows the original chapter-end handler action
            codes: row 1 advance, row 2 save menu, row 3 edit, row 4 fade,
            row 5 returns to the scene. */
@@ -887,8 +884,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     float nearOriginX=_actorOriginX-_actor.world.values[12],nearOriginZ=_actorOriginZ-_actor.world.values[14];
     BOOL nearInteraction=fabsf(nearOriginX)<12.0f&&fabsf(nearOriginZ)<12.0f;
-    if(!_editMode) {
-        dc_game_interaction_input interactionInput={.tick=tick,.new_touch=(newTouch||menuActivated||confirm),.near_target=nearInteraction};
+    if(gameplayScene && !_editMode) {
+        dc_game_interaction_input interactionInput={.tick=tick,.new_touch=menuActivated,.near_target=nearInteraction};
         dc_game_interaction_state interactionNext;dc_game_interaction_result interactionResult;
         if(dc_game_interaction_step(&_interactionState,&interactionInput,&interactionNext,&interactionResult)!=DC_OK)return @"Game interaction state update failed";
         if(interactionResult.begin) {
@@ -899,7 +896,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         _interactionState=interactionNext;_interactionActive=_interactionState.active;_interactionStartTick=_interactionState.start_tick;_interactionCount=_interactionState.interaction_count;
         if(interactionResult.completed){_interactionCompleted=YES;_storyPhase=1;_player.interaction_count=_interactionCount;_playerSaveDirty=YES;}
     }
-    if(_storyChapter==24 && _interactionCompleted)_gameFinished=YES;
+    if(gameplayScene && _storyChapter==24 && _interactionCompleted)_gameFinished=YES;
     if(touching) {
         // A game tap selects/interacts. Dragging that tap must not secretly
         // translate the player; explicit position adjustment uses its pad.
@@ -913,7 +910,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(controller.buttons&DC_PAD_DOWN)moveZ+=1;
     float moveLength=hypotf(moveX,moveZ);
     if(moveLength>1){moveX/=moveLength;moveZ/=moveLength;}
-    if(moveLength>0.01f && !_interactionActive && !_gameFinished) {
+    if(gameplayScene && moveLength>0.01f && !_interactionActive && !_gameFinished) {
         dc_game_player next;
         dc_game_input movement={.axis_x=moveX,.axis_z=moveZ,.touching=1};
         float speed=(controller.buttons&DC_PAD_L3)?2.f:1.f;
