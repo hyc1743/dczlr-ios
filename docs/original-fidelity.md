@@ -59,9 +59,11 @@ publish based only on the bounded mouse check.
 The independent `--mouse-input --expected-scene mouseInput` route reaches the
 first real-resource scene through startup and scripts 0-2. It checks relative
 drag, separate mouse presses, a scene-menu hit, and a Num6/arrow combination.
-Its report does not certify the original right-click menu, full story or a
-physical device. The full story gate is retained separately. Mouse-only runs
-cannot produce a release IPA.
+The current route additionally checks the initial camera context and primary
+target-0/reset callbacks. It does not certify all original context actions,
+the full story or a physical device. The separate story route covers scripts
+0-2, the first scene and script 4, not all 26 chapters. Mouse-only runs cannot
+produce a release IPA.
 
 The local `audit_texture_uploads.py` run rebuilt `dc_vk_sprite.c` and checked
 4,295 standalone/XX texture references (1,608 unique decoded images) through
@@ -211,3 +213,32 @@ not the host's current sorted-list entry. FUN_005358c0 type-4 option 1 arms
 +0x185d and, at initial progress zero, plays that slot; FUN_00513690 waits
 for its query to become idle before requesting scene state 2. This route is
 not implemented yet. Metadata only is retained in out/original-effect-slot-table.json.
+
+### Confirmed corrected camera run
+
+GitHub run 40413204123, source commit
+14be47ab8bb383b596d961ea331325f8fa4314d4, completed successfully on
+2026-10-27 (Asia/Shanghai). Portable checks, iOS build, generated startup/New
+Game, concurrent keyboard/mouse, and the real-resource camera/mouse gate passed.
+Local unittest discovery passes 297 tests. The unsigned IPA job was skipped;
+no release was published.
+
+The corrected target world matrix has translation
+(21.5725231,4.6985197,-0.9768603), consistent with the character world region,
+rather than the previous initial identity cache. The retarget capture has
+114,935 actor-visible pixels. The reset capture has 198,551 and its seven
+camera parameters equal the original home_sh CAM bytes exactly. The input
+surface remains 874x402 points, game rect (183,0,508,381), with zero virtual
+key overlap. The context remains usable after both actual camera actions.
+
+The local three-stage GPU diagnostic still renders b/c/a actors with
+44,065/41,292/35,293 visible pixels. Cached render-hidden target matrices now
+match the separately evaluated hierarchy positions for all three stage assets.
+These observations certify this bounded binding/action/render route, not
+complete original lighting, interactions, other camera modes, secondary view,
+save/edit screens or full-story equivalence.
+
+Artifact 12693474951 is retained in out/primary-camera-evidence-14be47a with
+report.json, native GPU captures, complete target matrices and app.log. Its
+ZIP passed CRC validation; SHA-256 is
+774469831f1fc9d867e5b6ccfa64f41df6bcfb20436e7420ac3c7973ac31e070.
