@@ -1,5 +1,11 @@
 # Original runtime input probe
 
+Input-state correction: the original keyboard and mouse converters use
+0 idle, 3 newly pressed, 1 held and 2 newly released. Historical probe names
+and command-line descriptions sometimes called forced code 3 a release;
+that label was incorrect. See [the recovered input evidence](windows-input-evidence.md)
+and [current keyboard/mouse controls](windows-controls.md).
+
 `tools/frida_directinput_probe.py` launches the local PE32 executable suspended,
 installs a Frida agent, resumes it, clicks the existing startup dialog button
 `1012`, and records DirectInput COM calls plus `ReadFile` reads from local PP
@@ -44,16 +50,16 @@ state flags before calling `0x00532240`. These gates are now observable in the
 probe, while a real user interaction still needs to drive them naturally.
 
 A follow-up bounded run now drives the menu in its original order: five hover
-frames with input code `0`, followed by five release frames with input code
+frames with input code `0`, followed by five press frames with input code
 `3` at `(1200,470)`. The original menu returns `2` while the row is first
-entered and `1` on release, confirming activation of row 1. The captured menu
+entered and `1` on the code-3 press, confirming activation of row 1. The captured menu
 table has six rows: row 1 at `(920,328,96,96)`, disabled row 2 at
 `(920,440,96,96)`, rows 3 and 4 at y `552` and `664`, and row 5 at
 `(0,504,352,264)`. The same run loads the post-action `RPP_11.pp` records;
 the report is kept locally as
 `research/native-core/directinput-frida-gameplay-natural-menu.json`.
 
-The iOS gameplay scene now uses this six-row table and the same hover/release
+The iOS gameplay scene now uses this six-row table and the same hover/press
 codes through `dc_menu_step`. Its existing near-target touch path remains as a
 compatibility input for the local playable-loop exercise; menu activation and
 near-target admission are kept as separate state gates.
@@ -65,7 +71,7 @@ in the bounded Windows probe. The simulator exercise sets
 `PORTLAB_EXERCISE_REAL_GAMEPLAY=1` and keeps the bounded automatic map sequence
 only for host-side coverage of all eight local maps.
 
-A two-action forced probe confirms the boundary: a second hover/release pair at
+A two-action forced probe confirms the boundary: a second hover/press pair at
 the same row returns menu result `1`, but does not open a new `RPP_11.pp` voice
 record or reload `RPP_10.pp`. The map-change caller and its state prerequisites
 therefore remain open; the probe is retained locally as
