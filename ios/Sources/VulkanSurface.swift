@@ -41,6 +41,7 @@ final class SpritePresenter: NSObject {
     private var testTitleTime: CFTimeInterval?
     private var testIntroTime: CFTimeInterval?
     private var testGameplayTime: CFTimeInterval?
+    private var wasGameplay = false
     private var testPadHeld = false
     private var reportedControllerMovement = false
     private var reportedControllerCamera = false
