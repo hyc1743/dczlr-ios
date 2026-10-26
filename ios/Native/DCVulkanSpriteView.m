@@ -156,7 +156,7 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(_gameAudio){NSString *audioError=[_gameAudio prepareGameplayAudio];if(audioError)return audioError;}
     NSString *gameError=nil;
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter error:&gameError];
-    if(!_gameScene)return gameError ?: @"Chapter 3 scene initialization failed";
+    if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
     return nil;
@@ -242,6 +242,8 @@ static void dc_write_float_le(uint8_t *out, float value) {
     if(profile.script>=0) {
         NSString *introError=nil;
         [_introScene detachRenderer];
+        [_gameScene detachRenderer];
+        _gameScene=nil;
         _introScene=[[DCIntroScene alloc] initWithDirectory:directory startChapter:chapter error:&introError];
         if(!_introScene)return introError ?: @"Mid-story script entry failed";
     } else {
@@ -550,10 +552,13 @@ static void dc_write_float_le(uint8_t *out, float value) {
                     if(enterError)return enterError;
                 } else if(command.value==3) {
                     /* Original Edit destination (FUN_005f1d20): the character
-                     * edit presentation over the first gameplay scene. */
+                     * edit presentation over the first gameplay scene. The
+                     * story save is not modified. */
                     [self loadStoryFromDirectory:directory];
-                    if(_story.chapter>=DC_STORY_CHAPTERS) { [self resetStory]; _story.chapter=3;_story.map=0;_story.stage=2;_storyInitialized=YES; }
-                    NSString *editError=[self enterStoryChapter:3 directory:directory];
+                    _story.chapter=3;_story.map=0;_story.stage=2;
+                    _storyInitialized=YES;
+                    [_gameScene detachRenderer];_gameScene=nil;
+                    NSString *editError=[self startGameSceneFromDirectory:directory];
                     if(editError)return editError;
                     if(_gameScene)[_gameScene setEditMode:YES];
                 } else if(command.value==4) {
