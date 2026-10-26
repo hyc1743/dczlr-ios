@@ -88,5 +88,10 @@ class PCTouchTests(unittest.TestCase):
         self.lib.dc_pc_input_pointer(C.byref(self.input),29,.7,.3)
         self.begin(1,26);self.call('reset');self.assertTrue(self.poll().pointer_active)
         self.lib.dc_pc_input_source(C.byref(self.input),29,0);self.assertFalse(self.poll().pointer_active)
+    def test_resize_cancels_unseen_taps_without_eating_physical_pending_press(self):
+        self.begin(1,22);self.begin(2,26);self.call('reset');f=self.poll()
+        self.assertEqual((f.keys[0x4d],f.mouse[0],f.pointer_active),(0,0,0))
+        self.begin(3,22);self.lib.dc_pc_input_key(C.byref(self.input),30,0x4d,1)
+        self.call('reset');self.assertEqual(self.poll().keys[0x4d],3)
 
 if __name__=='__main__':unittest.main()

@@ -62,3 +62,11 @@ drag, separate mouse presses, a scene-menu hit, and a Num6/arrow combination.
 Its report does not certify the original right-click menu, full story or a
 physical device. The full story gate is retained separately. Mouse-only runs
 cannot produce a release IPA.
+
+The local `audit_texture_uploads.py` run rebuilt `dc_vk_sprite.c` and checked
+4,295 standalone/XX texture references (1,608 unique decoded images) through
+Vulkan upload and 16 point/alpha samples per unique image: zero mismatches.
+The unrecognized `rpsp_02.pp` archive is explicitly excluded. This does not
+certify original scene effects, lighting, geometry composition or gameplay.
+No texture payloads were exported; the metadata report is retained locally as
+`out/texture-upload-audit.json`.

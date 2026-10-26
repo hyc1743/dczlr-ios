@@ -70,6 +70,24 @@ dc_status dc_pc_touch_end(dc_pc_touch *s,dc_pc_latch *in,uint64_t id) {
 }
 void dc_pc_touch_reset(dc_pc_touch *s,dc_pc_latch *in) {
     if(!s||!in)return;
-    for(unsigned i=0;i<16;++i)if(s->contacts[i].id)dc_pc_input_source(in,i,0);
+    uint8_t keys[DC_PC_KEY_COUNT]={0},mouse[DC_PC_MOUSE_COUNT]={0};
+    for(unsigned i=0;i<16;++i)if(s->contacts[i].id) {
+        uint32_t control=s->contacts[i].control;
+        if(control<DC_PC_TOUCH_COUNT) {
+            uint32_t code=s->targets[control].code;
+            if(code<256)keys[code]=1;else if(code<258)mouse[code-256]=1;
+        }
+        dc_pc_input_source(in,i,0);
+    }
+    /* Cancel unseen taps on resize/mode reset without deleting a physical
+     * source's pending press. Previously polled controls still release. */
+    for(unsigned k=0;k<DC_PC_KEY_COUNT;++k)if(keys[k]) {
+        int held=0;for(unsigned i=0;i<DC_PC_SOURCE_COUNT;++i)held|=in->sources[i].active&&in->sources[i].keys[k];
+        if(!held)in->pending_keys[k]=0;
+    }
+    for(unsigned k=0;k<DC_PC_MOUSE_COUNT;++k)if(mouse[k]) {
+        int held=0;for(unsigned i=0;i<DC_PC_SOURCE_COUNT;++i)held|=in->sources[i].active&&in->sources[i].mouse[k];
+        if(!held)in->pending_mouse[k]=0;
+    }
     memset(s->contacts,0,sizeof(s->contacts));dc_pc_input_source(in,27,0);
 }
