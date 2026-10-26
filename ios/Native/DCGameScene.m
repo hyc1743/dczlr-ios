@@ -70,6 +70,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginY,_actorOriginZ;
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
     float _padCameraYaw,_padCameraPitch,_padCameraZoom;
+    float _padCameraPanX,_padCameraPanZ;
     uint32_t _cameraPreset;
     BOOL _cameraAutoSelected;
     NSMutableDictionary<NSNumber *, NSValue *> *_cameraFallbacks;
@@ -126,12 +127,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         _storyChapter,_mapSelector,_storyStage,_anchorName,_cameraSource,_resumedPlayer];
 }
 - (void)requestRenderCapture:(NSString *)name {
-#if DEBUG
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
         _requestedRenderCapture=[name copy];
-#else
-    (void)name;
-#endif
 }
 - (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
 - (void)consumeChapterEndAction { _chapterEndAction=0; }
@@ -776,6 +773,13 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
+    BOOL pcHome=(pcInput.keys[0xc7]&1)!=0,pcEnd=(pcInput.keys[0xcf]&1)!=0;
+    BOOL pcPageUp=(pcInput.keys[0xc9]&1)!=0,pcPageDown=(pcInput.keys[0xd1]&1)!=0;
+    BOOL pcNum8=(pcInput.keys[0x48]&1)!=0,pcNum4=(pcInput.keys[0x4b]&1)!=0;
+    BOOL pcNum2=(pcInput.keys[0x50]&1)!=0,pcNum6=(pcInput.keys[0x4d]&1)!=0;
+    BOOL pcArrowUp=(pcInput.keys[0xc8]&1)!=0,pcArrowLeft=(pcInput.keys[0xcb]&1)!=0;
+    BOOL pcArrowDown=(pcInput.keys[0xd0]&1)!=0,pcArrowRight=(pcInput.keys[0xcd]&1)!=0;
+    if(pcInput.keys[0x2e]==3)[self requestRenderCapture:@"gameplay-capture.png"];
     float padDelta=_tickInitialized?fminf((tick-_lastTick)/1000.f,.1f):0;
     BOOL confirm=(controller.pressed&DC_PAD_A)!=0;
     BOOL next=(controller.pressed&DC_PAD_PLUS)!=0;
@@ -923,18 +927,25 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance,.height=_cameraHeight,.pitch=_cameraPitch,.yaw=_cameraYaw};
     if(controller.pressed&DC_PAD_R3){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
     float cameraX=controller.rx/32767.f,cameraY=controller.ry/32767.f;
+    if(pcNum4)cameraX-=1.f;if(pcNum6)cameraX+=1.f;
+    if(pcNum8||pcPageUp)cameraY-=1.f;if(pcNum2||pcPageDown)cameraY+=1.f;
     if(padDelta>0 && (cameraX!=0 || cameraY!=0))_controllerCameraAdvanced=YES;
     if(controller.buttons&DC_PAD_L)cameraX-=1;
     if(controller.buttons&DC_PAD_R)cameraX+=1;
     _padCameraYaw=remainderf(_padCameraYaw+cameraX*padDelta*1.5f,6.2831853f);
     _padCameraPitch=fmaxf(-.7f,fminf(.7f,_padCameraPitch+cameraY*padDelta));
     float zoom=((controller.buttons&DC_PAD_ZR)?1.f:0.f)-((controller.buttons&DC_PAD_ZL)?1.f:0.f);
+    if(pcHome)zoom+=1.f;if(pcEnd)zoom-=1.f;
+    if(pcInput.wheel>0)zoom+=1.f;else if(pcInput.wheel<0)zoom-=1.f;
     _padCameraZoom=fmaxf(-.7f,fminf(1.f,_padCameraZoom+zoom*padDelta));
+    float panX=(pcArrowRight?1.f:0.f)-(pcArrowLeft?1.f:0.f);
+    float panZ=(pcArrowDown?1.f:0.f)-(pcArrowUp?1.f:0.f);
+    _padCameraPanX+=panX*padDelta*2.0f;_padCameraPanZ+=panZ*padDelta*2.0f;
     orbit.yaw+=_padCameraYaw;orbit.pitch+=_padCameraPitch;
     orbit.stored_distance*=expf(_padCameraZoom);
-    orbit.base.values[12]=_cameraOriginX+_actor.world.values[12]-_actorOriginX;
+    orbit.base.values[12]=_cameraOriginX+_actor.world.values[12]-_actorOriginX+_padCameraPanX;
     orbit.base.values[13]=_cameraBase.values[13]+_actor.world.values[13]-_actorOriginY;
-    orbit.base.values[14]=_cameraOriginZ+_actor.world.values[14]-_actorOriginZ;
+    orbit.base.values[14]=_cameraOriginZ+_actor.world.values[14]-_actorOriginZ+_padCameraPanZ;
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};

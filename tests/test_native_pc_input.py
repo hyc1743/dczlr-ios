@@ -17,11 +17,13 @@ class Latch(C.Structure):
     _fields_=[('sources',Source*32),('previous_keys',C.c_uint8*256),
               ('previous_mouse',C.c_uint8*3),('pending_keys',C.c_uint8*256),
               ('pending_mouse',C.c_uint8*3),('x',C.c_float),('y',C.c_float),
-              ('dx',C.c_int32),('dy',C.c_int32),('wheel',C.c_int32)]
+              ('dx',C.c_int32),('dy',C.c_int32),('wheel',C.c_int32),
+              ('pointer_active',C.c_uint32)]
 class Frame(C.Structure):
     _fields_=[('keys',C.c_uint8*256),('mouse',C.c_uint8*3),
               ('x',C.c_float),('y',C.c_float),('dx',C.c_int32),
-              ('dy',C.c_int32),('wheel',C.c_int32),('active',C.c_uint32)]
+              ('dy',C.c_int32),('wheel',C.c_int32),('active',C.c_uint32),
+              ('pointer_active',C.c_uint32)]
 
 class NativePCInputTests(unittest.TestCase):
     @classmethod
@@ -115,6 +117,13 @@ class NativePCInputTests(unittest.TestCase):
         self.call('motion',0,2147483647,-2147483648,2147483647)
         self.call('motion',0,10,-10,100);f=self.poll()
         self.assertEqual((f.dx,f.dy,f.wheel),(2147483647,-2147483648,2147483647))
+    def test_pointer_ownership_is_distinct_from_keyboard_activity(self):
+        self.call('key',0,0x48,1);f=self.poll()
+        self.assertEqual((f.active,f.pointer_active),(1,0))
+        self.call('pointer',29,.75,.25);f=self.poll()
+        self.assertEqual((f.active,f.pointer_active,f.x,f.y),(1,1,.75,.25))
+        self.call('source',29,0);f=self.poll()
+        self.assertEqual((f.pointer_active,f.x,f.y),(0,.75,.25))
     def test_invalid_setters_are_atomic(self):
         for name,args in [('source',(32,1)),('source',(0,2)),('key',(32,1,1)),
             ('key',(0,256,1)),('key',(0,1,2)),('mouse',(0,3,1)),

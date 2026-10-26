@@ -32,6 +32,29 @@ static void dc_write_float_le(uint8_t *out, float value) {
     dc_write_word_le(out, bits);
 }
 
+static BOOL dc_pc_key_held(const dc_pc_frame *input, uint32_t scan) {
+    return input && scan < DC_PC_KEY_COUNT && (input->keys[scan] & 1u) != 0;
+}
+static BOOL dc_pc_key_pressed(const dc_pc_frame *input, uint32_t scan) {
+    return input && scan < DC_PC_KEY_COUNT && input->keys[scan] == 3;
+}
+static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
+    if (!controller) return;
+    /* The original PC emergency key and Alt+F4 both leave gameplay through
+     * the same safe title transition on iOS. They never terminate the app. */
+    if (dc_pc_key_pressed(&input,1) ||
+        (dc_pc_key_held(&input,0x38) && dc_pc_key_pressed(&input,0x3e))) {
+        controller->buttons |= DC_PAD_MINUS;controller->pressed |= DC_PAD_MINUS;
+    }
+    /* Z/X are the original mouse buttons. Keeping them in the pad snapshot
+     * makes right-click cancel/back work in gameplay as well as in menus. */
+    if (input.mouse[0]&1u) controller->buttons|=DC_PAD_A;
+    if (input.mouse[0]==3) controller->pressed|=DC_PAD_A;
+    if (input.mouse[1]&1u) controller->buttons|=DC_PAD_B;
+    if (input.mouse[1]==3) controller->pressed|=DC_PAD_B;
+    if (input.mouse[1]==2) controller->released|=DC_PAD_B;
+}
+
 @implementation DCVulkanSpriteView {
     dc_vk_sprite *_renderer;
     uintptr_t _texture;
@@ -375,7 +398,16 @@ static void dc_write_float_le(uint8_t *out, float value) {
                 layer:(CAMetalLayer *)layer width:(uint32_t)width height:(uint32_t)height
          dataDirectory:(NSString *)directory touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput {
     // Coordinates, buttons, all keys and motion arrive in one immutable frame.
-    if (pcInput.active) { x=pcInput.x*2-1; y=1-pcInput.y*2; touching=(pcInput.mouse[0]&1)!=0; }
+    if (pcInput.pointer_active) {
+        x=pcInput.x*2-1; y=1-pcInput.y*2;
+        touching=(pcInput.mouse[0]&1)!=0;
+    } else if (pcInput.mouse[0]&1u) {
+        /* A virtual Z/left-click is still a game tap even when no physical
+         * pointer is connected. Touchscreen coordinates remain authoritative
+         * for simultaneous finger input. */
+        touching=YES;
+    }
+    dc_merge_pc_actions(pcInput,&controller);
     if (!width || !height) return @"CAMetalLayer has empty drawable size";
     if (_renderer && (_width != width || _height != height)) [self destroyRenderer];
     if (!_renderer) {

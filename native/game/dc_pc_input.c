@@ -24,7 +24,10 @@ void dc_pc_input_init(dc_pc_latch *l) {
 dc_status dc_pc_input_source(dc_pc_latch *l,uint32_t id,uint32_t active) {
     if(!l)return DC_ARGUMENT;
     if(id>=DC_PC_SOURCE_COUNT||active>1)return DC_RANGE;
-    if(!active)memset(&l->sources[id],0,sizeof(l->sources[id]));
+    if(!active) {
+        memset(&l->sources[id],0,sizeof(l->sources[id]));
+        if(id==29) l->pointer_active=0;
+    }
     else l->sources[id].active=1;
     return DC_OK;
 }
@@ -48,6 +51,7 @@ dc_status dc_pc_input_pointer(dc_pc_latch *l,uint32_t id,float x,float y) {
     if(!l)return DC_ARGUMENT;
     if(id>=DC_PC_SOURCE_COUNT||!isfinite(x)||!isfinite(y)||x<0||x>1||y<0||y>1)return DC_RANGE;
     l->sources[id].active=1;l->x=x;l->y=y;
+    if(id==29) l->pointer_active=1;
     return DC_OK;
 }
 dc_status dc_pc_input_motion(dc_pc_latch *l,uint32_t id,int32_t dx,int32_t dy,int32_t wheel) {
@@ -70,6 +74,7 @@ dc_status dc_pc_input_poll(dc_pc_latch *l,dc_pc_frame *out) {
         l->previous_mouse[i]=frame.mouse[i]&1u;l->pending_mouse[i]=0;
     }
     frame.x=l->x;frame.y=l->y;frame.dx=l->dx;frame.dy=l->dy;frame.wheel=l->wheel;
+    frame.pointer_active=l->pointer_active;
     l->dx=0;l->dy=0;l->wheel=0;
     if(!frame.mouse[0])frame.mouse[0]=frame.keys[0x2c];
     if(!frame.mouse[1])frame.mouse[1]=frame.keys[0x2d];
@@ -82,7 +87,7 @@ void dc_pc_input_clear(dc_pc_latch *l) {
     if(!l)return;
     memset(l->sources,0,sizeof(l->sources));
     memset(l->pending_keys,0,sizeof(l->pending_keys));memset(l->pending_mouse,0,sizeof(l->pending_mouse));
-    l->dx=0;l->dy=0;l->wheel=0;
+    l->dx=0;l->dy=0;l->wheel=0;l->pointer_active=0;
 }
 uint32_t dc_pc_input_hid_scancode(uint32_t usage) {
     static const uint8_t letters[26]={0x1e,0x30,0x2e,0x20,0x12,0x21,0x22,0x23,0x17,0x24,0x25,0x26,0x32,0x31,0x18,0x19,0x10,0x13,0x1f,0x14,0x16,0x2f,0x11,0x2d,0x15,0x2c};

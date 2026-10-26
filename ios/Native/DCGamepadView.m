@@ -77,6 +77,8 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
 @interface DCGamepadView ()
 - (void)setScene:(uint32_t)scene completed:(BOOL)completed busy:(BOOL)busy;
 - (void)padsChanged;
+- (UIButton *)mouseButton:(NSString *)title index:(NSInteger)index;
+- (void)toggleKeyPanel;
 @end
 
 @implementation DCGamepadView {
@@ -87,10 +89,13 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     BOOL _completed,_pcMode,_positionMode,_busy;
     NSMutableSet<UITouch *> *_fingers;
     CALayer *_controls;
-    CAShapeLayer *_keys[DC_TOUCH_COUNT],*_knobs[2];
+    CAShapeLayer *_keys[DC_TOUCH_COUNT],*_knobs[2],*_mouseCursor;
     CATextLayer *_labels[DC_TOUCH_COUNT];
     DCPCInputView *_pcInput;
-    UIButton *_touchMode;
+    UIButton *_touchMode,*_keyButton,*_mouseLeft,*_mouseRight,*_wheelUp,*_wheelDown;
+    UIView *_keyPanel;
+    NSMutableArray<UIButton *> *_virtualKeys;
+    BOOL _keyPanelVisible;
     UIView *_menuOverlay,*_menuPanel;
     NSMutableArray<UIButton *> *_menuButtons;
 #if DEBUG
@@ -118,6 +123,10 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
             _knobs[i].strokeColor=[UIColor colorWithWhite:1 alpha:.85].CGColor;
             [_controls addSublayer:_knobs[i]];
         }
+        _mouseCursor=[CAShapeLayer layer];
+        _mouseCursor.fillColor=[UIColor colorWithWhite:1 alpha:.88].CGColor;
+        _mouseCursor.strokeColor=[UIColor blackColor].CGColor;_mouseCursor.lineWidth=1;
+        [_controls addSublayer:_mouseCursor];
         _pcInput=[[DCPCInputView alloc] initWithFrame:self.bounds];[self addSubview:_pcInput];
         _touchMode=[UIButton buttonWithType:UIButtonTypeSystem];
         [_touchMode setTitle:@"触屏" forState:UIControlStateNormal];
@@ -126,6 +135,38 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
         _touchMode.layer.cornerRadius=10;
         [_touchMode addTarget:self action:@selector(useTouchMode) forControlEvents:UIControlEventTouchUpInside];
         [self addSubview:_touchMode];
+        _keyButton=[UIButton buttonWithType:UIButtonTypeSystem];
+        [_keyButton setTitle:@"\u952e\u4f4d" forState:UIControlStateNormal];
+        [_keyButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        _keyButton.backgroundColor=[UIColor colorWithWhite:.1 alpha:.9];_keyButton.layer.cornerRadius=10;
+        [_keyButton addTarget:self action:@selector(toggleKeyPanel) forControlEvents:UIControlEventTouchUpInside];
+        [self addSubview:_keyButton];
+        _mouseLeft=[self mouseButton:@"\u5de6\u952e" index:0];
+        _mouseRight=[self mouseButton:@"\u53f3\u952e" index:1];
+        _wheelUp=[self mouseButton:@"\u6eda+" index:2];
+        _wheelDown=[self mouseButton:@"\u6eda-" index:3];
+        _keyPanel=[UIView new];_keyPanel.hidden=YES;_keyPanel.layer.cornerRadius=16;
+        _keyPanel.backgroundColor=[UIColor colorWithWhite:.03 alpha:.94];
+        _keyPanel.layer.borderWidth=1;_keyPanel.layer.borderColor=[UIColor colorWithWhite:1 alpha:.35].CGColor;
+        [self addSubview:_keyPanel];_virtualKeys=[NSMutableArray array];
+        NSArray *keyTitles=@[@"Esc",@"F1",@"F4",@"1",@"2",@"3",@"4",@"V",
+            @"Z \u5de6",@"X \u53f3",@"A \u6eda+",@"S \u6eda-",@"C \u62cd",@"Alt",@"Home",@"End",
+            @"Pg\u2191",@"Pg\u2193",@"Num8",@"Num4",@"Num2",@"Num6",@"\u2191",@"\u2190",
+            @"\u2193",@"\u2192",@"Alt+F4"];
+        const uint32_t keyCodes[]={1,0x3b,0x3e,2,3,4,5,0x2f,0x2c,0x2d,0x1e,0x1f,0x2e,0x38,
+            0xc7,0xcf,0xc9,0xd1,0x48,0x4b,0x50,0x4d,0xc8,0xcb,0xd0,0xcd,0x1000};
+        for(NSUInteger i=0;i<keyTitles.count;++i) {
+            UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
+            [button setTitle:keyTitles[i] forState:UIControlStateNormal];
+            [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+            button.titleLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+            button.backgroundColor=[UIColor colorWithWhite:.16 alpha:.92];button.layer.cornerRadius=7;
+            button.layer.borderWidth=1;button.layer.borderColor=[UIColor colorWithRed:.05 green:.75 blue:.8 alpha:.8].CGColor;
+            button.tag=(NSInteger)keyCodes[i];button.exclusiveTouch=NO;
+            [button addTarget:self action:@selector(virtualKeyDown:) forControlEvents:UIControlEventTouchDown];
+            [button addTarget:self action:@selector(virtualKeyUp:) forControlEvents:UIControlEventTouchUpInside|UIControlEventTouchUpOutside|UIControlEventTouchCancel];
+            [_keyPanel addSubview:button];[_virtualKeys addObject:button];
+        }
         _menuOverlay=[[UIView alloc] initWithFrame:self.bounds];
         _menuOverlay.backgroundColor=[UIColor colorWithWhite:0 alpha:.6];
         _menuOverlay.hidden=YES;[self addSubview:_menuOverlay];
@@ -161,9 +202,47 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     }
     return self;
 }
+- (UIButton *)mouseButton:(NSString *)title index:(NSInteger)index {
+    UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];
+    [button setTitle:title forState:UIControlStateNormal];
+    [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    button.titleLabel.font=[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    button.backgroundColor=[UIColor colorWithWhite:.08 alpha:.78];button.layer.cornerRadius=9;
+    button.layer.borderWidth=1;button.layer.borderColor=[UIColor colorWithWhite:1 alpha:.55].CGColor;
+    button.tag=index;button.exclusiveTouch=NO;
+    [button addTarget:self action:@selector(mouseDown:) forControlEvents:UIControlEventTouchDown];
+    [button addTarget:self action:@selector(mouseUp:) forControlEvents:UIControlEventTouchUpInside|UIControlEventTouchUpOutside|UIControlEventTouchCancel];
+    [self addSubview:button];return button;
+}
+- (void)mouseDown:(UIButton *)button {
+    button.backgroundColor=[UIColor colorWithRed:.05 green:.55 blue:.58 alpha:.95];
+    if(button.tag<2)[DCPCInputView setVirtualMouseButton:(uint32_t)button.tag down:YES];
+    else [DCPCInputView pulseVirtualWheel:button.tag==2?120:-120];
+}
+- (void)mouseUp:(UIButton *)button {
+    if(button.tag<2)[DCPCInputView setVirtualMouseButton:(uint32_t)button.tag down:NO];
+    button.backgroundColor=[UIColor colorWithWhite:.08 alpha:.78];
+}
+- (void)virtualKeyDown:(UIButton *)button {
+    button.backgroundColor=[UIColor colorWithRed:.05 green:.55 blue:.58 alpha:.95];
+    if(button.tag==0x1000)[DCPCInputView pulseVirtualAltF4];
+    else [DCPCInputView setVirtualKey:(uint32_t)button.tag down:YES];
+}
+- (void)virtualKeyUp:(UIButton *)button {
+    if(button.tag!=0x1000)[DCPCInputView setVirtualKey:(uint32_t)button.tag down:NO];
+    button.backgroundColor=[UIColor colorWithWhite:.16 alpha:.92];
+}
+- (void)toggleKeyPanel {
+    [self reset];_keyPanelVisible=!_keyPanelVisible;_keyPanel.hidden=!_keyPanelVisible;
+    [_keyButton setTitle:_keyPanelVisible?@"\u5173\u95ed\u952e\u4f4d":@"\u952e\u4f4d" forState:UIControlStateNormal];
+    [self setNeedsLayout];
+}
 - (void)dealloc { [NSNotificationCenter.defaultCenter removeObserver:self]; }
 - (void)applyInputMode {
     [self reset];_controls.hidden=_pcMode;_touchMode.hidden=!_pcMode;
+    _keyButton.hidden=_pcMode;
+    _mouseLeft.hidden=_mouseRight.hidden=_wheelUp.hidden=_wheelDown.hidden=_pcMode;
+    _keyPanel.hidden=_pcMode||!_keyPanelVisible;
     [_pcInput setInputEnabled:_pcMode];
     if(!_pcMode)[_pcInput reset]; // Clear an earlier active pointer source too.
 }
@@ -172,7 +251,7 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     if(_scene==scene&&_completed==completed&&_busy==busy)return;
     BOOL changed=_scene!=scene;
     _scene=scene;_completed=completed;_busy=busy;
-    if(changed){[self reset];_positionMode=NO;_menuOverlay.hidden=YES;}
+    if(changed){[self reset];_positionMode=NO;_menuOverlay.hidden=YES;_keyPanelVisible=NO;_keyPanel.hidden=YES;}
     [self setNeedsLayout];[self layoutIfNeeded];
 }
 - (void)layoutSubviews {
@@ -190,6 +269,19 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     if(_scene==2)next.controls[DC_TOUCH_BACK]=(dc_touch_rect){0};
     _touch.layout=next;_controls.frame=self.bounds;_pcInput.frame=self.bounds;
     _touchMode.frame=CGRectMake(insets.left+8,insets.top+6,76,44);
+    _keyButton.frame=CGRectMake(insets.left+92,insets.top+6,72,44);
+    CGFloat mouseW=62,mouseH=36,mouseX=CGRectGetMaxX(self.bounds)-insets.right-mouseW;
+    _mouseLeft.frame=CGRectMake(mouseX,insets.top+8,mouseW,mouseH);
+    _mouseRight.frame=CGRectMake(mouseX-mouseW-6,insets.top+8,mouseW,mouseH);
+    _wheelUp.frame=CGRectMake(mouseX,insets.top+50,mouseW,mouseH);
+    _wheelDown.frame=CGRectMake(mouseX-mouseW-6,insets.top+50,mouseW,mouseH);
+    CGFloat keyPanelWidth=MIN(620.0,MAX(360.0,self.bounds.size.width-24)),keyPanelHeight=218;
+    _keyPanel.frame=CGRectMake((self.bounds.size.width-keyPanelWidth)*.5,insets.top+56,keyPanelWidth,keyPanelHeight);
+    CGFloat keyGap=6,keyWidth=(keyPanelWidth-7*keyGap-20)/8.0,keyHeight=34;
+    for(NSUInteger i=0;i<_virtualKeys.count;++i) {
+        NSUInteger row=i/8,col=i%8;
+        _virtualKeys[i].frame=CGRectMake(10+col*(keyWidth+keyGap),12+row*(keyHeight+keyGap),keyWidth,keyHeight);
+    }
     _menuOverlay.frame=self.bounds;
     CGFloat panelHeight=360,panelWidth=260;
     _menuPanel.frame=CGRectMake((self.bounds.size.width-panelWidth)*.5,
@@ -260,6 +352,23 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
         CGPathRef path=CGPathCreateWithEllipseInRect(CGRectMake(c.x+dx-knob,c.y+dy-knob,knob*2,knob*2),NULL);
         _knobs[i].path=path;CGPathRelease(path);
     }
+    CGPoint cursor=CGPointZero;BOOL hasCursor=NO;
+    for(unsigned i=0;i<16;++i) {
+        dc_touch_contact f=_touch.fingers[i];
+        if(f.id&&f.control==DC_TOUCH_POINTER){cursor=CGPointMake(f.x,f.y);hasCursor=YES;break;}
+    }
+    _mouseCursor.hidden=!hasCursor;
+    if(hasCursor) {
+        CGMutablePathRef path=CGPathCreateMutable();
+        CGPathMoveToPoint(path,NULL,cursor.x,cursor.y);
+        CGPathAddLineToPoint(path,NULL,cursor.x+2,cursor.y+20);
+        CGPathAddLineToPoint(path,NULL,cursor.x+8,cursor.y+14);
+        CGPathAddLineToPoint(path,NULL,cursor.x+15,cursor.y+17);
+        CGPathAddLineToPoint(path,NULL,cursor.x+17,cursor.y+13);
+        CGPathAddLineToPoint(path,NULL,cursor.x+9,cursor.y+10);
+        CGPathAddLineToPoint(path,NULL,cursor.x+13,cursor.y+5);
+        CGPathCloseSubpath(path);_mouseCursor.path=path;CGPathRelease(path);
+    }
     [CATransaction commit];
 }
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
@@ -296,6 +405,11 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
 }
 - (void)reset {
     dc_touch_reset(&_touch);[_fingers removeAllObjects];
+    [DCPCInputView clearVirtualInput];
+    for(UIButton *button in @[_mouseLeft,_mouseRight,_wheelUp,_wheelDown])
+        button.backgroundColor=[UIColor colorWithWhite:.08 alpha:.78];
+    for(UIButton *button in _virtualKeys)
+        button.backgroundColor=[UIColor colorWithWhite:.16 alpha:.92];
     pthread_mutex_lock(&inputMutex);
     memset(&virtualState,0,sizeof(virtualState));inputState.pending&=physicalState.buttons;
     pthread_mutex_unlock(&inputMutex);
@@ -312,7 +426,8 @@ static void textAt(CATextLayer *layer,NSString *text,CGPoint point,CGFloat size,
     publishLocked();pthread_mutex_unlock(&inputMutex);
 }
 - (void)menuAction:(UIButton *)button {
-    [self reset];_menuOverlay.hidden=YES;
+    [self reset];_menuOverlay.hidden=YES;_keyPanelVisible=NO;_keyPanel.hidden=YES;
+    [_keyButton setTitle:@"\u952e\u4f4d" forState:UIControlStateNormal];
     if(button.tag==1)[self pulse:DC_PAD_X];
     else if(button.tag==2)[self pulse:DC_PAD_Y];
     else if(button.tag==3)[self pulse:DC_PAD_MINUS];
@@ -459,6 +574,17 @@ BOOL dc_gamepad_test_menu_action(uint32_t index) {
     check(!v->_menuOverlay.hidden&&dc_gamepad_read().touch_count==0,@"Menu opens without clicking the game");
     [v->_menuButtons[0] sendActionsForControlEvents:UIControlEventTouchUpInside];
     check(v->_menuOverlay.hidden,@"Resume closes the menu");
+    [v mouseDown:v->_mouseLeft];
+    check(dc_pc_input_read().mouse[0]==3,@"Virtual mouse left button publishes a click");
+    [v mouseUp:v->_mouseLeft];
+    check(dc_pc_input_read().mouse[0]==2,@"Virtual mouse left button releases");
+    [v mouseDown:v->_mouseRight];
+    check(dc_pc_input_read().mouse[1]==3,@"Virtual mouse right button publishes a click");
+    [v mouseUp:v->_mouseRight];dc_pc_input_read();
+    [v virtualKeyDown:v->_virtualKeys[0]];
+    check(dc_pc_input_read().keys[1]==3,@"Virtual Esc publishes a key");
+    [v virtualKeyUp:v->_virtualKeys[0]];
+    check(dc_pc_input_read().keys[1]==2,@"Virtual Esc releases");
     begin(action);dc_gamepad_read();dc_gamepad_set_active(NO);frame=dc_gamepad_read();
     check(!frame.buttons&&!frame.lx&&!frame.rx&&!frame.touch_count,@"Background releases every input source");
     dc_gamepad_set_active(YES);

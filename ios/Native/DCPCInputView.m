@@ -7,6 +7,14 @@ static pthread_mutex_t pcMutex = PTHREAD_MUTEX_INITIALIZER;
 static dc_pc_latch pcState;
 static BOOL pcInitialized, pcActive = YES;
 static __weak DCPCInputView *pcView;
+static const uint32_t kVirtualSource = 28;
+static BOOL virtualKeys[DC_PC_KEY_COUNT],virtualMouse[DC_PC_MOUSE_COUNT];
+static void virtualSourceActivityLocked(void) {
+    BOOL active=NO;
+    for(NSUInteger i=0;i<DC_PC_KEY_COUNT;++i)if(virtualKeys[i]){active=YES;break;}
+    if(!active)for(NSUInteger i=0;i<DC_PC_MOUSE_COUNT;++i)if(virtualMouse[i]){active=YES;break;}
+    dc_pc_input_source(&pcState,kVirtualSource,active?1:0);
+}
 static void pcInitialize(void) {
     if (!pcInitialized) { dc_pc_input_init(&pcState); pcInitialized = YES; }
 }
@@ -44,6 +52,39 @@ dc_pc_frame dc_pc_input_read(void) {
     GCMouse *_mouseDevice;
     BOOL _hardwareHover;
     CGPoint _hardwareLocation;
+}
++ (void)setVirtualKey:(uint32_t)scancode down:(BOOL)down {
+    if(scancode>=DC_PC_KEY_COUNT)return;
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    if(virtualKeys[scancode]!=(down?YES:NO)) {
+        virtualKeys[scancode]=down?YES:NO;
+        dc_pc_input_key(&pcState,kVirtualSource,scancode,down?1:0);
+    }
+    virtualSourceActivityLocked();pthread_mutex_unlock(&pcMutex);
+}
++ (void)setVirtualMouseButton:(uint32_t)button down:(BOOL)down {
+    if(button>=DC_PC_MOUSE_COUNT)return;
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    if(virtualMouse[button]!=(down?YES:NO)) {
+        virtualMouse[button]=down?YES:NO;
+        dc_pc_input_mouse(&pcState,kVirtualSource,button,down?1:0);
+    }
+    virtualSourceActivityLocked();pthread_mutex_unlock(&pcMutex);
+}
++ (void)pulseVirtualWheel:(int32_t)delta {
+    if(!delta)return;
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    dc_pc_input_motion(&pcState,kVirtualSource,0,0,delta);
+    pthread_mutex_unlock(&pcMutex);
+}
++ (void)pulseVirtualAltF4 {
+    [self setVirtualKey:0x38 down:YES];[self setVirtualKey:0x3e down:YES];
+    [self setVirtualKey:0x3e down:NO];[self setVirtualKey:0x38 down:NO];
+}
++ (void)clearVirtualInput {
+    pthread_mutex_lock(&pcMutex);pcInitialize();
+    memset(virtualKeys,0,sizeof(virtualKeys));memset(virtualMouse,0,sizeof(virtualMouse));
+    dc_pc_input_source(&pcState,kVirtualSource,0);pthread_mutex_unlock(&pcMutex);
 }
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
@@ -232,7 +273,9 @@ dc_pc_frame dc_pc_input_read(void) {
 - (void)reset {
     for (UIControl *button in _sources.keyEnumerator.allObjects) [self buttonUp:(UIButton *)button];
     _pointerTouch=nil; _wheelRemainder=0; _motionRemainderX=0; _motionRemainderY=0;
-    pthread_mutex_lock(&pcMutex); pcInitialize(); dc_pc_input_clear(&pcState);
+    pthread_mutex_lock(&pcMutex); pcInitialize();
+    memset(virtualKeys,0,sizeof(virtualKeys));memset(virtualMouse,0,sizeof(virtualMouse));
+    dc_pc_input_clear(&pcState);
     if (_enabled && pcActive) { dc_pc_input_source(&pcState,29,1); dc_pc_input_pointer(&pcState,29,(float)_cursor.x,(float)_cursor.y); }
     pthread_mutex_unlock(&pcMutex);
 }
@@ -354,5 +397,9 @@ void dc_pc_input_set_active(BOOL active) {
     NSCAssert(NSThread.isMainThread,@"PC input lifecycle must run on main thread");
     pcActive=active;
     if (pcView) [pcView reset];
-    else { pthread_mutex_lock(&pcMutex); pcInitialize(); dc_pc_input_clear(&pcState); pthread_mutex_unlock(&pcMutex); }
+    else {
+        pthread_mutex_lock(&pcMutex); pcInitialize();
+        memset(virtualKeys,0,sizeof(virtualKeys));memset(virtualMouse,0,sizeof(virtualMouse));
+        dc_pc_input_clear(&pcState);pthread_mutex_unlock(&pcMutex);
+    }
 }
