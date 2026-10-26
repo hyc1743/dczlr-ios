@@ -51,18 +51,22 @@ jobs:
           python - <<'PY'
           import json
           import hashlib
+          import os
           from pathlib import Path
           ipa = Path('build/DCZL-R-unsigned.ipa')
           Path('build/build-report.json').write_text(json.dumps({
               'product': 'DCZL-R-unsigned.ipa',
               'host_build': 'compiled_by_xcodebuild',
               'native_guest': 'native reimplementation linked',
-              'graphics_backend': 'native Vulkan sprite integration through MoltenVK',
+              'graphics_backend': 'Vulkan/MoltenVK with explicit gameplay winding and bind-corrected actor attachment',
               'game_playability': 'simulator validated with real resources; device execution unverified',
               'controller': 'weixing3-derived UIKit virtual and ExtendedGamepad input; simulator regression passed',
-              'validation_run': '40222123265',
+              'validation_run': '40261908465',
+              'portable_tests': 234,
+              'source_revision': os.environ['GITHUB_SHA'],
+              'gameplay_rendering': 'initial native GPU frame confirms visible actor; original image equivalence unverified',
               'resource_manifest': 'embedded',
-              'resource_parts': 'published_separately_as_release_assets',
+              'resource_parts': 'external; existing Documents/game/Data can be reused',
               'signing': 'unsigned',
               'sha256': hashlib.sha256(ipa.read_bytes()).hexdigest(),
           }, indent=2) + '\n')
