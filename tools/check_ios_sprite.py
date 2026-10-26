@@ -333,7 +333,7 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     launch_output=(output/'launch.txt').open('w',encoding='utf-8')
     launch_process=subprocess.Popen(['xcrun','simctl','launch','--terminate-running-process',device,'org.example.portlab'],
         stdout=launch_output,stderr=subprocess.STDOUT,text=True,env=launch_environment)
-    wait_seconds=300 if startup_fixture else 240
+    wait_seconds=600 if exercise_story else (300 if startup_fixture else 240)
     deadline = time.monotonic() + wait_seconds
     log = ""
     captured=set()
