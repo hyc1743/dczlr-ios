@@ -804,6 +804,13 @@ static void freeMorphCaches(dc_game_model *slot) {
         _storyPhase=0;_interactionCompleted=NO;_interactionState.completed=0;
         _chapterEndAction=0;
     }
+    if(!gameplayScene && _chapterEndAction==0 &&
+       (touching || (controller.pressed&(DC_PAD_A|DC_PAD_PLUS)))) {
+        /* The non-gameplay callbacks are tap-to-continue scene handlers in
+         * the original dispatcher. Keep their input separate from the
+         * gameplay row menu, but preserve the same chapter advance action. */
+        _chapterEndAction=2;
+    }
     BOOL menuActivated=NO;
     if (gameplayScene && (pcInput.active || (_gameMenuInitialized && touching) || _previousGameMenuTouch)) {
         float menuScale=fminf((float)width/1024.0f,(float)height/768.0f);
