@@ -31,7 +31,7 @@ jobs:
           sys.path.insert(0,'tools')
           from github_transport import request
           run=request(os.environ['GH_TOKEN'],'GET',
-              '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/40318917568')
+              '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/40352140195')
           assert run['status']=='completed' and run['conclusion']=='success'
           jobs=request(os.environ['GH_TOKEN'],'GET',
               '/repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+str(run['id'])+'/jobs?per_page=100')['jobs']
@@ -92,7 +92,7 @@ jobs:
               'validation_run': str(validation['run']),
               'tested_game_code_revision': validation['source'],
               'simulator_app_build_run': str(validation['run']),
-              'portable_tests': 266,
+              'portable_tests': 267,
               'validation_scope': {
                   'startup_and_new_game': 'real-resource route passed',
                   'movement_camera_and_interaction': 'visible window hit tests and UIKit touch handlers passed on iPhone 16 Pro / iOS 18.5 simulator; raw controller injection disabled',
