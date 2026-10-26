@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts
+from check_ios_sprite import presented_scenes, scene_evidence, scene_ready,new_game_evidence,gameplay_evidence,has_session,stage_resource_parts,story_evidence
 
 
 class SceneEvidenceTests(unittest.TestCase):
@@ -142,7 +142,24 @@ class SceneEvidenceTests(unittest.TestCase):
             (source/"DczlrData.manifest.json").write_text(json.dumps(manifest),encoding="utf-8")
             result=stage_resource_parts(source,container,output)
             self.assertEqual(result[0]["sha256"],manifest["parts"][0]["sha256"])
-            self.assertEqual((container/"ResourcePacks"/part.name).read_bytes(),payload)
+            self.assertEqual((container/"Documents/ResourcePacks"/part.name).read_bytes(),payload)
+            self.assertEqual((container/"Documents"/part.name).read_bytes(),payload)
+
+    def test_story_requires_ordered_real_scene_and_rejects_errors(self):
+        events = ('PORTLAB_INTRO_RECORD=0:0', 'PORTLAB_INTRO_RECORD=1:0',
+                  'PORTLAB_INTRO_RECORD=2:0', 'PORTLAB_SCENE_PRESENTED=gameplay',
+                  'PORTLAB_GAMEPLAY_SKIN_ADVANCED', 'PORTLAB_GAME_INTERACTION_COMPLETED',
+                  'PORTLAB_INTRO_RECORD=4:0')
+        def log(values):
+            return '\n'.join('2026-10-26T00:00:00Z '+event+' presented' for event in values)
+        self.assertEqual(story_evidence(log(events))['completed_interactions'],1)
+        for i in range(len(events)):
+            with self.assertRaises(ValueError):
+                story_evidence(log(events[:i]+events[i+1:]))
+        with self.assertRaises(ValueError):
+            story_evidence(log(events[-1:]+events[:-1]))
+        with self.assertRaises(ValueError):
+            story_evidence(log(events)+ '\n2026-10-26T00:00:01Z Vulkan 初始化或绘制失败：failure')
 
 
 if __name__ == "__main__":

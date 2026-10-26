@@ -96,6 +96,8 @@ def gameplay_evidence(log, require_complete=True, require_skin=True):
 
 
 def story_evidence(log):
+    if "Vulkan 初始化或绘制失败" in log:
+        raise ValueError("Story run reported a rendering failure")
     scenes = gameplay_scenes(log)
     if not scenes or scenes[0] != "gameplay":
         raise ValueError("Story gameplay scene was not presented")
@@ -109,6 +111,15 @@ def story_evidence(log):
     skin = bool(re.search(r"(?m)^\S+ PORTLAB_GAMEPLAY_SKIN_ADVANCED(?= |$)", log))
     if not skin:
         raise ValueError("Real gameplay actor skinning was not reported")
+    # Require a forward route in this session. Unordered or stale markers
+    # must not certify that a script actually followed the game scene.
+    route = re.findall(r"(?m)^\S+ (PORTLAB_INTRO_RECORD=\d+:\d+|PORTLAB_SCENE_PRESENTED=gameplay|PORTLAB_GAME_INTERACTION_COMPLETED)(?= |$)", log)
+    expected = ("PORTLAB_INTRO_RECORD=0:0", "PORTLAB_INTRO_RECORD=1:0",
+                "PORTLAB_INTRO_RECORD=2:0", "PORTLAB_SCENE_PRESENTED=gameplay",
+                "PORTLAB_GAME_INTERACTION_COMPLETED", "PORTLAB_INTRO_RECORD=4:0")
+    cursor = iter(route)
+    if not all(any(event == required for event in cursor) for required in expected):
+        raise ValueError("Story events did not follow script -> gameplay -> interaction -> next script order")
     return {
         "scenes": scenes,
         "completed_interactions": len(interactions),
@@ -210,7 +221,8 @@ def stage_resource_parts(parts_root, container, output, restore=False):
     if not parts_root.is_dir() or not manifest_path.is_file():
         raise ValueError("resource-parts must contain DczlrData.manifest.json")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    destination = container / "ResourcePacks"
+    documents = container / "Documents"
+    destination = documents / "ResourcePacks"
     destination.mkdir(parents=True, exist_ok=True)
     staged = []
     for part in manifest.get("parts", []):
@@ -224,7 +236,7 @@ def stage_resource_parts(parts_root, container, output, restore=False):
         # Keep a root-level copy too. Older app containers and the native
         # importer accept both layouts; staging both removes container-path
         # ambiguity across simulator launches.
-        shutil.copy2(source, container / source.name)
+        shutil.copy2(source, documents / source.name)
         staged.append({"name": source.name, "size": source.stat().st_size, "sha256": digest})
     (output / "resource-staging.json").write_text(json.dumps({
         "source": str(parts_root), "destination": str(destination),
@@ -312,7 +324,10 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
     if resource_parts:
         if container is None:
             raise ValueError('resource-parts requires a resolved simulator app container')
-        stage_resource_parts(resource_parts, container, output, restore=exercise_real_gameplay)
+        # Both automation routes hand Data to the renderer at launch. Restore
+        # it completely before either route can start reading game resources.
+        stage_resource_parts(resource_parts, container, output,
+                             restore=exercise_real_gameplay or exercise_story)
     launch_environment=dict(os.environ)
     # Hosted simulators can expose a host/virtual gamepad. Isolate this display
     # probe from that device so virtual controls are actually rendered. The
