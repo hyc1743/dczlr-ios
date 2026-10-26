@@ -3,6 +3,7 @@
 NS_ASSUME_NONNULL_BEGIN
 @interface DCGamepadView : UIView
 - (void)reset;
+- (void)invalidateInput;
 + (nullable NSString *)verifyControls NS_SWIFT_NAME(verifyControls());
 @end
 /* Thread-safe snapshots: the renderer receives a value, never shared UIKit state. */

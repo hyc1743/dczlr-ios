@@ -42,6 +42,8 @@ dc_pc_frame dc_pc_input_read(void) {
     CAShapeLayer *_cursorLayer;
     GCKeyboard *_keyboardDevice;
     GCMouse *_mouseDevice;
+    BOOL _hardwareHover;
+    CGPoint _hardwareLocation;
 }
 - (instancetype)initWithFrame:(CGRect)frame {
     if ((self = [super initWithFrame:frame])) {
@@ -86,6 +88,7 @@ dc_pc_frame dc_pc_input_read(void) {
         _cursorLayer.strokeColor=UIColor.blackColor.CGColor; _cursorLayer.lineWidth=1.5;
         [self.layer addSublayer:_cursorLayer];
         [self updatePointerLabel];
+        [self addGestureRecognizer:[[UIHoverGestureRecognizer alloc] initWithTarget:self action:@selector(pointerHover:)]];
         NSNotificationCenter *nc=NSNotificationCenter.defaultCenter;
         for (NSNotificationName name in @[GCKeyboardDidConnectNotification,GCKeyboardDidDisconnectNotification,
                 GCMouseDidConnectNotification,GCMouseDidDisconnectNotification])
@@ -177,7 +180,14 @@ dc_pc_frame dc_pc_input_read(void) {
     UIBezierPath *path=[UIBezierPath bezierPath];
     [path moveToPoint:p]; [path addLineToPoint:CGPointMake(p.x+2,p.y+19)];
     [path addLineToPoint:CGPointMake(p.x+7,p.y+14)]; [path addLineToPoint:CGPointMake(p.x+15,p.y+13)]; [path closePath];
-    [CATransaction begin]; [CATransaction setDisableActions:YES]; _cursorLayer.path=path.CGPath; [CATransaction commit];
+    [CATransaction begin]; [CATransaction setDisableActions:YES]; _cursorLayer.path=path.CGPath;
+    _cursorLayer.hidden=_hardwareHover; [CATransaction commit];
+}
+- (void)pointerHover:(UIHoverGestureRecognizer *)hover {
+    _hardwareHover=hover.state==UIGestureRecognizerStateBegan || hover.state==UIGestureRecognizerStateChanged;
+    _hardwareLocation=[hover locationInView:self];
+    if (_hardwareHover) [self movePointerTo:_hardwareLocation relative:NO];
+    else [self updateCursor];
 }
 - (void)movePointerTo:(CGPoint)position relative:(BOOL)relative {
     if (!_enabled || !pcActive || self.bounds.size.width<=0 || self.bounds.size.height<=0) return;
@@ -199,7 +209,10 @@ dc_pc_frame dc_pc_input_read(void) {
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     (void)event;
     if (!_enabled || !pcActive || _pointerTouch) return;
-    _pointerTouch=touches.anyObject; _lastTouch=[_pointerTouch locationInView:self];
+    for (UITouch *touch in touches) if (touch.type!=UITouchTypeIndirectPointer) { _pointerTouch=touch; break; }
+    if (!_pointerTouch) return;
+    _hardwareHover=NO;
+    _lastTouch=[_pointerTouch locationInView:self];
     if (!_relative) {
         [self movePointerTo:_lastTouch relative:NO];
         pthread_mutex_lock(&pcMutex); dc_pc_input_mouse(&pcState,24,0,1); pthread_mutex_unlock(&pcMutex);
@@ -230,6 +243,16 @@ dc_pc_frame dc_pc_input_read(void) {
 }
 - (void)devicesChanged {
     if (!NSThread.isMainThread) { dispatch_async(dispatch_get_main_queue(),^{[self devicesChanged];}); return; }
+    if (!_enabled) {
+        _keyboardDevice.keyboardInput.keyChangedHandler=nil;
+        _mouseDevice.mouseInput.mouseMovedHandler=nil;
+        _mouseDevice.mouseInput.leftButton.pressedChangedHandler=nil;
+        _mouseDevice.mouseInput.rightButton.pressedChangedHandler=nil;
+        _mouseDevice.mouseInput.middleButton.pressedChangedHandler=nil;
+        _mouseDevice.mouseInput.scroll.valueChangedHandler=nil;
+        _keyboardDevice=nil; _mouseDevice=nil; _hardwareHover=NO;
+        return;
+    }
     GCKeyboard *keyboard=GCKeyboard.coalescedKeyboard;
     if (_keyboardDevice!=keyboard) {
         _keyboardDevice.keyboardInput.keyChangedHandler=nil; _keyboardDevice=keyboard;
@@ -245,6 +268,7 @@ dc_pc_frame dc_pc_input_read(void) {
     };
     GCMouse *mouse=GCMouse.mice.firstObject;
     if (_mouseDevice!=mouse) {
+        _hardwareHover=NO;
         _mouseDevice.mouseInput.mouseMovedHandler=nil; _mouseDevice.mouseInput.leftButton.pressedChangedHandler=nil;
         _mouseDevice.mouseInput.rightButton.pressedChangedHandler=nil; _mouseDevice.mouseInput.middleButton.pressedChangedHandler=nil;
         _mouseDevice.mouseInput.scroll.valueChangedHandler=nil; _mouseDevice=mouse;
@@ -252,7 +276,10 @@ dc_pc_frame dc_pc_input_read(void) {
     }
     mouse.handlerQueue=dispatch_get_main_queue();
     mouse.mouseInput.mouseMovedHandler=^(GCMouseInput *input,float dx,float dy) {
-        (void)input; DCPCInputView *view=weakSelf; [view movePointerTo:CGPointMake(dx,-dy) relative:YES];
+        (void)input; DCPCInputView *view=weakSelf;
+        // UIKit hover is the absolute system pointer when available. Raw
+        // deltas are the fallback; never move the cursor through both paths.
+        if (view && !view->_hardwareHover) [view movePointerTo:CGPointMake(dx,-dy) relative:YES];
     };
     [self bindMouseButton:mouse.mouseInput.leftButton index:0];
     [self bindMouseButton:mouse.mouseInput.rightButton index:1];
@@ -269,6 +296,7 @@ dc_pc_frame dc_pc_input_read(void) {
     button.pressedChangedHandler=^(GCControllerButtonInput *input,float value,BOOL pressed) {
         (void)input; (void)value; DCPCInputView *view=weakSelf;
         if (!view || !view->_enabled || !pcActive) return;
+        if (pressed && view->_hardwareHover && [view hitTest:view->_hardwareLocation withEvent:nil]!=view) return;
         pthread_mutex_lock(&pcMutex); dc_pc_input_mouse(&pcState,31,index,pressed); pthread_mutex_unlock(&pcMutex);
     };
 }
@@ -308,7 +336,10 @@ dc_pc_frame dc_pc_input_read(void) {
     dc_pc_frame reset=dc_pc_input_read();
     check(reset.keys[0x2a]==2 && reset.dx==0 && reset.wheel==0,@"Focus loss releases sampled input");
     dc_pc_input_set_active(YES);
-    [view setInputEnabled:NO]; dc_pc_input_read();
+    [view buttonDown:view->_quick[6]]; [view buttonDown:view->_mouseButtons[0]]; dc_pc_input_read();
+    [view setInputEnabled:NO];
+    dc_pc_frame removed=dc_pc_input_read();
+    check(removed.keys[0x2a]==2 && removed.mouse[0]==2 && !removed.active,@"Removing controls releases keyboard and mouse");
     pcView=previous;
     if (previous) [previous devicesChanged];
     return failure;
@@ -321,5 +352,7 @@ dc_pc_frame dc_pc_input_read(void) {
 
 void dc_pc_input_set_active(BOOL active) {
     NSCAssert(NSThread.isMainThread,@"PC input lifecycle must run on main thread");
-    pcActive=active; [pcView reset];
+    pcActive=active;
+    if (pcView) [pcView reset];
+    else { pthread_mutex_lock(&pcMutex); pcInitialize(); dc_pc_input_clear(&pcState); pthread_mutex_unlock(&pcMutex); }
 }

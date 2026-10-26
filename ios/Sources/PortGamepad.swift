@@ -17,5 +17,5 @@ struct PortVirtualGamepad: UIViewRepresentable {
         guard let width = proposal.width, let height = proposal.height else { return nil }
         return CGSize(width: width, height: height)
     }
-    static func dismantleUIView(_ view: DCGamepadView, coordinator: ()) { view.reset() }
+    static func dismantleUIView(_ view: DCGamepadView, coordinator: ()) { view.invalidateInput() }
 }
