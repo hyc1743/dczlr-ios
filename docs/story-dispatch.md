@@ -65,7 +65,9 @@ an outcome record per stage:
 `tools/oracle_story.py` runs the original handler in isolation with synthetic
 contexts and compares every observable (chapter, selectors, flags, callback
 installs, backup banks, audio-player stops and cleanup calls) against
-`dc_story_advance`/`dc_story_menu_action` on 5,760 cases.
+`dc_story_advance`/`dc_story_menu_action` on 5,760 cases. The original
+function reads the chapter tables from the image's own data section, so the
+recovered table bytes are exercised directly.
 
 ## Gameplay menu activation
 

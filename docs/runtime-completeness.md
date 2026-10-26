@@ -37,9 +37,12 @@ Verification:
 
 - `tools/oracle_story.py` matches the original chapter-end handler
   (FUN_00523380) with the real static tables on 5,760 synthetic cases.
-- `tools/oracle_intro.py` matched the original end-of-script/transition
-  helpers with the real 26-entry chapter descriptor table (567 + 2,568
-  cases).
+- `tools/oracle_intro.py` matches the original end-of-script/transition
+  helpers on 567 + 2,568 synthetic descriptor cases; the recovered real
+  descriptor table plugs into the same verified routing and is asserted by
+  `tools/story_cases.py` and the story-loop audit. The chapter-end oracle
+  (5,760 cases) exercises the real table bytes because the original handler
+  reads them from the image's own data section.
 - `tools/audit_story_loop.py --data Data` walks all 26 chapters against the
   local resources: every script, map, actor, face, camera candidate and
   voice binding resolves; chapter 24 unlocks and the final termination are
