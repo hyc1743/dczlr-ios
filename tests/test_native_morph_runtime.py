@@ -28,6 +28,7 @@ def morph_xa():
 
 def build():
     out=ROOT/'out'/'render-coverage-analysis'/'test-morph-runtime.dll'
+    out.parent.mkdir(parents=True,exist_ok=True)
     command=compiler_command()+['-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-DDC_NATIVE_SHARED','-shared','-Inative/include',
         'native/resource/dc_pp.c','native/resource/dc_image.c','native/resource/dc_xa.c','native/resource/dc_xx.c','native/game/dc_morph.c','-o',str(out)]
     subprocess.run(command,cwd=ROOT,check=True,env=dict(os.environ,ZIG_GLOBAL_CACHE_DIR=str(ROOT/'.tools'/'zig-cache')))
