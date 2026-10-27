@@ -8,6 +8,7 @@
 #include "dc_scene_ui.h"
 #include "dc_menu.h"
 #include "dc_model.h"
+#include "dc_morph.h"
 #include "dc_story.h"
 #include "dc_xl.h"
 #include <math.h>
@@ -24,6 +25,7 @@ typedef struct dc_game_model {
     dc_xa_info xaInfo;
     struct dc_morph_track_cache *morphTracks;
     uint32_t morphTrackCount;
+    dc_morph *morph;
     uintptr_t *textures;
     uint32_t textureCount;
     dc_matrix world;
@@ -70,12 +72,19 @@ static uint32_t gameColor(const dc_material_value *value) {
     return out;
 }
 static void freeMorphCaches(dc_game_model *slot) {
-    if(!slot || !slot->morphTracks)return;
-    for(uint32_t i=0;i<slot->morphTrackCount;++i) {
-        free(slot->morphTracks[i].indices);
-        free(slot->morphTracks[i].keys);
+    if(!slot)return;
+    if(slot->morph) {
+        dc_morph_close(slot->morph);
+        slot->morph=NULL;
     }
-    free(slot->morphTracks);slot->morphTracks=NULL;slot->morphTrackCount=0;
+    if(slot->morphTracks) {
+        for(uint32_t i=0;i<slot->morphTrackCount;++i) {
+            free(slot->morphTracks[i].indices);
+            free(slot->morphTracks[i].keys);
+        }
+        free(slot->morphTracks);
+    }
+    slot->morphTracks=NULL;slot->morphTrackCount=0;
 }
 
 @implementation DCGameScene {
@@ -188,8 +197,8 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
     dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u camera_mode=%u camera_body=%u camera_auto_on=%u camera_auto_off=%u camera_auto_samples=%u secondary_visible=%d secondary_mode=%u secondary_actions=%u secondary_retargets=%u secondary_resets=%u secondary_auto_samples=%u secondary_pointer_updates=%u secondary_pointer_operation=%u secondary_visibility_changes=%u context_callbacks=cameras-initial-character",
-        _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u progress=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u camera_mode=%u camera_body=%u camera_auto_on=%u camera_auto_off=%u camera_auto_samples=%u secondary_visible=%d secondary_mode=%u secondary_actions=%u secondary_retargets=%u secondary_resets=%u secondary_auto_samples=%u secondary_pointer_updates=%u secondary_pointer_operation=%u secondary_visibility_changes=%u context_callbacks=cameras-initial-character",
+        _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_stageProgress,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
         _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection,
         _cameraActionCount,_cameraRetargetCount,_cameraResetCount,_pendingContextActions,
         _characterActionCount,_characterAnimationStarts,animation.current,_characterReturnedIdle,_characterAction.exit_pending,
@@ -530,11 +539,12 @@ static void freeMorphCaches(dc_game_model *slot) {
     return nil;
 }
 - (NSData *)lightEntryForSelector:(uint32_t)selector archive:(DCArchive *)archive {
-    NSString *prefix=[NSString stringWithFormat:@"pp%02u_",selector];
+    NSString *suffix=(_sceneType==6?@"_02.xl":@"_01.xl");
+    NSString *prefix=[NSString stringWithFormat:@"pp%02u",selector];
     for(uint32_t i=0;i<archive.entryCount;++i) {
         NSString *name=[archive asciiNameAtIndex:i];
         if(!name || ![name.lowercaseString hasPrefix:prefix.lowercaseString] ||
-           ![name.lowercaseString hasSuffix:@".xl"]) continue;
+           ![name.lowercaseString hasSuffix:suffix.lowercaseString]) continue;
         return [archive readEntryAtIndex:i limit:128*1024 error:nil];
     }
     return nil;
@@ -600,6 +610,11 @@ static void freeMorphCaches(dc_game_model *slot) {
     return YES;
 }
 - (uint32_t)findAnchor:(dc_game_model *)slot {
+    NSString *prefix = _sceneType==5 ? @"p" : (_sceneType==6 ? @"r" : @"l");
+    NSString *stage = [NSString stringWithFormat:@"%c", _characterPrefix];
+    NSString *name = [NSString stringWithFormat:@"m_Nn_yuka_%@_%@", prefix, stage];
+    uint32_t node=[self findNode:slot name:name];
+    if(node!=UINT32_MAX)return node;
     dc_game_map_presentation profile;
     if(dc_game_map_presentation_profile(_mapSelector,&profile)!=DC_OK)return UINT32_MAX;
     return [self findNode:slot name:[NSString stringWithUTF8String:profile.anchor]];
@@ -760,16 +775,19 @@ static void freeMorphCaches(dc_game_model *slot) {
         }
     }
     NSError *reason=nil;DCArchive *mapArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_10.pp"]] error:&reason];
-    DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_08.pp"]] error:&reason];
+    NSString *actorArchiveName=_sceneType==6?@"RPP_05.pp":@"RPP_08.pp";
+    DCArchive *actorArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:actorArchiveName]] error:&reason];
     DCArchive *faceArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_09.pp"]] error:nil];
      DCArchive *auxiliaryArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_04.pp"]] error:nil];
      DCArchive *lightArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_07.pp"]] error:nil];
      if(!mapArchive || !actorArchive || !faceArchive) { if(error)*error=reason.localizedDescription;return nil; }
     _map.xxData=[self entry:[NSString stringWithFormat:@"mm00_%02u.xx",_mapSelector] archive:mapArchive error:error];
     _map.xaData=[self entry:[NSString stringWithFormat:@"mn00_%02u.xa",_mapSelector] archive:mapArchive error:nil];
-    _actor.xxData=[self entry:[NSString stringWithFormat:@"%cm00_01.xx",_characterPrefix] archive:actorArchive error:error];
-    _actor.xaData=[self entry:[NSString stringWithFormat:@"%cn00_02.xa",_characterPrefix] archive:actorArchive error:error];
-    NSData *actorPlacement=[self entry:[NSString stringWithFormat:@"%cm00_01.plst",_characterPrefix] archive:actorArchive error:nil];
+    NSString *bodySuffix=_sceneType==6?@"02":@"01";
+    NSString *animationSuffix=_sceneType==4?@"02":(_sceneType==5?@"03":@"04");
+    _actor.xxData=[self entry:[NSString stringWithFormat:@"%cm00_%@.xx",_characterPrefix,bodySuffix] archive:actorArchive error:error];
+    _actor.xaData=[self entry:[NSString stringWithFormat:@"%cn00_%@.xa",_characterPrefix,animationSuffix] archive:actorArchive error:error];
+    NSData *actorPlacement=[self entry:[NSString stringWithFormat:@"%cm00_%@.plst",_characterPrefix,bodySuffix] archive:actorArchive error:nil];
     if(faceArchive) {
         _face.xxData=[self entry:[NSString stringWithFormat:@"%ck00_00.xx",_characterPrefix] archive:faceArchive error:nil];
         _face.xaData=[self entry:[NSString stringWithFormat:@"%cn00_01.xa",_characterPrefix] archive:faceArchive error:nil];
@@ -792,6 +810,10 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(dc_model_request(_autoCamera.model,0,0)!=DC_OK){if(error)*error=@"Original automatic camera animation unavailable";return nil;}
     }
     NSString *morphError=nil;
+    if(_actor.model && _actor.xaInfo.morph_tracks &&
+       ![self buildMorphCaches:&_actor error:&morphError]) {
+        if(error)*error=morphError ?: @"Game actor morph initialization failed";return nil;
+    }
     if(_face.model && ![self buildMorphCaches:&_face error:&morphError]) { if(error)*error=morphError ?: @"Game morph cache initialization failed";return nil; }
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
@@ -1009,70 +1031,34 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (BOOL)buildMorphCaches:(dc_game_model *)slot error:(NSString **)error {
     freeMorphCaches(slot);
     if(!slot->xaData || !slot->xaInfo.morph_tracks)return YES;
-    slot->morphTrackCount=slot->xaInfo.morph_tracks;
-    slot->morphTracks=calloc(slot->morphTrackCount,sizeof(*slot->morphTracks));
-    if(!slot->morphTracks){slot->morphTrackCount=0;if(error)*error=@"Game morph cache allocation failed";return NO;}
-    dc_xa_morph_vector_set *vectorViews=calloc(slot->xaInfo.morph_vector_sets?slot->xaInfo.morph_vector_sets:1,sizeof(*vectorViews));
-    if(!vectorViews || dc_xa_load_morph_vector_sets(slot->xaData.bytes,slot->xaData.length,vectorViews,slot->xaInfo.morph_vector_sets)!=DC_OK) {
-        free(vectorViews);freeMorphCaches(slot);if(error)*error=@"Game morph vector table failed";return NO;
+    dc_status status=dc_morph_open(slot->xx,slot->xxData.bytes,slot->xxData.length,
+        slot->xaData.bytes,slot->xaData.length,&slot->morph);
+    if(status!=DC_OK) {
+        if(error)*error=[NSString stringWithFormat:@"Game morph runtime binding failed: %d",status];
+        freeMorphCaches(slot);return NO;
     }
-    NSMutableDictionary<NSString *,NSValue *> *vectorTable=[NSMutableDictionary dictionaryWithCapacity:slot->xaInfo.morph_vector_sets];
-    for(uint32_t i=0;i<slot->xaInfo.morph_vector_sets;++i) {
-        NSString *name=[self decodedName:(const uint8_t *)slot->xaData.bytes+vectorViews[i].data_offset length:vectorViews[i].data_length];
-        dc_morph_key_cache ref={.frame=0,.vectorsOffset=vectorViews[i].vectors_offset,.count=vectorViews[i].count};
-        if(name)[vectorTable setObject:[NSValue valueWithBytes:&ref objCType:@encode(dc_morph_key_cache)] forKey:name];
+    dc_morph_info info={0};
+    status=dc_morph_get_info(slot->morph,&info);
+    if(status!=DC_OK||info.tracks!=slot->xaInfo.morph_tracks) {
+        if(error)*error=@"Game morph runtime profile mismatch";
+        freeMorphCaches(slot);return NO;
     }
-    for(uint32_t track=0;track<slot->morphTrackCount;++track) {
-        dc_xa_morph_track trackView;
-        if(dc_xa_morph_track_at(slot->xaData.bytes,slot->xaData.length,track,&trackView)!=DC_OK) { if(error)*error=@"Game morph track cache metadata failed";free(vectorViews);freeMorphCaches(slot);return NO; }
-        NSString *target=[self decodedName:(const uint8_t *)slot->xaData.bytes+trackView.target_offset length:trackView.target_length];
-        uint32_t indexSet=[self morphIndexSetNamed:target model:slot];
-        if(indexSet==UINT32_MAX) { if(error)*error=@"Game morph cache target is unavailable";free(vectorViews);freeMorphCaches(slot);return NO; }
-        dc_xa_morph_index_set indexView;
-        if(dc_xa_morph_index_set_at(slot->xaData.bytes,slot->xaData.length,indexSet,&indexView)!=DC_OK) { if(error)*error=@"Game morph cache index metadata failed";free(vectorViews);freeMorphCaches(slot);return NO; }
-        dc_morph_track_cache *cache=&slot->morphTracks[track];cache->meshIndex=UINT32_MAX;cache->indexCount=indexView.count;
-        if(dc_xx_morph_mesh(slot->xx,(const uint8_t *)slot->xaData.bytes+trackView.name_offset,
-            trackView.name_length,indexView.selector,&cache->meshIndex)!=DC_OK) {
-            if(error)*error=@"Game morph track node/submesh binding failed";free(vectorViews);freeMorphCaches(slot);return NO;
-        }
-        cache->indices=calloc(indexView.count?indexView.count:1,sizeof(*cache->indices));
-        if(!cache->indices || dc_xa_load_morph_indices(slot->xaData.bytes,slot->xaData.length,indexSet,cache->indices,indexView.count)!=DC_OK) { if(error)*error=@"Game morph cache indices failed";free(vectorViews);freeMorphCaches(slot);return NO; }
-        cache->keyCount=trackView.key_count;cache->keys=calloc(cache->keyCount?cache->keyCount:1,sizeof(*cache->keys));
-        if(!cache->keys){if(error)*error=@"Game morph cache key allocation failed";free(vectorViews);freeMorphCaches(slot);return NO;}
-        for(uint32_t keyIndex=0;keyIndex<cache->keyCount;++keyIndex) {
-            dc_xa_morph_key key;if(dc_xa_morph_key_at(slot->xaData.bytes,slot->xaData.length,track,keyIndex,&key)!=DC_OK){if(error)*error=@"Game morph cache key metadata failed";free(vectorViews);freeMorphCaches(slot);return NO;}
-            uint32_t frame=0;memcpy(&frame,key.raw,sizeof(frame));NSString *vectorName=[self decodedName:(const uint8_t *)slot->xaData.bytes+key.value_offset length:key.value_length];
-            NSValue *boxed=vectorTable[vectorName];dc_morph_key_cache ref={0};
-            if(!boxed){if(error)*error=@"Game morph cache vector metadata failed";free(vectorViews);freeMorphCaches(slot);return NO;}
-            [boxed getValue:&ref];ref.frame=frame;cache->keys[keyIndex]=ref;
-        }
-        if(cache->meshIndex==UINT32_MAX || cache->meshIndex>=slot->info.submeshes){if(error)*error=@"Game morph cache mesh binding failed";free(vectorViews);freeMorphCaches(slot);return NO;}
-    }
-    free(vectorViews);
     return YES;
 }
 
 - (BOOL)applyMorphsToModel:(dc_game_model *)slot frame:(float)frame
     buffers:(dc_mesh_vertex **)buffers counts:(const uint32_t *)counts error:(NSString **)error {
-    if(!slot->xaData || !slot->morphTrackCount)return YES;
-    for(uint32_t track=0;track<slot->morphTrackCount;++track) {
-        dc_morph_track_cache *cache=&slot->morphTracks[track];
-        if(!cache->keyCount || cache->meshIndex>=slot->info.submeshes){if(error)*error=@"Game morph cache is incomplete";return NO;}
-        uint32_t selected=0;
-        for(uint32_t key=1;key<cache->keyCount;++key) {
-            if((float)cache->keys[key].frame<=frame)selected=key;else break;
-        }
-        dc_morph_key_cache *vector=&cache->keys[selected];uint32_t meshIndex=cache->meshIndex;
-        if(!buffers[meshIndex] || counts[meshIndex]!=vector->count){if(error)*error=@"Game morph vertex count mismatch";return NO;}
-        const uint8_t *source=(const uint8_t *)slot->xaData.bytes+vector->vectorsOffset;size_t positionBytes=(size_t)vector->count*3*sizeof(float);
-        for(uint32_t i=0;i<cache->indexCount;++i) {
-            uint32_t packed=cache->indices[i];uint32_t ids[2]={packed>>16,packed&0xffffu};
-            for(uint32_t side=0;side<2;++side) {
-                uint32_t vertex=ids[side];if(vertex>=vector->count){if(error)*error=@"Game morph vertex index is out of range";return NO;}
-                memcpy(buffers[meshIndex][vertex].position,source+(size_t)vertex*3*sizeof(float),3*sizeof(float));
-                memcpy(buffers[meshIndex][vertex].normal,source+positionBytes+(size_t)vertex*3*sizeof(float),3*sizeof(float));
-            }
-        }
+    if(!slot->morph)return YES;
+    dc_morph_mesh_buffer *meshBuffers=calloc(slot->info.submeshes?slot->info.submeshes:1,sizeof(*meshBuffers));
+    if(!meshBuffers){if(error)*error=@"Game morph buffer descriptors failed";return NO;}
+    for(uint32_t i=0;i<slot->info.submeshes;++i) {
+        meshBuffers[i]=(dc_morph_mesh_buffer){.vertices=buffers[i],.count=counts[i]};
+    }
+    dc_status status=dc_morph_apply(slot->morph,frame,meshBuffers,slot->info.submeshes);
+    free(meshBuffers);
+    if(status!=DC_OK) {
+        if(error)*error=[NSString stringWithFormat:@"Game morph runtime apply failed: %d",status];
+        return NO;
     }
     return YES;
 }
@@ -1093,7 +1079,7 @@ static void freeMorphCaches(dc_game_model *slot) {
             }
         }
         dc_animation_state actorAnimation;float morphFrame=0;
-        if(dc_model_get_animation(_actor.model,&actorAnimation)==DC_OK) morphFrame=actorAnimation.frame*256.0f;
+        if(dc_model_get_animation(slot->model,&actorAnimation)==DC_OK) morphFrame=actorAnimation.frame;
         NSString *morphError=nil;
         if(![self applyMorphsToModel:slot frame:morphFrame buffers:morphVertices counts:morphCounts error:&morphError]) {
             for(uint32_t mesh=0;mesh<slot->info.submeshes;++mesh)free(morphVertices[mesh]);free(morphVertices);free(morphCounts);return morphError ?: @"Game morph application failed";
@@ -1131,6 +1117,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     width:(uint32_t)width height:(uint32_t)height {
     if(!_loaded)return @"Game scene is not loaded";
     BOOL gameplayScene=(_sceneType==4);
+    BOOL cameraScene=(_sceneType>=4&&_sceneType<=6);
     BOOL pcHome=(pcInput.keys[0xc7]&1)!=0,pcEnd=(pcInput.keys[0xcf]&1)!=0;
     BOOL pcPageUp=(pcInput.keys[0xc9]&1)!=0,pcPageDown=(pcInput.keys[0xd1]&1)!=0;
     BOOL pcNum8=(pcInput.keys[0x48]&1)!=0,pcNum4=(pcInput.keys[0x4b]&1)!=0;
@@ -1138,6 +1125,12 @@ static void freeMorphCaches(dc_game_model *slot) {
     BOOL pcArrowUp=(pcInput.keys[0xc8]&1)!=0,pcArrowLeft=(pcInput.keys[0xcb]&1)!=0;
     BOOL pcArrowDown=(pcInput.keys[0xd0]&1)!=0,pcArrowRight=(pcInput.keys[0xcd]&1)!=0;
     if(pcInput.keys[0x2e]==3)[self requestRenderCapture:@"gameplay-capture.png"];
+    if(cameraScene&&(pcInput.keys[0x3b]==3||pcInput.keys[0x3c]==3)&&!_pendingSystemAction){
+        _pendingSystemAction=pcInput.keys[0x3b]==3?3:4;
+        if(!self.transitionScene||[self.transitionScene requestTransition:2 tick:tick]!=DC_OK)
+            return @"Original direct system transition failed";
+        _pendingEffectSlot=0;_hasPendingEffect=YES;
+    }
     float padDelta=_tickInitialized?fminf((tick-_lastTick)/1000.f,.1f):0;
     if(controller.pressed&DC_PAD_B){
         touching=NO;_inputInitialized=NO;
@@ -1156,7 +1149,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     /* Non-gameplay callbacks have separate state machines. Do not invent
      * tap-to-skip behavior for watch/night/ending chapters. */
     BOOL secondaryOwnsPointer=NO;
-    if(gameplayScene) {
+    if(cameraScene) {
         if(pcInput.keys[0x2f]==3) {
             _secondaryVisible=!_secondaryVisible;++_secondaryVisibilityChanges;
 #if DEBUG
@@ -1207,8 +1200,14 @@ static void freeMorphCaches(dc_game_model *slot) {
             buttons[2].disabled=_stageProgress?0:1;
             int32_t result=-1;
             if(dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(px),(int32_t)lrintf(py),1,0,&result)!=DC_OK)return @"Scene icon hover failed";
+            if(left!=0&&dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(px),(int32_t)lrintf(py),1,left,&result)!=DC_OK)
+                return @"Scene icon input failed";
             _mainIconHover=result==-1?-1:_gameMenu.hover;
-            if(left==3&&_mainIconHover>=1&&_mainIconHover<=4){++_acceptedMenuEvents;_lastAcceptedMenuRow=(uint32_t)_mainIconHover;}
+            if(result==1&&_mainIconHover>=1&&_mainIconHover<=4){
+                ++_acceptedMenuEvents;_lastAcceptedMenuRow=(uint32_t)_mainIconHover;
+                if(_sceneType==4&&_mapSelector==0&&_mainIconHover==1&&!_pendingVoiceName)
+                    _pendingVoiceName=@"ast001_01.wav";
+            }
             if(pcInput.mouse[1]==3&&_mainIconHover>=1&&_mainIconHover<=4) {
                 dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
                 dc_scene_context_input input={.scene_type=_sceneType,.icon=(uint32_t)_mainIconHover,.stage_progress=_stageProgress,
@@ -1308,6 +1307,12 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(dc_model_tick(_autoCamera.model,delta,tick,&_autoCamera.world)!=DC_OK)return @"Original camera animation tick failed";
     }
     dc_camera_orbit orbit=[self activeCameraOrbit];dc_matrix automaticWorld=gameIdentity();
+    if(_sceneType==6&&_primaryCameraMode==0) {
+        uint32_t nightCameraNode=[self findNode:&_actor name:[self characterNode:@"s_Nn_kamera_S"]];
+        dc_matrix nightCameraWorld;
+        if(nightCameraNode!=UINT32_MAX&&dc_model_global(_actor.model,nightCameraNode,&nightCameraWorld)==DC_OK)
+            orbit=(dc_camera_orbit){.base=nightCameraWorld};
+    }
     if(_primaryCameraMode==2||_secondaryCameraMode==2) {
         if([self cameraBinding:DC_CAMERA_ANIMATION_EYE matrix:&_autoCameraEye]!=DC_OK||
            [self cameraBinding:DC_CAMERA_ANIMATION_TARGET matrix:&_autoCameraTarget]!=DC_OK)return @"Original automatic camera binding failed";
@@ -1328,7 +1333,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _renderedCameraWorld=camera.world;
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
     dc_camera_orbit secondaryOrbit=_secondaryCamera;dc_camera_matrices secondaryCamera={0};
-    if(gameplayScene) {
+    if(cameraScene) {
         if(dc_camera_secondary_viewport(&viewport,&_secondaryViewport)!=DC_OK)return @"Original secondary viewport unavailable";
         if(_secondaryCameraMode==2) {
             secondaryOrbit=(dc_camera_orbit){.base=automaticWorld};++_secondaryAutoFrames;

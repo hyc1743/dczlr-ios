@@ -23,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)requestAuxiliary:(uint32_t)destination transition:(DCStartupScene *)transition tick:(uint32_t)tick;
 - (void)consumeAuxiliaryDestination;
 - (void)resumeAtTick:(uint32_t)tick;
+- (void)resumeFromAuxiliaryAtTick:(uint32_t)tick;
 - (void)detachRenderer;
 - (void)pause;
 - (nullable NSString *)drawWithRenderer:(dc_vk_sprite *)renderer transition:(DCStartupScene *)transition

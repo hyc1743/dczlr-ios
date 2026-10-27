@@ -66,6 +66,11 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(_tickInitialized)_text.wait_stamp+=tick-_lastTick;
     _lastTick=tick;_tickInitialized=YES;_touching=NO;
 }
+- (void)resumeFromAuxiliaryAtTick:(uint32_t)tick {
+    _flow.action=0;_flow.waiting=0;
+    _auxiliaryDestination=0;
+    [self resumeAtTick:tick];
+}
 - (NSString *)requestAuxiliary:(uint32_t)destination transition:(DCStartupScene *)transition tick:(uint32_t)tick {
     if(_flow.waiting||_auxiliaryDestination)return nil;
     if(destination!=2&&destination!=5&&destination!=7)return @"Unknown original script system destination";
