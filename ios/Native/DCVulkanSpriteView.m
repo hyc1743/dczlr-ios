@@ -15,6 +15,7 @@
 #import "DCConfigScene.h"
 #import "DCSaveScene.h"
 #import "DCDummyScene.h"
+#import "DCEndingScene.h"
 #import "DCGamepadView.h"
 #include "dc_menu.h"
 #include "dc_save.h"
@@ -65,6 +66,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     DCSaveScene *_saveScene;
     DCDummyScene *_dummyScene;
     uint32_t _dummyOwner;
+    DCEndingScene *_endingScene;
+    uint32_t _endingSceneTypeOverride;
     NSMutableData *_numericState;
     NSData *_configuration;
     uint32_t _systemOwnerType,_systemOwnerChapter;
@@ -201,7 +204,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     NSString *gameError=nil;
     BOOL resume=_resumeNextScene;_resumeNextScene=NO;
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter
-        mapSelector:_story.map stage:_story.stage stageProgress:_story.stage<DC_STORY_STAGES?_story.stages[_story.stage].progress:0 resumeSavedPlayer:resume error:&gameError];
+        mapSelector:_story.map stage:_story.stage stageProgress:_story.stage<DC_STORY_STAGES?_story.stages[_story.stage].progress:0
+        sceneTypeOverride:_endingSceneTypeOverride resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _gameScene.transitionScene=_startupScene;
     _gameScene.secondaryViewVisible=!_secondaryViewDisabledSetting;
@@ -388,11 +392,20 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     _introScene=nil;
     [_gameScene detachRenderer];
     _gameScene=nil;
+    [_endingScene detachRenderer];
+    _endingScene=nil;
+    _endingSceneTypeOverride=0;
     if(profile.script>=0) {
         _resumeNextScene=NO;
         NSString *introError=nil;
         _introScene=[[DCIntroScene alloc] initWithDirectory:directory startChapter:chapter error:&introError];
         if(!_introScene)return introError ?: @"Mid-story script entry failed";
+    } else if(profile.scene==DC_STORY_SCENE_ENDING) {
+        NSString *endingError=nil;
+        _endingScene=[[DCEndingScene alloc] initWithDirectory:directory renderer:_renderer transition:_startupScene
+            story:&_story error:&endingError];
+        if(!_endingScene)return endingError?:@"Ending selector initialization failed";
+        _previousGameplayTouch=NO;_suppressGameplayTouch=YES;
     } else {
         NSString *gameError=[self startGameSceneFromDirectory:directory];
         if(gameError)return gameError;
@@ -422,6 +435,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     [_configScene detachRenderer];
     [_saveScene detachRenderer];
     [_dummyScene detachRenderer];
+    [_endingScene detachRenderer];
     [_startupScene detachRenderer];
     dc_vk_sprite_destroy(_renderer);
     _renderer = NULL;
@@ -434,7 +448,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     _galleryTexture=0;
     _gameScene = nil;
     _configScene=nil;_saveScene=nil;_numericState=nil;_configuration=nil;
-    _dummyScene=nil;_dummyOwner=0;
+    _dummyScene=nil;_dummyOwner=0;_endingScene=nil;_endingSceneTypeOverride=0;
     _previousGameplayTouch = NO;
     _suppressGameplayTouch = NO;
     _lastTitleScan = 0;
@@ -595,6 +609,37 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             else if(_dummyOwner==2)[_saveScene resumeFromTemporaryScreen];
             else if(_dummyOwner==3)[_introScene resumeFromAuxiliaryAtTick:sceneTick];
             _dummyOwner=0;
+        }
+        return nil;
+    }
+    if(_endingScene) {
+        NSString *failure=[_endingScene drawAtTick:sceneTick pcInput:pcInput width:_width height:_height];
+        if(failure)return failure;
+        _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;
+        if(_endingScene.action==2){
+            [_endingScene detachRenderer];_endingScene=nil;_endingSceneTypeOverride=0;
+            _titleStateInitialized=NO;_titleMenuInitialized=NO;_previousTitleTouch=NO;
+        } else if(_endingScene.action==3||_endingScene.action==5){
+            uint32_t action=_endingScene.action;
+            [_endingScene detachRenderer];_endingScene=nil;
+            NSString *pageError=action==3?[self enterConfigSceneFromDirectory:directory]:
+                [self enterSaveSceneFromDirectory:directory];
+            if(pageError)return pageError;
+        } else if(_endingScene.action==4){
+            return @"Game session ended";
+        } else if(_endingScene.routeReady){
+            static const uint32_t maps[7]={0,1,3,4,5,7,8};
+            uint32_t category=_endingScene.category;
+            _story.map=maps[_endingScene.mapIndex];_story.chapter=24;
+            uint32_t stage=_endingScene.firstStage<=2?_endingScene.firstStage:0;
+            _story.stage=2-stage;
+            _endingSceneTypeOverride=category==0?4:(category==1?5:6);
+            [_endingScene detachRenderer];_endingScene=nil;
+            [self saveStoryToDirectory:directory];
+            NSString *gameError=[self startGameSceneFromDirectory:directory];
+            if(gameError)return gameError;
+            _endingSceneTypeOverride=0;
+            _suppressGameplayTouch=YES;
         }
         return nil;
     }

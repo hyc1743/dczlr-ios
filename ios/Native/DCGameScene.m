@@ -742,6 +742,12 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
     mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress resumeSavedPlayer:(BOOL)resume error:(NSString **)error {
+    return [self initWithDirectory:directory renderer:renderer chapter:chapter mapSelector:mapSelector stage:stage
+        stageProgress:progress sceneTypeOverride:0 resumeSavedPlayer:resume error:error];
+}
+- (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
+    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress
+    sceneTypeOverride:(uint32_t)sceneTypeOverride resumeSavedPlayer:(BOOL)resume error:(NSString **)error {
     if(!(self=[super init]))return nil;_directory=[directory copy];_renderer=renderer;
     _storyChapter=chapter;_storyPhase=0;
     dc_story_chapter profile;
@@ -749,7 +755,10 @@ static void freeMorphCaches(dc_game_model *slot) {
     /* Scene chapters carry their own selectors; the ending scene keeps the
      * previous map/stage from the story state. */
     _mapSelector=profile.map>=0 ? (uint32_t)profile.map : (mapSelector<=8 ? mapSelector : 0);
-    _sceneKind=profile.scene;_sceneType=profile.scene_type;
+    _sceneKind=profile.scene;_sceneType=sceneTypeOverride?sceneTypeOverride:profile.scene_type;
+    if(sceneTypeOverride==4)_sceneKind=DC_STORY_SCENE_GAMEPLAY;
+    else if(sceneTypeOverride==5)_sceneKind=DC_STORY_SCENE_WATCH;
+    else if(sceneTypeOverride==6)_sceneKind=DC_STORY_SCENE_NIGHT;
     /* Original settings Reset defaults (0050f6f0): secondary view enabled,
      * wheel step4. Camera limits come from 00512cc0/00479490. */
     _secondaryVisible=_sceneType==4;

@@ -46,6 +46,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
     mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress resumeSavedPlayer:(BOOL)resume error:(NSString **)error;
+- (nullable instancetype)initWithDirectory:(NSString *)directory
+    renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
+    mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress
+    sceneTypeOverride:(uint32_t)sceneTypeOverride resumeSavedPlayer:(BOOL)resume error:(NSString **)error;
 - (void)detachRenderer;
 - (nullable NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
     width:(uint32_t)width height:(uint32_t)height;
