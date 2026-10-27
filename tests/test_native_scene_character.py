@@ -61,6 +61,19 @@ class CharacterActionTests(unittest.TestCase):
             else:status=self.lib.dc_animation_set_loop(clips,timing,512,0,row['value'])
             self.assertEqual(status,0)
             self.assertEqual([clips[0].loop,timing[0].loop_limit,timing[0].chain,timing[0].next_clip],row['expected'])
+    def test_recorded_original_initial_character_dispatch(self):
+        fixture=json.loads((ROOT/'tests/fixtures/character-select-original-vectors.json').read_text())
+        for row in fixture['vectors']:
+            state=SceneCharacterState(row['counter'],0,0,0,0,0)
+            event=self.select(state,row['option']);expected=row['observed']
+            self.assertEqual((state.activation_count,state.delay_pending,state.exit_pending),
+                             (expected['count'],expected['delay'],expected['exit']))
+            if row['option']==0:
+                self.assertEqual(event.configure_animation,1)
+                self.assertEqual(expected['calls'],[['0x404630',6,7],['0x404680',5,1]])
+            else:
+                self.assertEqual(event.play_slot,28)
+                self.assertEqual(expected['calls'],[['sound',28]])
     def test_actual_initial_asset_chain_returns_to_idle(self):
         if not (ROOT/'Data/RPP_08.pp').exists():self.skipTest('private original resource gate')
         with PPArchive(ROOT/'Data/RPP_08.pp') as pp:

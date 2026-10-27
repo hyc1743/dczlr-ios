@@ -1,0 +1,1090 @@
+{
+  "sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "original_function_sha256": {
+    "0x5358c0": "b09da6c9bff721e6e9515a229c0abd15eb0998ed00debfbb1610639b059774bf"
+  },
+  "cases": 54,
+  "scope": "initial type4 progress0 with both alternate-node bindings null; model config and audio stub boundaries; no graphics or full gameplay",
+  "vectors": [
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 1,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 1,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 1,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 11,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 11,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 11,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 13,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 13,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 0,
+      "clip": 13,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 1,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 1,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 1,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 11,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 11,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 11,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 13,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 13,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 1,
+      "clip": 13,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 1,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 1,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 1,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 11,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 11,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 11,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 13,
+      "counter": 0,
+      "observed": {
+        "count": 1,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 13,
+      "counter": 9999,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 0,
+      "stage": 2,
+      "clip": 13,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 1,
+        "exit": 0,
+        "calls": [
+          [
+            "0x404630",
+            6,
+            7
+          ],
+          [
+            "0x404680",
+            5,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 1,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 1,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 1,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 11,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 11,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 11,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 13,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 13,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 0,
+      "clip": 13,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 1,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 1,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 1,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 11,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 11,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 11,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 13,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 13,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 1,
+      "clip": 13,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 1,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 1,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 1,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 11,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 11,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 11,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 13,
+      "counter": 0,
+      "observed": {
+        "count": 0,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 13,
+      "counter": 9999,
+      "observed": {
+        "count": 9999,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    },
+    {
+      "option": 1,
+      "stage": 2,
+      "clip": 13,
+      "counter": 10000,
+      "observed": {
+        "count": 10000,
+        "delay": 0,
+        "exit": 1,
+        "calls": [
+          [
+            "sound",
+            28
+          ]
+        ]
+      }
+    }
+  ]
+}

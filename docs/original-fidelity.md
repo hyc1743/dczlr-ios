@@ -264,7 +264,7 @@ and special effect programs remain outside this change.
 The local Intel Vulkan pixel gate verifies black/gray/white RGB shadow
 samples preserve/darken/blacken the floor, independent of submission order.
 All prior pixel, clipping, depth, filter, scissor and admission gates pass.
-Validation layers are disabled on this local run; Apple execution is pending.
+Validation layers are disabled on this local run; CI evidence follows below.
 
 FUN_00404630/00404680 are now available as model configuration operations.
 20 isolated original-instruction cases match chain enable/disable and loop
@@ -290,4 +290,43 @@ and restored clip1, actual slot28 busy-to-idle playback, original transition,
 and arrival at numbered script chapter4. The route still does not certify
 full story equivalence, later character actions, outfit actions, secondary
 camera modes or save/edit screens. Local unittest discovery passes314 tests.
-GitHub/Apple validation for this change is pending.
+The Apple simulator validation is recorded below.
+
+Additional isolated execution of FUN_005358c0 matches 54 initial selection
+cases across stages 0/1/2, clips 1/11/13, options 0/1 and counter boundaries.
+Model configuration and sound starts are recorded helper boundaries;
+alternate-node bindings are null, selecting the initial hidden-alternate
+branch. This is not a live game observation. The portable replay fixture is
+tests/fixtures/character-select-original-vectors.json; local discovery now
+passes 315 tests.
+
+GitHub Vulkan run 40424130048 (source 06073ab) passed both Linux llvmpipe with
+validation enabled (zero reported errors) and macOS MoltenVK pixel/surface
+gates. Artifact 12698093550 contains Linux pixel evidence, and 12699197138
+the Apple evidence. Local RGB comparisons at a chosen overhead camera find
+53,830 shadow-darkened pixels, zero shadow-lightened pixels, and 34,863 pixels
+restored from the old black-rectangle rendering. Those numeric comparisons
+use the original assets through the shipping renderer, with/without the
+shadow draw; they are not an original-PC GPU comparison. Local captures,
+reports and downloaded pixel artifacts are retained under out/render-fix.
+
+### Confirmed initial character simulator run
+
+GitHub run 40424126130 passed on source 06073ab9eb4e7d6e34125ca17e658c3a6d5ef3d3.
+Portable checks, iOS compilation, generated startup/New Game, simultaneous
+PC input and the real-resource mouse/camera/character gate all succeeded.
+The unsigned IPA job was intentionally skipped; packaging is separate.
+
+The original character context option 0 produced active clip 2 (178,999
+actor-visible pixels), followed by restored clip 1 (175,026). The trace
+records the actual slot 28 player busy and then idle after 6,267 ms, followed
+by original transition clip 2 and a presented numbered script 4:0. The two
+character and two camera actions leave pending_actions=0 on this route.
+Original active CAM reset still matches its source bytes. All 28 virtual
+controls remain outside game rect (183,0,508,381), with zero overlap.
+
+Artifact 12698738978 is retained in out/render-fix/ios-mouse-input with
+report.json, native captures/sidecars and app.log. ZIP SHA-256 is
+1c3293af56b507512273fe37b9a6af62847e9816e27c998b61131d0fdfeb1ca8;
+CRC validation and local artifact review passed. This certifies only the
+initial type-4 progress-zero route, not later menus or the complete game.
