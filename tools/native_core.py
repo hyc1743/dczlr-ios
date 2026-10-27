@@ -477,7 +477,7 @@ def library():
         if sys.platform not in ("win32", "darwin"):
             shared_flags += ["-fPIC"]
         env = dict(os.environ, ZIG_GLOBAL_CACHE_DIR=str(ROOT / ".tools/zig-cache"))
-        result = subprocess.run(command + ["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror",
+        result = subprocess.run(command + ["-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-Wno-misleading-indentation",
             "-DDC_NATIVE_SHARED", *shared_flags, "-I" + str(ROOT / "native/include"),
             *(str(p) for p in sources), *(["-lm"] if sys.platform != "win32" else []), "-o", str(target)], env=env,
             capture_output=True, text=True, timeout=180)
