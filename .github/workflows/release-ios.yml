@@ -12,7 +12,7 @@ on:
       validation_run:
         description: Successful scoped iOS simulator validation run
         required: true
-        default: '40424126130'
+        default: '40431033351'
         type: string
 
 permissions:
@@ -44,7 +44,7 @@ jobs:
       - name: Verify scoped simulator validation matches release code
         env:
           GH_TOKEN: ${{ github.token }}
-          VALIDATION_RUN: ${{ inputs.validation_run || '40424126130' }}
+          VALIDATION_RUN: ${{ inputs.validation_run || '40431033351' }}
           RELEASE_TAG: ${{ steps.tag.outputs.value }}
         run: |
           python3 tools/verify_release_validation.py --run "$VALIDATION_RUN" --tag "$RELEASE_TAG" --output out/release-validation.json
@@ -90,7 +90,7 @@ jobs:
           report={**package,'release_channel':'development prerelease',
               'source_revision':os.environ['GITHUB_SHA'],'release_run':os.environ['GITHUB_RUN_ID'],
               'validation':validation,'portable_checks':'passed in release workflow',
-              'known_limitations':['evolved character/outfit actions and remaining camera modes incomplete',
+              'known_limitations':['evolved character/outfit actions incomplete',
                   'secondary view and save/edit screens incomplete','complete story and original visual equivalence not established',
                   'physical device execution and signing not tested'],
               'resources':'external; existing Documents/game/Data can be reused',

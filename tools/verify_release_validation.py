@@ -18,7 +18,7 @@ def check(run,jobs):
               'Exercise simultaneous keyboard and mouse controls','Verify virtual mouse on the first real scene'}
     passed={s['name'] for j in jobs for s in j.get('steps',[]) if s['conclusion']=='success'}
     if not required<=passed:raise ValueError('Missing scoped simulator execution checks')
-    return {'run':run['id'],'source':run['head_sha'],'scope':'startup, PC/touch input, original scene UI, primary retarget, CAM reset and initial character animation/audio/chapter4 handoff',
+    return {'run':run['id'],'source':run['head_sha'],'scope':'startup, PC/touch input, original scene UI, both primary targets, automatic camera on/off, CAM reset and initial character animation/audio/chapter4 handoff',
             'complete_story':'not tested','physical_device':'not tested'}
 def normalized_project(text):
     return re.sub(r'(CFBundle(?:ShortVersionString|Version):)\s*"[^"\n]+"',r'\1 "VERSION"',text)

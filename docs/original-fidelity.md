@@ -368,8 +368,7 @@ captures at two animation frames, held Num6/Up while automatic mode is active,
 toggle-off CAM/world-matrix restoration, then the existing initial character
 actions and script-4 handoff. A separate Python calculation checks captured
 camera world matrices, actual eye motion and the +2 target height. Simulator
-execution for this change is pending; full original scene equivalence remains
-unverified.
+evidence follows below; full original scene equivalence remains unverified.
 
 The presentation log's automatic sample count saturates at eight; the GPU
 sidecars retain the full animation/frame counters. This avoids opening and
@@ -377,3 +376,35 @@ appending to the on-device log on every automatic-camera frame. Initial
 simulator run 40430406391 was cancelled before scene validation after this
 logging issue was identified. Vulkan run 40430409561 passed Linux and Apple
 pixel/surface gates on the unchanged camera C code at source 4703cd7.
+
+### Confirmed extended primary-camera simulator run
+
+GitHub run 40431033351 succeeded on source
+16c6f66ded6a1df279ec59578fbbccf1ff0f874e. Portable tests, iOS compilation,
+startup/New Game, simultaneous PC input and the expanded real-resource route
+passed. Exact GPU captures show primary target 1 with 195,286 actor-visible
+pixels, automatic frame 1 with 286,800, later automatic frame 8 with 282,779,
+and automatic-off restoration with 175,747.
+
+Original auto_cam animation frames advanced from 9.4679985 to 10.2019997;
+the eye moved from (71.7242584,-2.9135201,3.3714945) to
+(71.9920197,-2.9135201,-2.1151638). Independent Python calculations match
+the rendered world matrices using the animated eye and light-node target
+raised by exactly 2.0. Num6 and Up were held during this interval, while
+the underlying seven CAM parameters remained unchanged. Toggling off
+restored the original CAM parameters and rendered world matrix.
+
+The route then executed the existing original character animation, sound
+completion gate and transition into numbered script 4:0. All 28 virtual
+controls remain outside rect (183,0,508,381) with zero overlap. This is an
+initial type-4 scene route, not complete-story or physical-device evidence.
+
+Artifact 12703200134 is retained under
+out/primary-camera-modes-evidence-16c6f66. The downloaded ZIP passed CRC
+validation; SHA-256 is
+ee3bf4bcbd57b1e54e0a87acada78688e0ee29d9d0218a16ba7ae1880b2f39b9.
+The report, native captures/sidecars and app.log were reviewed locally.
+Linux Vulkan artifact 12700659920 and Apple artifact 12700689957 are retained
+under out/original-camera-modes; their ZIP hashes are respectively
+434f8d0aa2b810fa22764e52c40a924a97c39c90aed940095e9a3810bc90dda3 and
+0790771e26c36904f01b3b78dfbe2cb5b1a2a3dc08735aaf86ad59bca6ddaadf.
