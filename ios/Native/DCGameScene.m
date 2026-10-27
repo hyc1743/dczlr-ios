@@ -98,7 +98,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_xl_light _mapVariantLight;
     dc_vk_sprite *_renderer;
     dc_game_model _map,_actor,_autoCamera;
-    dc_game_model _face;
+    dc_game_model _face,_watchAuxiliary[2];
     dc_matrix _cameraBase,_actorWorld;
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginY,_actorOriginZ;
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
@@ -266,6 +266,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_model_shift_clock(_map.model,elapsed);dc_model_shift_clock(_actor.model,elapsed);
     if(_face.model)dc_model_shift_clock(_face.model,elapsed);
     if(_autoCamera.model)dc_model_shift_clock(_autoCamera.model,elapsed);
+    for(unsigned auxiliary=0;auxiliary<2;++auxiliary)if(_watchAuxiliary[auxiliary].model)
+        dc_model_shift_clock(_watchAuxiliary[auxiliary].model,elapsed);
     _lastTick=_characterLastTick=tick;_characterClockInitialized=YES;
     _exitSoundStartTick+=elapsed;_interactionStartTick+=elapsed;_interactionState.start_tick+=elapsed;
     _pointerCameraOwner=0;_inputInitialized=NO;_previousGameMenuTouch=NO;
@@ -807,6 +809,17 @@ static void freeMorphCaches(dc_game_model *slot) {
      }
     if(!_map.xxData || !_actor.xxData || !_actor.xaData)return nil;
     if(![self openModel:&_map staticOnly:(_map.xaData==nil) error:error] || ![self openModel:&_actor staticOnly:NO error:error])return nil;
+    if(_sceneType==5) {
+        for(unsigned auxiliary=0;auxiliary<2;++auxiliary) {
+            NSString *xxName=[NSString stringWithFormat:@"sm%02u_%02u.xx",_storyStage,auxiliary];
+            NSString *xaName=[NSString stringWithFormat:@"sn%02u_%02u.xa",_storyStage,auxiliary];
+            _watchAuxiliary[auxiliary].xxData=[self entry:xxName archive:actorArchive error:error];
+            _watchAuxiliary[auxiliary].xaData=[self entry:xaName archive:actorArchive error:error];
+            if(!_watchAuxiliary[auxiliary].xxData||!_watchAuxiliary[auxiliary].xaData||
+               ![self openModel:&_watchAuxiliary[auxiliary] staticOnly:NO error:error])return nil;
+            if(dc_model_request(_watchAuxiliary[auxiliary].model,0,0)!=DC_OK){if(error)*error=@"Watch auxiliary animation request failed";return nil;}
+        }
+    }
     if(_face.xxData && _face.xaData && ![self openModel:&_face staticOnly:YES error:error])return nil;
     if(_sceneType==4) {
         DCArchive *cameraArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_17.pp"]] error:&reason];
@@ -896,6 +909,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _cameraAutoSelected=_sceneType>=4&&_sceneType<=6;
     _actor.world=_actorWorld;
     _face.world=_actorWorld;
+    for(unsigned auxiliary=0;auxiliary<2;++auxiliary)_watchAuxiliary[auxiliary].world=_actorWorld;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
     _actorOriginX=_actorWorld.values[12];_actorOriginY=_actorWorld.values[13];_actorOriginZ=_actorWorld.values[14];
     [self computeWalkBounds];
@@ -918,7 +932,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     /* All draws are blocking and serialized by the view's render queue.
      * Release GPU handles while their renderer is still alive, including
      * partially initialized models; dealloc can then free the CPU data. */
-    dc_game_model *models[]={&_map,&_actor,&_face,&_autoCamera};
+    dc_game_model *models[]={&_map,&_actor,&_face,&_autoCamera,&_watchAuxiliary[0],&_watchAuxiliary[1]};
     for(size_t m=0;m<sizeof(models)/sizeof(models[0]);++m) {
         dc_game_model *slot=models[m];
         if(slot->textures)for(uint32_t i=0;i<slot->textureCount;++i) {
@@ -928,7 +942,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     [self detachSceneUI];_renderer=NULL;
 }
-- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachSceneUI];[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face];[self detachModel:&_autoCamera]; }
+- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachSceneUI];[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face];[self detachModel:&_autoCamera];[self detachModel:&_watchAuxiliary[0]];[self detachModel:&_watchAuxiliary[1]]; }
 
 - (void)detachSceneUI {
     if(_renderer)for(NSNumber *handle in _sceneUITextures.allValues)dc_vk_sprite_remove_texture(_renderer,handle.unsignedLongLongValue);
@@ -1324,6 +1338,10 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(![self updateFaceAttachment])return @"Game face anchor lookup failed";
         if(dc_model_tick(_face.model,0,tick,&_face.world)!=DC_OK)return @"Game face tick failed";
     }
+    for(unsigned auxiliary=0;auxiliary<2;++auxiliary)if(_watchAuxiliary[auxiliary].model) {
+        if(dc_model_tick(_watchAuxiliary[auxiliary].model,delta,tick,&_watchAuxiliary[auxiliary].world)!=DC_OK)
+            return @"Watch auxiliary model tick failed";
+    }
     if(_autoCamera.model) {
         dc_matrix target;
         if([self cameraBinding:DC_CAMERA_ANIMATION_TARGET matrix:&target]!=DC_OK)return @"Original animated camera target unavailable";
@@ -1371,7 +1389,9 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(dc_camera_build(&secondaryOrbit,&secondaryLens,&secondaryCamera)!=DC_OK)return @"Original secondary camera build failed";
         _secondaryRenderedWorld=secondaryCamera.world;
     }
-    size_t geometryCapacity=(_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes)*(_secondaryVisible?2:1);
+    size_t auxiliaryMeshes=_watchAuxiliary[0].model?_watchAuxiliary[0].info.submeshes:0;
+    auxiliaryMeshes+=_watchAuxiliary[1].model?_watchAuxiliary[1].info.submeshes:0;
+    size_t geometryCapacity=(_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes+auxiliaryMeshes)*(_secondaryVisible?2:1);
     size_t capacity=geometryCapacity+22+self.transitionScene.transitionMeshCapacity;
     dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));if(!draws)return @"Game draw allocation failed";
     __attribute__((objc_precise_lifetime)) NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
@@ -1380,6 +1400,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(!failure)failure=[self append:&_actor camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;
     if(!failure && _face.model)failure=[self append:&_face camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
+    for(unsigned auxiliary=0;auxiliary<2;++auxiliary)if(!failure&&_watchAuxiliary[auxiliary].model)
+        failure=[self append:&_watchAuxiliary[auxiliary] camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     size_t primarySceneCount=count,secondaryStart=count,secondaryMapCount=0,secondarySceneCount=0;
     if(!failure&&_secondaryVisible) {
         uint32_t secondaryMapTriangles=0,secondaryActorTriangles=0;
@@ -1387,6 +1409,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         secondaryMapCount=count-secondaryStart;
         if(!failure)failure=[self append:&_actor camera:&secondaryCamera viewport:&_secondaryViewport draws:draws count:&count storage:storage triangles:&secondaryActorTriangles];
         if(!failure&&_face.model)failure=[self append:&_face camera:&secondaryCamera viewport:&_secondaryViewport draws:draws count:&count storage:storage triangles:&secondaryActorTriangles];
+        for(unsigned auxiliary=0;auxiliary<2;++auxiliary)if(!failure&&_watchAuxiliary[auxiliary].model)
+            failure=[self append:&_watchAuxiliary[auxiliary] camera:&secondaryCamera viewport:&_secondaryViewport draws:draws count:&count storage:storage triangles:&secondaryActorTriangles];
         secondarySceneCount=count-secondaryStart;
     }
     size_t sceneDrawCount=count;
