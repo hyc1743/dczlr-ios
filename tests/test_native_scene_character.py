@@ -38,11 +38,17 @@ class CharacterActionTests(unittest.TestCase):
         self.assertEqual((state.activation_count,state.delay_ms),(10000,1000))
         self.assertEqual(self.step(state,500).request_clip,2)
     def test_unsupported_profile_preserves_all_outputs(self):
-        for scene,progress,option in ((5,0,0),(4,1,0),(4,0,2)):
+        for scene,progress,option in ((7,0,0),(4,1,0),(4,0,2)):
             state=SceneCharacterState(12,345,1,0,0,0);out=SceneCharacterEvent(9,9,9,9)
             before=(bytes(state),bytes(out))
             self.assertNotEqual(self.lib.dc_scene_character_select(C.byref(state),scene,progress,option,C.byref(out)),0)
             self.assertEqual((bytes(state),bytes(out)),before)
+    def test_watch_and_night_initial_context_actions(self):
+        for scene,options in ((5,4),(6,3)):
+            for option in range(options):
+                state=SceneCharacterState();out=SceneCharacterEvent()
+                self.assertEqual(self.lib.dc_scene_character_select(C.byref(state),scene,0,option,C.byref(out)),0)
+                self.assertTrue(out.request_clip!=0xffffffff or out.play_slot!=0xffffffff)
     def test_effect_slot_order_and_empty_tail(self):
         for slot,expected in ((0,'se100.wav'),(16,'se321.wav'),(22,'se021.wav'),(28,'se030.wav'),(29,'se031.wav')):
             name=C.create_string_buffer(16)

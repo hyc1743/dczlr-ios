@@ -22,6 +22,21 @@ static dc_scene_character_event character_event(void) {
 }
 dc_status dc_scene_character_select(dc_scene_character_state *state,uint32_t type,uint32_t progress,uint32_t option,dc_scene_character_event *out) {
     if(!state||!out)return DC_ARGUMENT;
+    if(type==5) {
+        if(option>3)return DC_RANGE;
+        dc_scene_character_state next=*state;dc_scene_character_event event=character_event();
+        if(next.exit_pending||next.transition_pending)return DC_NOT_FOUND;
+        event.request_clip=(option==0?4:option==1?5:option==2?2:7);
+        next.delay_pending=0;*state=next;*out=event;return DC_OK;
+    }
+    if(type==6) {
+        if(option>2)return DC_RANGE;
+        dc_scene_character_state next=*state;dc_scene_character_event event=character_event();
+        if(next.exit_pending||next.transition_pending)return DC_NOT_FOUND;
+        if(option==2){next.exit_pending=1;event.play_slot=28;}
+        else event.request_clip=option==0?2:6;
+        *state=next;*out=event;return DC_OK;
+    }
     if(type!=4||progress)return DC_NOT_FOUND;
     if(option>1)return DC_RANGE;
     dc_scene_character_state next=*state;dc_scene_character_event event=character_event();
@@ -56,7 +71,7 @@ dc_status dc_scene_icon_uv(uint32_t stage,uint32_t icon,float *u0,float *u1) {
 
 dc_status dc_scene_action_build(uint32_t type,uint32_t icon,uint32_t option,uint32_t mode,uint32_t secondary,dc_scene_action_plan *out) {
     if(!out)return DC_ARGUMENT;
-    if(type!=4)return DC_NOT_FOUND;
+    if(type!=4&&!(type>=5&&type<=6&&icon==1))return DC_NOT_FOUND;
     if(icon<1||icon>4||mode>2||secondary>2)return DC_RANGE;
     if(icon<3)return DC_NOT_FOUND;
     dc_scene_action_plan plan={.camera_mode=mode,.secondary_camera_mode=secondary};
@@ -82,11 +97,18 @@ dc_status dc_scene_action_build(uint32_t type,uint32_t icon,uint32_t option,uint
 
 dc_status dc_scene_context_build(const dc_scene_context_input *in,dc_scene_context *out) {
     if(!in||!out)return DC_ARGUMENT;
-    if(in->scene_type!=4)return DC_NOT_FOUND;
+    if(in->scene_type!=4&&!(in->icon==1&&in->scene_type>=5&&in->scene_type<=6))return DC_NOT_FOUND;
     if(in->icon<1||in->icon>4||in->stage_progress>2||in->camera_mode>2||in->secondary_camera_mode>2||!isfinite(in->x)||!isfinite(in->y))return DC_RANGE;
     dc_scene_context menu={.icon=in->icon,.opening_right=1,.hover=-1};
     for(unsigned i=0;i<7;++i)menu.items[i].resource_id=-1;
-    if(in->icon==1) {
+    if(in->scene_type==5&&in->icon==1) {
+        menu.count=4;int32_t ids[]={1,2,3,7};
+        for(unsigned i=0;i<menu.count;++i)menu.items[i]=(dc_scene_context_item){ids[i],i,0,0};
+    } else if(in->scene_type==6&&in->icon==1) {
+        menu.count=2;
+        int32_t ids[]={1,2,0,0,0,0};
+        for(unsigned i=0;i<menu.count;++i)menu.items[i]=(dc_scene_context_item){ids[i],i,0,0};
+    } else if(in->icon==1) {
         if(in->stage_progress)return DC_NOT_FOUND;
         if(in->animation==1||in->animation==11||in->animation==13) {
             menu.count=2;menu.items[0]=(dc_scene_context_item){1,6,0,0};menu.items[1]=(dc_scene_context_item){2,0,0,0};
@@ -139,7 +161,7 @@ dc_status dc_scene_context_step(dc_scene_context *menu,float x,float y,uint32_t 
 }
 dc_status dc_scene_context_resource(uint32_t type,uint32_t icon,int32_t id,uint32_t state,char *out,size_t capacity) {
     if(!out)return DC_ARGUMENT;
-    if(type!=4)return DC_NOT_FOUND;
+    if(type<4||type>6)return DC_NOT_FOUND;
     if(icon<1||icon>4||id<0||id>999||state>1)return DC_RANGE;
     char buffer[32];int n=snprintf(buffer,sizeof(buffer),"M_%c%03d%c.ema","kacs"[icon-1],id,"SN"[state]);
     if(n<0||(size_t)n>=capacity)return DC_RANGE;

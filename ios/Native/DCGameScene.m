@@ -956,7 +956,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     return nil;
 }
 - (NSString *)appendSceneUI:(dc_vk_geometry_item *)draws count:(size_t *)count storage:(NSMutableArray *)storage viewport:(dc_viewport)viewport {
-    _sceneUIDraws=0;if(_sceneType!=4)return nil;
+    _sceneUIDraws=0;if(_sceneType<4||_sceneType>6)return nil;
     float scale=viewport.width/1024.f;
     NSArray<NSString *> *icons=@[@"chara",@"fuku",@"cam",@"sys"];
     for(unsigned row=1;row<=4;++row) {
@@ -1158,6 +1158,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     /* Non-gameplay callbacks have separate state machines. Do not invent
      * tap-to-skip behavior for watch/night/ending chapters. */
     BOOL secondaryOwnsPointer=NO;
+    BOOL primaryOwnsPointer=NO;
     if(cameraScene) {
         if(pcInput.keys[0x2f]==3) {
             _secondaryVisible=!_secondaryVisible;++_secondaryVisibilityChanges;
@@ -1172,8 +1173,10 @@ static void freeMorphCaches(dc_game_model *slot) {
         BOOL held=(pcInput.mouse[0]&1)||(pcInput.mouse[1]&1)||(pcInput.mouse[2]&1);
         BOOL inside=mx>=0&&mx<=352&&my>=504&&my<=768;
         BOOL press=pcInput.mouse[0]==3||pcInput.mouse[1]==3||pcInput.mouse[2]==3;
+        BOOL iconRegion=mx>=880&&my>=300&&my<=768;
         if(!held&&!pcInput.wheel)_pointerCameraOwner=0;
-        if(!_pointerCameraOwner&&!_contextOpen&&(press||pcInput.wheel))_pointerCameraOwner=_secondaryVisible&&inside?2:1;
+        if(!_pointerCameraOwner&&!_contextOpen&&(press||pcInput.wheel))
+            _pointerCameraOwner=_secondaryVisible&&inside?2:((pcInput.mouse[1]&&iconRegion)?1:3);
         if(_pointerCameraOwner==2&&!_contextOpen&&(held||pcInput.wheel)) {
             secondaryOwnsPointer=YES;
             if(_secondaryCameraMode!=2) {
@@ -1196,8 +1199,21 @@ static void freeMorphCaches(dc_game_model *slot) {
                 }
             }
         }
+        if(_pointerCameraOwner==3&&!_contextOpen&&(held||pcInput.wheel)) {
+            primaryOwnsPointer=YES;
+            dc_camera_orbit current=[self activeCameraOrbit],next;
+            dc_camera_pointer_input motion={pcInput.dx,pcInput.dy,pcInput.wheel,
+                pcInput.mouse[0],pcInput.mouse[1],pcInput.mouse[2],(pcInput.keys[0x3b]&1)!=0};
+            if(dc_camera_secondary_pointer(&current,&_secondaryLimits,&motion,&next)!=DC_OK)
+                return @"Original primary camera pointer update failed";
+            if(memcmp(&next,&current,sizeof(next))){
+                [self adoptCameraOrbit:next];++_cameraActionCount;
+                if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+                    [self requestRenderCapture:@"gameplay-primary-pointer-native.png"];
+            }
+        }
     }
-    if(gameplayScene&&!secondaryOwnsPointer&&!_characterAction.exit_pending&&!_characterAction.transition_pending) {
+    if(cameraScene&&!secondaryOwnsPointer&&!primaryOwnsPointer&&!_characterAction.exit_pending&&!_characterAction.transition_pending) {
         float scale=fminf((float)width/1024.f,(float)height/768.f);
         float px=((x+1)*.5f*width-(width-1024*scale)*.5f)/scale;
         float py=((1-y)*.5f*height-(height-768*scale)*.5f)/scale;
