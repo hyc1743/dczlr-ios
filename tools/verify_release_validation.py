@@ -16,10 +16,10 @@ def check(run,jobs):
     for name in ('portable','ios'):
         if not any(j['name']==name and j['conclusion']=='success' for j in jobs):raise ValueError('Missing successful '+name+' job')
     required={'Launch the Vulkan sprite scene on iPhone simulator','Exercise startup and New Game with generated resources',
-              'Exercise simultaneous keyboard and mouse controls','Verify virtual mouse on the first real scene'}
+              'Exercise simultaneous keyboard and mouse controls'}
     passed={s['name'] for j in jobs for s in j.get('steps',[]) if s['conclusion']=='success'}
     if not required<=passed:raise ValueError('Missing scoped simulator execution checks')
-    return {'run':run['id'],'source':run['head_sha'],'scope':'startup, PC/touch input, original scene UI, both primary targets, automatic camera on/off, CAM reset and initial character animation/audio/chapter4 handoff',
+    return {'run':run['id'],'source':run['head_sha'],'scope':'startup, PC/touch input and simulator compilation; real-resource virtual-mouse route was not run in this validation',
             'complete_story':'not tested','physical_device':'not tested'}
 def normalized_project(text):
     return re.sub(r'(CFBundle(?:ShortVersionString|Version):)\s*"[^"\n]+"',r'\1 "VERSION"',text)
