@@ -408,3 +408,48 @@ Linux Vulkan artifact 12700659920 and Apple artifact 12700689957 are retained
 under out/original-camera-modes; their ZIP hashes are respectively
 434f8d0aa2b810fa22764e52c40a924a97c39c90aed940095e9a3810bc90dda3 and
 0790771e26c36904f01b3b78dfbe2cb5b1a2a3dc08735aaf86ad59bca6ddaadf.
+
+## Secondary camera and independent viewport (2026-10-27)
+
+The original main loop FUN_004621f0 selects slot0's viewport, clears its
+color/depth, runs FUN_004782e0/FUN_004146b0, then restores the main viewport
+through FUN_00478b30/FUN_004225d0. It is a second view in the same target,
+not a resized screenshot. FUN_00512cc0 sets logical (0,504,352,264), using
+constants at 0x639f68/6c/70 and original integer truncation. V (scan0x2f)
+toggles the main settings flag +0x21fe4 and live visibility +0x68b5.
+The settings Reset branch in FUN_0050f6f0 enables this flag and sets wheel
+step +0x21ff8 to float4.0; the old clock/timestamp interpretation of the
+copied controller +0x120/+0x128 value is not applicable to wheel control.
+
+The host now executes secondary context options3/4/5 using the original
+face/body bindings, primary=0 retarget helper, active CAM reset and automatic
+mode toggle. The separate auto_cam clip0 supplies both cameras in the same
+frame when both automatic modes are active. V visibility survives switching
+between scene objects during the app session; original settings persistence
+remains part of the unfinished system-screen work.
+
+FUN_00479630's pointer calculation is ported: left rotates, right adjusts
+distance/height, both buttons or middle pan, wheel dollies along the camera
+axis, and F1 doubles sensitivity. Gesture ownership stays with the selected
+camera until release, including a drag outside the inset. Original angle
+correction, controller limits and base-position clamps are retained. The
+84 isolated original-instruction cases match within 0.000004 absolute error.
+Key-state, translation/multiplication and publication are explicit synthetic
+boundaries. The vectors are in secondary-pointer-original-vectors.json.
+
+The Vulkan backend supports up to16 independently sorted geometry passes in
+one submission. Inset color/depth clearing is restricted to its rectangle;
+later UI/transition overlays retain the target. All passes are validated
+before any submission, including invalid late passes. The local Intel GPU
+pixel gate passes original gates plus independent inset depth, retained main
+pixels, final overlay, atomic rejection and single-submission checks.
+
+Models advance once per frame, then the two views project the same cached
+poses. Native captures compare both views against map-only passes and the
+secondary pass against a same-frame primary-only counterfactual. Sidecars
+retain separate actor visibility, inset/world matrices, pointer inputs and
+the controller before/after. The expanded UIKit route exercises all secondary
+options, V hide/show, held left dragging outside the inset, right dragging,
+both buttons with F1, wheel, simultaneous automatic views and both resets.
+Local unittest discovery passes330 tests. Apple/Linux CI execution of this
+implementation is pending; system pages and complete flow are not complete.

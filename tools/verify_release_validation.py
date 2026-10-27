@@ -8,7 +8,8 @@ import subprocess
 from github_transport import request
 
 RUNTIME_PATHS=['native','ios/Native','ios/Sources','ios/RuntimeChecks','ios/Resources',
-               'tools/bootstrap_moltenvk.py','tools/build_sprite_shaders.py']
+               'tools/bootstrap_moltenvk.py','tools/build_sprite_shaders.py','tools/check_ios_sprite.py',
+               'tools/camera_evidence_math.py','tools/secondary_camera_evidence.py']
 def check(run,jobs):
     if run['path']!='.github/workflows/build-ios.yml' or run['status']!='completed' or run['conclusion']!='success':
         raise ValueError('A successful iOS validation workflow is required')

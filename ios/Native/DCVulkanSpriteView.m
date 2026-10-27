@@ -58,6 +58,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     DCGameAudio *_gameAudio;
     DCIntroScene *_introScene;
     DCGameScene *_gameScene;
+    BOOL _secondaryViewDisabledSetting;
     dc_title_state _titleState;
     BOOL _titleStateInitialized;
     dc_story_state _story;
@@ -190,6 +191,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         mapSelector:_story.map stage:_story.stage stageProgress:_story.stage<DC_STORY_STAGES?_story.stages[_story.stage].progress:0 resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _gameScene.transitionScene=_startupScene;
+    _gameScene.secondaryViewVisible=!_secondaryViewDisabledSetting;
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
     return nil;
@@ -768,6 +770,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             if(suppressInput) gamePC=(dc_pc_frame){0};
             NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController pcInput:gamePC width:_width height:_height];
             if(gameFailure)return gameFailure;
+            if(_gameScene.interactiveScene)_secondaryViewDisabledSetting=!_gameScene.secondaryViewVisible;
             effectFailure=[self playPendingGameplayEffect];if(effectFailure)return effectFailure;
             NSString *voiceFailure=[self playPendingGameplayVoice];
             if(voiceFailure)return voiceFailure;

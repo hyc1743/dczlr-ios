@@ -35,6 +35,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t sceneKind;
 @property(nonatomic,readonly) uint32_t sceneType;
 @property(nonatomic,readonly) BOOL interactiveScene;
+@property(nonatomic) BOOL secondaryViewVisible;
 @property(nonatomic,strong,nullable) DCStartupScene *transitionScene;
 - (uint32_t)takePendingEffectSlot;
 - (nullable NSString *)updateCharacterWithExitSoundBusy:(BOOL)busy tick:(uint32_t)tick;

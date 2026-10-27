@@ -42,6 +42,12 @@ typedef struct prepared_draw {
     size_t original_order;
     double sort_depth;
 } prepared_draw;
+typedef struct prepared_pass {
+    size_t first,count;
+    dc_vk_clip_rect clip;
+    uint32_t clear_flags;
+    uint8_t clear_rgba[4];
+} prepared_pass;
 
 struct dc_vk_sprite {
     VkInstance instance;
@@ -842,6 +848,8 @@ unsupported:
 
 static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t visible,
     const uint8_t clear[4], uint8_t *rgba,const dc_vk_clip_rect *clip);
+static dc_status render_passes_prepared(dc_vk_sprite *r,prepared_draw *draws,size_t visible,
+    const prepared_pass *passes,size_t pass_count,const uint8_t clear[4],uint8_t *rgba);
 
 dc_status dc_vk_sprite_render(dc_vk_sprite *r, const dc_vk_sprite_item *items, size_t count,
         const uint8_t clear[4], uint8_t *rgba, size_t capacity) {
@@ -892,57 +900,84 @@ static int auto_draw_order(const void *aa,const void *bb) {
 
 dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item *items,size_t count,
         const uint8_t clear[4],uint8_t *rgba,size_t capacity,const dc_vk_clip_rect *clip) {
-    if (!r || !clear || (!rgba && capacity) || (count && !items)) return DC_ARGUMENT;
-    if (r->broken) return fail(r, DC_IO, "Renderer requires recreation after submission failure");
-    if (count > 4096 || (rgba && capacity < (size_t)r->width * r->height * 4)) return DC_RANGE;
-    if (clip && (!clip->width || !clip->height || clip->x>r->width || clip->y>r->height ||
-        clip->width>r->width-clip->x || clip->height>r->height-clip->y)) return DC_RANGE;
-    prepared_draw *draws = calloc(count ? count : 1, sizeof(*draws));
-    if (!draws) return DC_MEMORY;
-    size_t visible = 0, total = 0;
-    dc_status status = DC_OK;
-    for (size_t i = 0; i < count; ++i) {
-        const dc_vk_geometry_item *item = &items[i];
-        if (item->hidden == 1) continue;
-        if (!item->vertices || !item->vertex_count || item->vertex_count % 3 || item->vertex_count > 1048576 - total) {
-            status = DC_RANGE; break;
-        }
-        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_AUTO_TRANSLUCENT || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
-        texture *image = find_texture(r, item->texture);
-        if (!image) { status = DC_ARGUMENT; break; }
-        uint32_t translucent=!image->opaque||item->blend_mode==1||item->blend_mode==2||item->depth_mode==DC_VK_DEPTH_AUTO_TRANSLUCENT;
-        double sort_depth=0;
-        for (size_t j = 0; j < item->vertex_count; ++j) {
-            const dc_sprite_vertex *v = &item->vertices[j];
-            if (!isfinite(v->x) || !isfinite(v->y) || !isfinite(v->z) ||
-                !isfinite(v->rhw) || v->rhw <= 0 || !isfinite(v->u) || !isfinite(v->v)) { status = DC_FORMAT; break; }
-            translucent|=(v->diffuse>>24)!=255;
-            sort_depth+=(double)v->z;
-        }
-        if (status != DC_OK) break;
-        uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
-        uint32_t depth=item->depth_mode;
-        if(depth>=DC_VK_DEPTH_AUTO)depth=translucent?DC_VK_DEPTH_READ_ONLY:DC_VK_DEPTH_WRITE;
-        draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
-            .image = image, .pipeline = 3 + blend + 3*depth + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
-            .alpha_op = 4,.auto_depth=item->depth_mode>=DC_VK_DEPTH_AUTO,
-            .translucent=translucent,.original_order=i,.sort_depth=sort_depth/item->vertex_count};
-        total += item->vertex_count;
+    if(!r)return DC_ARGUMENT;
+    dc_vk_geometry_pass pass={.items=items,.count=count,.clip=clip?*clip:(dc_vk_clip_rect){0,0,r->width,r->height}};
+    return dc_vk_geometry_render_passes(r,&pass,1,clear,rgba,capacity);
+}
+
+dc_status dc_vk_geometry_render_passes(dc_vk_sprite *r,const dc_vk_geometry_pass *passes,size_t pass_count,
+        const uint8_t clear[4],uint8_t *rgba,size_t capacity) {
+    if(!r||!clear||(!rgba&&capacity)||(pass_count&&!passes))return DC_ARGUMENT;
+    if(r->broken)return fail(r,DC_IO,"Renderer requires recreation after submission failure");
+    if(pass_count>16||(rgba&&capacity<(size_t)r->width*r->height*4))return DC_RANGE;
+    size_t draw_count=0;
+    for(size_t p=0;p<pass_count;++p) {
+        const dc_vk_geometry_pass *pass=&passes[p];const dc_vk_clip_rect *clip=&pass->clip;
+        if(pass->count&&!pass->items)return DC_ARGUMENT;
+        if(pass->count>4096-draw_count||!clip->width||!clip->height||clip->x>r->width||clip->y>r->height||
+           clip->width>r->width-clip->x||clip->height>r->height-clip->y)return DC_RANGE;
+        if(pass->clear_flags>3)return DC_FORMAT;
+        draw_count+=pass->count;
     }
-    if (status == DC_OK) {
-        for(size_t i=0;i<visible;) {
-            if(!draws[i].auto_depth){++i;continue;}
-            size_t end=i+1;while(end<visible&&draws[end].auto_depth)++end;
-            qsort(draws+i,end-i,sizeof(*draws),auto_draw_order);i=end;
+    prepared_draw *draws=calloc(draw_count?draw_count:1,sizeof(*draws));
+    if(!draws)return DC_MEMORY;
+    prepared_pass prepared[16]={0};size_t visible=0,total=0;
+    dc_status status=DC_OK;
+    for(size_t p=0;p<pass_count&&status==DC_OK;++p) {
+        const dc_vk_geometry_pass *pass=&passes[p];
+        prepared[p]=(prepared_pass){.first=visible,.clip=pass->clip,.clear_flags=pass->clear_flags};
+        memcpy(prepared[p].clear_rgba,pass->clear_rgba,4);
+        const dc_vk_geometry_item *items=pass->items;size_t count=pass->count;
+        for (size_t i = 0; i < count; ++i) {
+            const dc_vk_geometry_item *item = &items[i];
+            if (item->hidden == 1) continue;
+            if (!item->vertices || !item->vertex_count || item->vertex_count % 3 || item->vertex_count > 1048576 - total) {
+                status = DC_RANGE; break;
+            }
+            if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_AUTO_TRANSLUCENT || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
+            texture *image = find_texture(r, item->texture);
+            if (!image) { status = DC_ARGUMENT; break; }
+            uint32_t translucent=!image->opaque||item->blend_mode==1||item->blend_mode==2||item->depth_mode==DC_VK_DEPTH_AUTO_TRANSLUCENT;
+            double sort_depth=0;
+            for (size_t j = 0; j < item->vertex_count; ++j) {
+                const dc_sprite_vertex *v = &item->vertices[j];
+                if (!isfinite(v->x) || !isfinite(v->y) || !isfinite(v->z) ||
+                    !isfinite(v->rhw) || v->rhw <= 0 || !isfinite(v->u) || !isfinite(v->v)) { status = DC_FORMAT; break; }
+                translucent|=(v->diffuse>>24)!=255;
+                sort_depth+=(double)v->z;
+            }
+            if (status != DC_OK) break;
+            uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
+            uint32_t depth=item->depth_mode;
+            if(depth>=DC_VK_DEPTH_AUTO)depth=translucent?DC_VK_DEPTH_READ_ONLY:DC_VK_DEPTH_WRITE;
+            draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
+                .image = image, .pipeline = 3 + blend + 3*depth + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
+                .alpha_op = 4,.auto_depth=item->depth_mode>=DC_VK_DEPTH_AUTO,
+                .translucent=translucent,.original_order=i,.sort_depth=sort_depth/item->vertex_count};
+            total += item->vertex_count;
         }
-        status = render_prepared(r, draws, visible, clear, rgba,clip);
+        if (status == DC_OK) {
+            prepared[p].count=visible-prepared[p].first;
+            for(size_t i=prepared[p].first;i<visible;) {
+                if(!draws[i].auto_depth){++i;continue;}
+                size_t end=i+1;while(end<visible&&draws[end].auto_depth)++end;
+                qsort(draws+i,end-i,sizeof(*draws),auto_draw_order);i=end;
+            }
+        }
     }
+    if(status==DC_OK)status=render_passes_prepared(r,draws,visible,prepared,pass_count,clear,rgba);
     free(draws);
     return status;
 }
 
 static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t visible,
         const uint8_t clear[4], uint8_t *rgba,const dc_vk_clip_rect *clip) {
+    prepared_pass pass={.count=visible,.clip=clip?*clip:(dc_vk_clip_rect){0,0,r->width,r->height}};
+    return render_passes_prepared(r,draws,visible,&pass,1,clear,rgba);
+}
+
+static dc_status render_passes_prepared(dc_vk_sprite *r,prepared_draw *draws,size_t visible,
+        const prepared_pass *passes,size_t pass_count,const uint8_t clear[4],uint8_t *rgba) {
     dc_status status = DC_OK;
     VkDeviceSize vertex_bytes = 0;
     for (size_t i = 0; i < visible; ++i) {
@@ -966,20 +1001,36 @@ static dc_status render_prepared(dc_vk_sprite *r, prepared_draw *draws, size_t v
             .renderPass = r->render_pass, .framebuffer = r->framebuffer,
             .renderArea = {{0, 0}, {r->width, r->height}}, .clearValueCount = 2, .pClearValues = clear_values};
         vkCmdBeginRenderPass(r->command, &begin, VK_SUBPASS_CONTENTS_INLINE);
-        VkRect2D scissor={{0,0},{r->width,r->height}};
-        if (clip) scissor=(VkRect2D){{(int32_t)clip->x,(int32_t)clip->y},{clip->width,clip->height}};
-        vkCmdSetScissor(r->command,0,1,&scissor);
-        for (size_t i = 0; i < visible; ++i) {
-            prepared_draw *draw = &draws[i];
-            struct { float width, height; uint32_t alpha_op, reserved; } push = {(float)r->width, (float)r->height, draw->alpha_op, 0};
-            VkDeviceSize offset = draw->offset;
-            vkCmdBindPipeline(r->command, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[draw->pipeline]);
-            vkCmdBindDescriptorSets(r->command, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipeline_layout,
-                0, 1, &draw->image->sets[draw->filter], 0, NULL);
-            vkCmdBindVertexBuffers(r->command, 0, 1, &r->vertices.buffer, &offset);
-            vkCmdPushConstants(r->command, r->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                0, sizeof(push), &push);
-            vkCmdDraw(r->command, (uint32_t)draw->count, 1, 0, 0);
+        for(size_t p=0;p<pass_count;++p) {
+            const prepared_pass *pass=&passes[p];
+            VkRect2D scissor={{(int32_t)pass->clip.x,(int32_t)pass->clip.y},{pass->clip.width,pass->clip.height}};
+            vkCmdSetScissor(r->command,0,1,&scissor);
+            if(pass->clear_flags) {
+                VkClearAttachment attachments[2]={0};uint32_t attachment_count=0;
+                if(pass->clear_flags&DC_VK_CLEAR_COLOR) {
+                    attachments[attachment_count].aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
+                    for(unsigned c=0;c<4;++c)attachments[attachment_count].clearValue.color.float32[c]=pass->clear_rgba[c]/255.f;
+                    ++attachment_count;
+                }
+                if(pass->clear_flags&DC_VK_CLEAR_DEPTH) {
+                    attachments[attachment_count].aspectMask=VK_IMAGE_ASPECT_DEPTH_BIT;
+                    attachments[attachment_count++].clearValue.depthStencil.depth=1.f;
+                }
+                VkClearRect rect={.rect=scissor,.layerCount=1};
+                vkCmdClearAttachments(r->command,attachment_count,attachments,1,&rect);
+            }
+            for (size_t i = pass->first; i < pass->first+pass->count; ++i) {
+                prepared_draw *draw = &draws[i];
+                struct { float width, height; uint32_t alpha_op, reserved; } push = {(float)r->width, (float)r->height, draw->alpha_op, 0};
+                VkDeviceSize offset = draw->offset;
+                vkCmdBindPipeline(r->command, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipelines[draw->pipeline]);
+                vkCmdBindDescriptorSets(r->command, VK_PIPELINE_BIND_POINT_GRAPHICS, r->pipeline_layout,
+                    0, 1, &draw->image->sets[draw->filter], 0, NULL);
+                vkCmdBindVertexBuffers(r->command, 0, 1, &r->vertices.buffer, &offset);
+                vkCmdPushConstants(r->command, r->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                    0, sizeof(push), &push);
+                vkCmdDraw(r->command, (uint32_t)draw->count, 1, 0, 0);
+            }
         }
         vkCmdEndRenderPass(r->command);
         if (rgba) {

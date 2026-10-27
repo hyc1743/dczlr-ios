@@ -137,6 +137,11 @@ class Matrix(C.Structure):
 class CameraOrbit(C.Structure):
     _fields_ = [("base", Matrix)]+[(n,C.c_float) for n in ("stored_distance","height","pitch","yaw")]
 
+class CameraPointerInput(C.Structure):
+    _fields_=[(n,C.c_int32) for n in ('dx','dy','wheel')]+[(n,C.c_uint8) for n in ('left','right','middle','fast')]
+class CameraPointerLimits(C.Structure):
+    _fields_=[(n,C.c_float) for n in ('far_distance','near_distance','high','low','wheel_step')]
+
 
 class CameraLens(C.Structure):
     _fields_ = [(n,C.c_float) for n in ("fov_y","near_z","far_z")]+[(n,C.c_uint32) for n in ("viewport_width","viewport_height")]
@@ -627,6 +632,8 @@ def library():
     lib.dc_camera_retarget.restype = C.c_int
     lib.dc_camera_scene_node.argtypes=[C.c_uint32,C.c_uint32,C.c_void_p,C.c_size_t]
     lib.dc_camera_look_at.argtypes=[C.POINTER(Matrix),C.POINTER(Matrix),C.POINTER(Matrix)]
+    lib.dc_camera_secondary_viewport.argtypes=[C.POINTER(Viewport),C.POINTER(Viewport)]
+    lib.dc_camera_secondary_pointer.argtypes=[C.POINTER(CameraOrbit),C.POINTER(CameraPointerLimits),C.POINTER(CameraPointerInput),C.POINTER(CameraOrbit)]
     lib.dc_scene_action_build.argtypes = [C.c_uint32]*5+[C.POINTER(SceneActionPlan)]
     lib.dc_scene_action_build.restype = C.c_int
     lib.dc_game_player_step.argtypes=[C.POINTER(GamePlayer),C.POINTER(GameInput),C.c_float,C.POINTER(GamePlayer)]

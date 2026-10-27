@@ -3,6 +3,57 @@
 #include <string.h>
 #include <stdio.h>
 
+dc_status dc_camera_secondary_viewport(const dc_viewport *main,dc_viewport *out) {
+    if(!main||!out)return DC_ARGUMENT;
+    const float values[]={main->x,main->y,main->width,main->height,main->min_z,main->max_z};
+    for(unsigned i=0;i<6;++i)if(!isfinite(values[i]))return DC_RANGE;
+    if(main->x<0||main->y<0||main->width<=0||main->height<=0)return DC_RANGE;
+    float scale=main->width/1024.f;
+    double y=504.*scale,w=352.*scale,h=264.*scale;
+    if(y>=4294967296.||w>=4294967296.||h>=4294967296.||w<1||h<1)return DC_RANGE;
+    dc_viewport next={main->x,main->y+(float)(uint32_t)y,(float)(uint32_t)w,(float)(uint32_t)h,0,1};
+    if(next.width>main->width||next.y+next.height>main->y+main->height)return DC_RANGE;
+    *out=next;return DC_OK;
+}
+
+dc_status dc_camera_secondary_pointer(const dc_camera_orbit *source,
+        const dc_camera_pointer_limits *limits,const dc_camera_pointer_input *in,dc_camera_orbit *out) {
+    if(!source||!limits||!in||!out)return DC_ARGUMENT;
+    if(in->left>3||in->right>3||in->middle>3||in->fast>1)return DC_RANGE;
+    const float bounds[]={limits->far_distance,limits->near_distance,limits->high,limits->low,limits->wheel_step};
+    for(unsigned i=0;i<5;++i)if(!isfinite(bounds[i]))return DC_RANGE;
+    if(limits->near_distance<=0||limits->far_distance<limits->near_distance||limits->high<limits->low||limits->wheel_step<0)return DC_RANGE;
+    dc_camera_matrices camera;dc_camera_lens lens={.3f,.5f,10000,1024,768};
+    dc_status status=dc_camera_build(source,&lens,&camera);if(status!=DC_OK)return status;
+    dc_camera_orbit next=*source;double speed=in->fast?2.:1.;
+    int operation=(in->left&1)?((in->right&1)?2:0):((in->right&1)?1:((in->middle&1)?2:(in->wheel?3:-1)));
+    if(operation==0) {
+        next.pitch=(float)((double)next.pitch-(double)in->dy*.01f*speed);
+        next.yaw=(float)((double)next.yaw-(double)in->dx*.01f*speed);
+        float *angles[]={&next.pitch,&next.yaw};
+        for(unsigned i=0;i<2;++i) {
+            if(*angles[i]<0)*angles[i]+=6.2831854820251465f;
+            else if(*angles[i]>6.2831854820251465f)*angles[i]-=6.2831854820251465f;
+        }
+    } else if(operation==1) {
+        next.stored_distance=(float)((double)next.stored_distance-(double)in->dx*.1f*speed);
+        next.height=(float)((double)next.height-(double)in->dy*.1f*speed);
+        if(next.stored_distance>-limits->near_distance)next.stored_distance=-limits->near_distance;
+        else if(next.stored_distance<-limits->far_distance)next.stored_distance=-limits->far_distance;
+        if(next.height<limits->low)next.height=limits->low;
+        else if(next.height>limits->high)next.height=limits->high;
+    } else if(operation==2||operation==3) {
+        float x=operation==2?(float)((double)in->dx*.1f*speed):0;
+        float z=operation==2?(float)((double)in->dy*.1f*speed):(float)((in->wheel>0?-1.:1.)*limits->wheel_step*speed);
+        for(unsigned i=0;i<3;++i) {
+            float movement=(float)((double)x*camera.world.values[i]+(double)z*camera.world.values[8+i]);
+            float value=next.base.values[12+i]+movement;
+            next.base.values[12+i]=fmaxf(-50,fminf(50,value));
+        }
+    }
+    *out=next;return DC_OK;
+}
+
 dc_status dc_camera_scene_node(uint32_t stage,uint32_t binding,char *out,size_t capacity) {
     if(!out)return DC_ARGUMENT;
     if(stage>2||binding>3)return DC_RANGE;

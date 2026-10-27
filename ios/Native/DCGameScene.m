@@ -43,6 +43,23 @@ static NSArray<NSNumber *> *gameMatrixValues(const dc_matrix *matrix) {
     for(unsigned i=0;i<16;++i)[values addObject:@(matrix->values[i])];
     return values;
 }
+static dc_vk_clip_rect gameClip(dc_viewport viewport,uint32_t width,uint32_t height) {
+    uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f));
+    uint32_t right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f));
+    uint32_t bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));
+    return (dc_vk_clip_rect){left,top,right-left,bottom-top};
+}
+static dc_status gameRenderPasses(dc_vk_sprite *renderer,const dc_vk_geometry_item *draws,
+        size_t primaryCount,size_t secondaryStart,size_t secondaryCount,size_t overlayStart,size_t overlayCount,
+        dc_vk_clip_rect primaryClip,dc_vk_clip_rect secondaryClip,BOOL secondaryVisible,
+        uint8_t *pixels,size_t bytes) {
+    const uint8_t clear[4]={0,0,0,255};
+    dc_vk_geometry_pass passes[3]={{.items=draws,.count=primaryCount,.clip=primaryClip}};size_t count=1;
+    if(secondaryVisible)passes[count++]=(dc_vk_geometry_pass){.items=draws+secondaryStart,.count=secondaryCount,.clip=secondaryClip,
+        .clear_flags=DC_VK_CLEAR_COLOR|DC_VK_CLEAR_DEPTH,.clear_rgba={0,0,0,255}};
+    if(overlayCount)passes[count++]=(dc_vk_geometry_pass){.items=draws+overlayStart,.count=overlayCount,.clip=primaryClip};
+    return dc_vk_geometry_render_passes(renderer,passes,count,clear,pixels,bytes);
+}
 static uint32_t gameColor(const dc_material_value *value) {
     uint32_t out=0;
     for(uint32_t i=0;i<4;++i) {
@@ -81,6 +98,16 @@ static void freeMorphCaches(dc_game_model *slot) {
     uint32_t _cameraPreset;
     NSData *_cameraPresetData;
     dc_camera_orbit _secondaryCamera;
+    dc_camera_pointer_limits _secondaryLimits;
+    dc_matrix _secondaryRenderedWorld,_secondaryTarget;
+    dc_viewport _secondaryViewport;
+    BOOL _secondaryVisible;
+    uint32_t _pointerCameraOwner;
+    uint32_t _secondaryActions,_secondaryRetargets,_secondaryResets,_secondaryAutoFrames,_secondaryPointerUpdates,_secondaryVisibilityChanges;
+    uint32_t _secondaryAutoEnters,_secondaryAutoLeaves,_secondaryLastPointerOperation;
+    dc_camera_orbit _secondaryPointerBefore;
+    dc_camera_pointer_input _secondaryLastPointer;
+    uint32_t _secondaryTargetBinding;
     dc_matrix _lastCameraTarget;
     uint32_t _primaryCameraMode,_secondaryCameraMode;
     uint32_t _cameraActionCount,_cameraResetCount,_cameraRetargetCount,_pendingContextActions;
@@ -149,6 +176,8 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (uint32_t)sceneKind { return _sceneKind; }
 - (uint32_t)sceneType { return _sceneType; }
 - (BOOL)interactiveScene { return _sceneType==4; }
+- (BOOL)secondaryViewVisible { return _secondaryVisible; }
+- (void)setSecondaryViewVisible:(BOOL)visible { _secondaryVisible=visible&&_sceneType==4; }
 - (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
 - (BOOL)controllerMovementAdvanced { return _controllerMovementAdvanced; }
 - (BOOL)controllerCameraAdvanced { return _controllerCameraAdvanced; }
@@ -157,13 +186,14 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
     dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u camera_mode=%u camera_body=%u camera_auto_on=%u camera_auto_off=%u camera_auto_samples=%u context_callbacks=primary-camera-initial-character",
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u camera_mode=%u camera_body=%u camera_auto_on=%u camera_auto_off=%u camera_auto_samples=%u secondary_visible=%d secondary_mode=%u secondary_actions=%u secondary_retargets=%u secondary_resets=%u secondary_auto_samples=%u secondary_pointer_updates=%u secondary_pointer_operation=%u secondary_visibility_changes=%u context_callbacks=cameras-initial-character",
         _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
         _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection,
         _cameraActionCount,_cameraRetargetCount,_cameraResetCount,_pendingContextActions,
         _characterActionCount,_characterAnimationStarts,animation.current,_characterReturnedIdle,_characterAction.exit_pending,
         _exitSoundBusyObserved,_exitSoundWaitMs,_characterAction.transition_pending,
-        _primaryCameraMode,_cameraBodyRetargetCount,_cameraAutoEnterCount,_cameraAutoLeaveCount,MIN(_cameraAutoFrames,8u)];
+        _primaryCameraMode,_cameraBodyRetargetCount,_cameraAutoEnterCount,_cameraAutoLeaveCount,MIN(_cameraAutoFrames,8u),
+        _secondaryVisible,_secondaryCameraMode,_secondaryActions,_secondaryRetargets,_secondaryResets,MIN(_secondaryAutoFrames,8u),_secondaryPointerUpdates,_secondaryLastPointerOperation,_secondaryVisibilityChanges];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
@@ -261,7 +291,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         dc_camera_orbit preset;
         if(dc_camera_read_preset(_cameraPresetData.bytes,_cameraPresetData.length,_cameraPreset*3,&preset)!=DC_OK)return @"Original camera reset preset unavailable";
         [self adoptCameraOrbit:preset];
-        if(selection==6){_secondaryCamera=preset;_secondaryCameraMode=plan.secondary_camera_mode;}
+        if(selection==6){_secondaryCamera=preset;_secondaryCameraMode=plan.secondary_camera_mode;++_secondaryResets;++_secondaryActions;}
         uint32_t previousMode=_primaryCameraMode;_primaryCameraMode=plan.camera_mode;
         if(selection==2) {
             if(plan.camera_mode==2)++_cameraAutoEnterCount;
@@ -269,13 +299,38 @@ static void freeMorphCaches(dc_game_model *slot) {
         }
         ++_cameraResetCount;++_cameraActionCount;
 #if DEBUG
-        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"]&&
+           (selection==6||(plan.camera_mode==2?_cameraAutoEnterCount==1:_cameraAutoLeaveCount==1)))
             [self requestRenderCapture:selection==6?@"gameplay-camera-reset-native.png":
                 (plan.camera_mode==2?@"gameplay-camera-auto-first-native.png":@"gameplay-camera-auto-off-native.png")];
 #endif
+    } else if(_contextMenu.icon==3&&selection>=3&&selection<=5) {
+        uint32_t previousSecondaryMode=_secondaryCameraMode;
+        if(selection<5) {
+            dc_matrix target;dc_camera_orbit next;
+            if([self cameraBinding:selection-3 matrix:&target]!=DC_OK)return @"Original secondary camera target unavailable";
+            if(dc_camera_retarget(&_secondaryCamera,&target,0,&next)!=DC_OK)return @"Original secondary camera retarget failed";
+            _secondaryCamera=next;_secondaryTarget=target;_secondaryTargetBinding=selection-3;++_secondaryRetargets;
+        } else {
+            if(dc_camera_read_preset(_cameraPresetData.bytes,_cameraPresetData.length,_cameraPreset*3,&_secondaryCamera)!=DC_OK)
+                return @"Original secondary camera preset unavailable";
+            ++_secondaryResets;
+        }
+        _secondaryCameraMode=plan.secondary_camera_mode;++_secondaryActions;
+        if(selection==5) {
+            if(_secondaryCameraMode==2)++_secondaryAutoEnters;
+            else if(previousSecondaryMode==2)++_secondaryAutoLeaves;
+        }
+#if DEBUG
+        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"]&&
+           (selection<5||(_secondaryCameraMode==2?_secondaryAutoEnters==1:_secondaryAutoLeaves==1)))
+            [self requestRenderCapture:selection==3?@"gameplay-secondary-face-native.png":selection==4?@"gameplay-secondary-body-native.png":
+                (_secondaryCameraMode==2?@"gameplay-secondary-auto-first-native.png":@"gameplay-secondary-auto-off-native.png")];
+        if(selection==5&&_secondaryCameraMode==2&&_primaryCameraMode==2&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+            [self requestRenderCapture:@"gameplay-cameras-both-auto-native.png"];
+#endif
     } else {
-        /* Secondary-view output and save/edit destination screens remain
-         * separate port work. Their state is not silently changed. */
+        /* Original system destination screens have their own pending port. */
         ++_pendingContextActions;
     }
     return nil;
@@ -634,6 +689,10 @@ static void freeMorphCaches(dc_game_model *slot) {
      * previous map/stage from the story state. */
     _mapSelector=profile.map>=0 ? (uint32_t)profile.map : (mapSelector<=8 ? mapSelector : 0);
     _sceneKind=profile.scene;_sceneType=profile.scene_type;
+    /* Original settings Reset defaults (0050f6f0): secondary view enabled,
+     * wheel step4. Camera limits come from 00512cc0/00479490. */
+    _secondaryVisible=_sceneType==4;
+    _secondaryLimits=(dc_camera_pointer_limits){100,5,20,-30,4};
     _stageProgress=progress;_mainIconHover=-1;_lastContextSelection=-1;
     _sceneUITextures=[NSMutableDictionary dictionary];
     _storyStage=profile.stage>=0 ? (uint32_t)profile.stage : (stage<=2 ? stage : 0);
@@ -1059,7 +1118,47 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     /* Non-gameplay callbacks have separate state machines. Do not invent
      * tap-to-skip behavior for watch/night/ending chapters. */
-    if(gameplayScene&&!_characterAction.exit_pending&&!_characterAction.transition_pending) {
+    BOOL secondaryOwnsPointer=NO;
+    if(gameplayScene) {
+        if(pcInput.keys[0x2f]==3) {
+            _secondaryVisible=!_secondaryVisible;++_secondaryVisibilityChanges;
+#if DEBUG
+            if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+                [self requestRenderCapture:_secondaryVisible?@"gameplay-secondary-visible-native.png":@"gameplay-secondary-hidden-native.png"];
+#endif
+        }
+        float inputScale=fminf((float)width/1024.f,(float)height/768.f);
+        float mx=((x+1)*.5f*width-(width-1024*inputScale)*.5f)/inputScale;
+        float my=((1-y)*.5f*height-(height-768*inputScale)*.5f)/inputScale;
+        BOOL held=(pcInput.mouse[0]&1)||(pcInput.mouse[1]&1)||(pcInput.mouse[2]&1);
+        BOOL inside=mx>=0&&mx<=352&&my>=504&&my<=768;
+        BOOL press=pcInput.mouse[0]==3||pcInput.mouse[1]==3||pcInput.mouse[2]==3;
+        if(!held&&!pcInput.wheel)_pointerCameraOwner=0;
+        if(!_pointerCameraOwner&&!_contextOpen&&(press||pcInput.wheel))_pointerCameraOwner=_secondaryVisible&&inside?2:1;
+        if(_pointerCameraOwner==2&&!_contextOpen&&(held||pcInput.wheel)) {
+            secondaryOwnsPointer=YES;
+            if(_secondaryCameraMode!=2) {
+                dc_camera_pointer_input motion={pcInput.dx,pcInput.dy,pcInput.wheel,
+                    pcInput.mouse[0],pcInput.mouse[1],pcInput.mouse[2],(pcInput.keys[0x3b]&1)!=0};
+                dc_camera_orbit next;
+                if(dc_camera_secondary_pointer(&_secondaryCamera,&_secondaryLimits,&motion,&next)!=DC_OK)return @"Original secondary camera pointer update failed";
+                if(memcmp(&next,&_secondaryCamera,sizeof(next))) {
+                    _secondaryPointerBefore=_secondaryCamera;_secondaryLastPointer=motion;
+                    _secondaryLastPointerOperation=(motion.left&1)?((motion.right&1)?2:0):((motion.right&1)?1:((motion.middle&1)?2:3));
+                    _secondaryCamera=next;++_secondaryPointerUpdates;
+#if DEBUG
+                    if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"]) {
+                        if(_secondaryLastPointerOperation==0&&motion.left==1)[self requestRenderCapture:@"gameplay-secondary-pointer-native.png"];
+                        else if(_secondaryLastPointerOperation==1&&motion.right==1)[self requestRenderCapture:@"gameplay-secondary-right-native.png"];
+                        else if(_secondaryLastPointerOperation==2)[self requestRenderCapture:@"gameplay-secondary-pan-native.png"];
+                        else if(_secondaryLastPointerOperation==3)[self requestRenderCapture:@"gameplay-secondary-wheel-native.png"];
+                    }
+#endif
+                }
+            }
+        }
+    }
+    if(gameplayScene&&!secondaryOwnsPointer&&!_characterAction.exit_pending&&!_characterAction.transition_pending) {
         float scale=fminf((float)width/1024.f,(float)height/768.f);
         float px=((x+1)*.5f*width-(width-1024*scale)*.5f)/scale;
         float py=((1-y)*.5f*height-(height-768*scale)*.5f)/scale;
@@ -1150,7 +1249,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _padCameraPitch=fmaxf(-.7f,fminf(.7f,_padCameraPitch+cameraY*padDelta));
     float zoom=((controller.buttons&DC_PAD_ZR)?1.f:0.f)-((controller.buttons&DC_PAD_ZL)?1.f:0.f);
     if(pcHome)zoom+=1.f;if(pcEnd)zoom-=1.f;
-    if(pcInput.wheel>0)zoom+=1.f;else if(pcInput.wheel<0)zoom-=1.f;
+    if(!secondaryOwnsPointer){if(pcInput.wheel>0)zoom+=1.f;else if(pcInput.wheel<0)zoom-=1.f;}
     _padCameraZoom=fmaxf(-.7f,fminf(1.f,_padCameraZoom+zoom*padDelta));
     float panX=(pcArrowRight?1.f:0.f)-(pcArrowLeft?1.f:0.f);
     float panZ=(pcArrowDown?1.f:0.f)-(pcArrowUp?1.f:0.f);
@@ -1171,16 +1270,17 @@ static void freeMorphCaches(dc_game_model *slot) {
         for(unsigned i=0;i<3;++i)_autoCamera.world.values[12+i]=target.values[12+i];
         if(dc_model_tick(_autoCamera.model,delta,tick,&_autoCamera.world)!=DC_OK)return @"Original camera animation tick failed";
     }
-    dc_camera_orbit orbit=[self activeCameraOrbit];
-    if(_primaryCameraMode==2) {
-        dc_matrix cameraWorld;
+    dc_camera_orbit orbit=[self activeCameraOrbit];dc_matrix automaticWorld=gameIdentity();
+    if(_primaryCameraMode==2||_secondaryCameraMode==2) {
         if([self cameraBinding:DC_CAMERA_ANIMATION_EYE matrix:&_autoCameraEye]!=DC_OK||
            [self cameraBinding:DC_CAMERA_ANIMATION_TARGET matrix:&_autoCameraTarget]!=DC_OK)return @"Original automatic camera binding failed";
         /* 00513690 raises the look target by DAT_0062e664 (2.0), then calls
          * 00417ac0 on the eye supplied by the separate auto_cam animation. */
         _autoCameraTarget.values[13]+=2.f;
-        if(dc_camera_look_at(&_autoCameraEye,&_autoCameraTarget,&cameraWorld)!=DC_OK)return @"Original automatic camera orientation failed";
-        orbit=(dc_camera_orbit){.base=cameraWorld};++_cameraAutoFrames;
+        if(dc_camera_look_at(&_autoCameraEye,&_autoCameraTarget,&automaticWorld)!=DC_OK)return @"Original automatic camera orientation failed";
+    }
+    if(_primaryCameraMode==2) {
+        orbit=(dc_camera_orbit){.base=automaticWorld};++_cameraAutoFrames;
 #if DEBUG
         if(_cameraAutoFrames==8&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
             [self requestRenderCapture:@"gameplay-camera-auto-later-native.png"];
@@ -1190,12 +1290,38 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     _renderedCameraWorld=camera.world;
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
-    size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes+22+self.transitionScene.transitionMeshCapacity;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
+    dc_camera_orbit secondaryOrbit=_secondaryCamera;dc_camera_matrices secondaryCamera={0};
+    if(gameplayScene) {
+        if(dc_camera_secondary_viewport(&viewport,&_secondaryViewport)!=DC_OK)return @"Original secondary viewport unavailable";
+        if(_secondaryCameraMode==2) {
+            secondaryOrbit=(dc_camera_orbit){.base=automaticWorld};++_secondaryAutoFrames;
+#if DEBUG
+            if(_secondaryAutoFrames==8&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+                [self requestRenderCapture:@"gameplay-secondary-auto-later-native.png"];
+#endif
+        }
+        dc_camera_lens secondaryLens={.3f,.5f,10000,(uint32_t)_secondaryViewport.width,(uint32_t)_secondaryViewport.height};
+        if(dc_camera_build(&secondaryOrbit,&secondaryLens,&secondaryCamera)!=DC_OK)return @"Original secondary camera build failed";
+        _secondaryRenderedWorld=secondaryCamera.world;
+    }
+    size_t geometryCapacity=(_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes)*(_secondaryVisible?2:1);
+    size_t capacity=geometryCapacity+22+self.transitionScene.transitionMeshCapacity;
+    dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));if(!draws)return @"Game draw allocation failed";
+    __attribute__((objc_precise_lifetime)) NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
     NSString *failure=[self append:&_map camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
     size_t mapDrawCount=count;
     if(!failure)failure=[self append:&_actor camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;
     if(!failure && _face.model)failure=[self append:&_face camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
+    size_t primarySceneCount=count,secondaryStart=count,secondaryMapCount=0,secondarySceneCount=0;
+    if(!failure&&_secondaryVisible) {
+        uint32_t secondaryMapTriangles=0,secondaryActorTriangles=0;
+        failure=[self append:&_map camera:&secondaryCamera viewport:&_secondaryViewport draws:draws count:&count storage:storage triangles:&secondaryMapTriangles];
+        secondaryMapCount=count-secondaryStart;
+        if(!failure)failure=[self append:&_actor camera:&secondaryCamera viewport:&_secondaryViewport draws:draws count:&count storage:storage triangles:&secondaryActorTriangles];
+        if(!failure&&_face.model)failure=[self append:&_face camera:&secondaryCamera viewport:&_secondaryViewport draws:draws count:&count storage:storage triangles:&secondaryActorTriangles];
+        secondarySceneCount=count-secondaryStart;
+    }
     size_t sceneDrawCount=count;
     if(!failure)failure=[self appendSceneUI:draws count:&count storage:storage viewport:viewport];
     if(!failure&&_characterAction.transition_pending) {
@@ -1207,32 +1333,40 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(!failure&&ready&&_sceneType==4&&_stageProgress==0)_chapterEndAction=2;
     }
     if(!failure) {
-        uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f)),right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f)),bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));
-        dc_vk_clip_rect clip={left,top,right-left,bottom-top};uint8_t clear[4]={0,0,0,255};
+        dc_vk_clip_rect clip=gameClip(viewport,width,height),secondaryClip=_secondaryVisible?gameClip(_secondaryViewport,width,height):(dc_vk_clip_rect){0};
         BOOL capture=(_captureGameplayFrame&&!_capturedGameplayFrame)||_requestedRenderCapture!=nil;
         NSMutableData *pixels=capture?[NSMutableData dataWithLength:(size_t)width*height*4]:nil;
-        if(dc_vk_geometry_render_region(_renderer,draws,count,clear,pixels.mutableBytes,pixels.length,&clip)!=DC_OK)failure=@"Game Vulkan draw failed";
+        if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,count-sceneDrawCount,clip,secondaryClip,_secondaryVisible,pixels.mutableBytes,pixels.length)!=DC_OK)failure=@"Game Vulkan draw failed";
         if(!failure&&capture) {
             // Compare against the same GPU scene with no actor/face. A blue
             // background cannot masquerade as character visibility this way.
             NSMutableData *background=[NSMutableData dataWithLength:pixels.length];
-            if(dc_vk_geometry_render_region(_renderer,draws,mapDrawCount,clear,background.mutableBytes,background.length,&clip)!=DC_OK)
+            if(gameRenderPasses(_renderer,draws,mapDrawCount,secondaryStart,secondaryMapCount,sceneDrawCount,0,clip,secondaryClip,_secondaryVisible,background.mutableBytes,background.length)!=DC_OK)
                 failure=@"Actor visibility background readback failed";
             if(failure){free(draws);return failure;}
             NSMutableData *scenePixels=[NSMutableData dataWithLength:pixels.length];
-            if(dc_vk_geometry_render_region(_renderer,draws,sceneDrawCount,clear,scenePixels.mutableBytes,scenePixels.length,&clip)!=DC_OK){free(draws);return @"Scene-only visibility readback failed";}
+            if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,0,clip,secondaryClip,_secondaryVisible,scenePixels.mutableBytes,scenePixels.length)!=DC_OK){free(draws);return @"Scene-only visibility readback failed";}
             NSMutableData *iconPixels=_contextOpen?[NSMutableData dataWithLength:pixels.length]:nil;
-            if(iconPixels&&dc_vk_geometry_render_region(_renderer,draws,sceneDrawCount+_sceneUIIconDraws,clear,iconPixels.mutableBytes,iconPixels.length,&clip)!=DC_OK){free(draws);return @"Scene context visibility readback failed";}
-            if(dc_vk_geometry_render_region(_renderer,draws,count,clear,NULL,0,&clip)!=DC_OK){free(draws);return @"Scene UI presentation restore failed";}
+            if(iconPixels&&gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,_sceneUIIconDraws,clip,secondaryClip,_secondaryVisible,iconPixels.mutableBytes,iconPixels.length)!=DC_OK){free(draws);return @"Scene context visibility readback failed";}
+            NSMutableData *primaryOnly=_secondaryVisible?[NSMutableData dataWithLength:pixels.length]:nil;
+            if(primaryOnly&&gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,0,sceneDrawCount,0,clip,secondaryClip,NO,primaryOnly.mutableBytes,primaryOnly.length)!=DC_OK){free(draws);return @"Primary-only visibility readback failed";}
+            if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,count-sceneDrawCount,clip,secondaryClip,_secondaryVisible,NULL,0)!=DC_OK){free(draws);return @"Scene UI presentation restore failed";}
             const uint8_t *base=background.bytes,*scene=scenePixels.bytes;uint8_t *frame=pixels.mutableBytes;
             const uint8_t *icons=iconPixels.bytes;size_t uiVisible=0,contextVisible=0;
-            size_t visible=0;uint32_t minX=width,minY=height,maxX=0,maxY=0;
+            size_t visible=0,primaryActorVisible=0,secondaryActorVisible=0,secondaryVisiblePixels=0,secondaryChangedOutside=0;uint32_t minX=width,minY=height,maxX=0,maxY=0;
+            const uint8_t *primaryPixels=primaryOnly.bytes;
             for(uint32_t py=0;py<height;++py)for(uint32_t px=0;px<width;++px) {
                 size_t offset=((size_t)py*width+px)*4;
                 if(abs((int)scene[offset]-(int)base[offset])>8||
                    abs((int)scene[offset+1]-(int)base[offset+1])>8||
                    abs((int)scene[offset+2]-(int)base[offset+2])>8) {
                     ++visible;minX=MIN(minX,px);minY=MIN(minY,py);maxX=MAX(maxX,px);maxY=MAX(maxY,py);
+                    if(_secondaryVisible&&px>=secondaryClip.x&&px<secondaryClip.x+secondaryClip.width&&py>=secondaryClip.y&&py<secondaryClip.y+secondaryClip.height)++secondaryActorVisible;
+                    else ++primaryActorVisible;
+                }
+                if(primaryPixels&&(abs((int)scene[offset]-(int)primaryPixels[offset])>8||abs((int)scene[offset+1]-(int)primaryPixels[offset+1])>8||abs((int)scene[offset+2]-(int)primaryPixels[offset+2])>8)) {
+                    if(px>=secondaryClip.x&&px<secondaryClip.x+secondaryClip.width&&py>=secondaryClip.y&&py<secondaryClip.y+secondaryClip.height)++secondaryVisiblePixels;
+                    else ++secondaryChangedOutside;
                 }
                 if(abs((int)frame[offset]-(int)scene[offset])>8||abs((int)frame[offset+1]-(int)scene[offset+1])>8||abs((int)frame[offset+2]-(int)scene[offset+2])>8)++uiVisible;
                 if(icons&&(abs((int)frame[offset]-(int)icons[offset])>8||abs((int)frame[offset+1]-(int)icons[offset+1])>8||abs((int)frame[offset+2]-(int)icons[offset+2])>8))++contextVisible;
@@ -1261,10 +1395,26 @@ static void freeMorphCaches(dc_game_model *slot) {
                     @"camera_pose":@[@(orbit.height),@(orbit.stored_distance),@(orbit.pitch),@(orbit.yaw),@(orbit.base.values[12]),@(orbit.base.values[13]),@(orbit.base.values[14])],
                     @"camera_controller_pose":@[@(controllerPose.height),@(controllerPose.stored_distance),@(controllerPose.pitch),@(controllerPose.yaw),@(controllerPose.base.values[12]),@(controllerPose.base.values[13]),@(controllerPose.base.values[14])],
                     @"camera_world":gameMatrixValues(&_renderedCameraWorld),@"camera_target_binding":@(_lastCameraTargetBinding),
+                    @"secondary_visible":@(_secondaryVisible),@"secondary_world":gameMatrixValues(&_secondaryRenderedWorld),
+                    @"secondary_viewport":@[@(_secondaryViewport.x),@(_secondaryViewport.y),@(_secondaryViewport.width),@(_secondaryViewport.height),@(_secondaryViewport.min_z),@(_secondaryViewport.max_z)],
+                    @"secondary_pose":@[@(secondaryOrbit.height),@(secondaryOrbit.stored_distance),@(secondaryOrbit.pitch),@(secondaryOrbit.yaw),@(secondaryOrbit.base.values[12]),@(secondaryOrbit.base.values[13]),@(secondaryOrbit.base.values[14])],
+                    @"secondary_controller_pose":@[@(_secondaryCamera.height),@(_secondaryCamera.stored_distance),@(_secondaryCamera.pitch),@(_secondaryCamera.yaw),@(_secondaryCamera.base.values[12]),@(_secondaryCamera.base.values[13]),@(_secondaryCamera.base.values[14])],
+                    @"secondary_target_binding":@(_secondaryTargetBinding),@"secondary_target_matrix":_secondaryRetargets?gameMatrixValues(&_secondaryTarget):@[],
+                    @"secondary_actions":@(_secondaryActions),@"secondary_retargets":@(_secondaryRetargets),@"secondary_resets":@(_secondaryResets),
+                    @"secondary_auto_enters":@(_secondaryAutoEnters),@"secondary_auto_leaves":@(_secondaryAutoLeaves),
+                    @"secondary_pointer_owner":@(_pointerCameraOwner),@"secondary_pointer_operation":@(_secondaryLastPointerOperation),
+                    @"secondary_pointer_input":@[@(_secondaryLastPointer.dx),@(_secondaryLastPointer.dy),@(_secondaryLastPointer.wheel),@(_secondaryLastPointer.left),@(_secondaryLastPointer.right),@(_secondaryLastPointer.middle),@(_secondaryLastPointer.fast)],
+                    @"secondary_pointer_limits":@[@(_secondaryLimits.far_distance),@(_secondaryLimits.near_distance),@(_secondaryLimits.high),@(_secondaryLimits.low),@(_secondaryLimits.wheel_step)],
+                    @"pointer_logical":@[@(((x+1)*.5f*width-viewport.x)/scale),@(((1-y)*.5f*height-viewport.y)/scale)],
+                    @"secondary_pointer_before_base":gameMatrixValues(&_secondaryPointerBefore.base),
+                    @"secondary_pointer_before_pose":@[@(_secondaryPointerBefore.height),@(_secondaryPointerBefore.stored_distance),@(_secondaryPointerBefore.pitch),@(_secondaryPointerBefore.yaw)],
+                    @"secondary_auto_frames":@(_secondaryAutoFrames),@"secondary_pointer_updates":@(_secondaryPointerUpdates),
+                    @"secondary_map_draws":@(secondaryMapCount),@"secondary_scene_draws":@(secondarySceneCount),@"secondary_visible_pixels":@(secondaryVisiblePixels),@"secondary_changed_outside":@(secondaryChangedOutside),
+                    @"secondary_actor_visible_pixels":@(secondaryActorVisible),@"primary_actor_visible_pixels":@(primaryActorVisible),
                     @"camera_body_retargets":@(_cameraBodyRetargetCount),@"camera_auto_frames":@(_cameraAutoFrames),
                     @"camera_animation_clip":@(cameraAnimation.current),@"camera_animation_frame":@(cameraAnimation.frame),
-                    @"automatic_eye_world":_cameraAutoFrames?gameMatrixValues(&_autoCameraEye):@[],
-                    @"automatic_target":_cameraAutoFrames?@[@(_autoCameraTarget.values[12]),@(_autoCameraTarget.values[13]),@(_autoCameraTarget.values[14])]:@[],
+                    @"automatic_eye_world":(_cameraAutoFrames||_secondaryAutoFrames)?gameMatrixValues(&_autoCameraEye):@[],
+                    @"automatic_target":(_cameraAutoFrames||_secondaryAutoFrames)?@[@(_autoCameraTarget.values[12]),@(_autoCameraTarget.values[13]),@(_autoCameraTarget.values[14])]:@[],
                     @"automatic_center":_autoCamera.model?@[@(_autoCamera.world.values[12]),@(_autoCamera.world.values[13]),@(_autoCamera.world.values[14])]:@[],
                     @"camera_actions":@(_cameraActionCount),@"camera_resets":@(_cameraResetCount),@"camera_retargets":@(_cameraRetargetCount),
                     @"camera_target":_cameraRetargetCount?@[@(_lastCameraTarget.values[12]),@(_lastCameraTarget.values[13]),@(_lastCameraTarget.values[14])]:@[],

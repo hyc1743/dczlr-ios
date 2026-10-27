@@ -49,6 +49,14 @@ enum dc_vk_depth_mode {
     DC_VK_DEPTH_AUTO_TRANSLUCENT=4 /* Original transparent queue, even with opaque texels. */
 };
 typedef struct dc_vk_clip_rect { uint32_t x,y,width,height; } dc_vk_clip_rect;
+enum dc_vk_clear_flags { DC_VK_CLEAR_COLOR=1,DC_VK_CLEAR_DEPTH=2 };
+typedef struct dc_vk_geometry_pass {
+    const dc_vk_geometry_item *items;
+    size_t count;
+    dc_vk_clip_rect clip;
+    uint32_t clear_flags;
+    uint8_t clear_rgba[4];
+} dc_vk_geometry_pass;
 
 typedef struct dc_vk_sprite_info {
     char device_name[256];
@@ -98,6 +106,15 @@ DC_API dc_status dc_vk_geometry_render(dc_vk_sprite *renderer,
 DC_API dc_status dc_vk_geometry_render_region(dc_vk_sprite *renderer,
     const dc_vk_geometry_item *items,size_t count,const uint8_t clear_rgba[4],
     uint8_t *rgba,size_t capacity,const dc_vk_clip_rect *clip);
+/* One submission/presentation, independently sorted geometry per pass.
+ * The frame clear initializes the whole target. Each pass may clear color
+ * and/or depth within its nonempty clip rectangle before drawing. Later
+ * overlay passes can retain both attachments. All passes are validated before
+ * submission; invalid late passes preserve the previous target/readback.
+ * At most 16 passes, 4096 total draws and 1048576 total vertices. */
+DC_API dc_status dc_vk_geometry_render_passes(dc_vk_sprite *renderer,
+    const dc_vk_geometry_pass *passes,size_t count,const uint8_t clear_rgba[4],
+    uint8_t *rgba,size_t capacity);
 
 #ifdef __cplusplus
 }

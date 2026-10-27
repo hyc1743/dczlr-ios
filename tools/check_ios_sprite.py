@@ -13,6 +13,7 @@ import os
 import shutil
 import struct
 import uuid
+from camera_evidence_math import orbit_world
 
 
 SCENES = {"checker": "self-authored checker sprite", "startup": "first startup-card sprite", "warning": "second startup-card sprite",
@@ -184,14 +185,16 @@ def mouse_input_evidence(log):
         'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_CONTEXT_RENDERED',
         'PORTLAB_MOUSE_CONTEXT_SELECTED','PORTLAB_CAMERA_RETARGET_APPLIED','PORTLAB_CAMERA_RESET_APPLIED',
         'PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_CAMERA_BODY_RETARGET_APPLIED','PORTLAB_CAMERA_AUTO_ADVANCED',
-        'PORTLAB_CAMERA_AUTO_RESTORED','PORTLAB_CHARACTER_ANIMATION_STARTED','PORTLAB_CHARACTER_ANIMATION_RETURNED',
+        'PORTLAB_CAMERA_AUTO_RESTORED','PORTLAB_SECONDARY_TARGETS_APPLIED','PORTLAB_SECONDARY_AUTO_ADVANCED',
+        'PORTLAB_SECONDARY_VISIBILITY_TOGGLED','PORTLAB_SECONDARY_POINTER_APPLIED','PORTLAB_CAMERAS_BOTH_AUTO_APPLIED',
+        'PORTLAB_SECONDARY_INPUT_PASSED','PORTLAB_CHARACTER_ANIMATION_STARTED','PORTLAB_CHARACTER_ANIMATION_RETURNED',
         'PORTLAB_CHARACTER_SOUND_COMPLETED','PORTLAB_CHARACTER_HANDOFF','PORTLAB_MOUSE_INPUT_PASSED')
     for event in required:
         if not re.search(r'(?m)^\S+ '+re.escape(event)+r'(?= |$)',log):raise ValueError('Missing mouse evidence: '+event)
     return {'scope':'bounded input on first real-resource scene','input':'visible relative drag, mouse buttons and Num6/arrow combination',
         'menu':'left click accepted by scene hit test','complete_story':'not tested',
         'right_click_menu_behavior':'initial camera menu GPU visibility, left selection and right dismissal checked',
-        'context_action_callbacks':'both primary targets, automatic camera on/off, active CAM reset, initial character animation and audio-gated chapter4 handoff checked; secondary and system actions remain incomplete',
+        'context_action_callbacks':'primary and secondary targets, automatic modes, V visibility, pointer controls, CAM reset, initial character animation and audio-gated chapter4 handoff checked; system destinations remain incomplete',
         'original_game_equivalence':'not established','physical_device':'not tested'}
 
 
@@ -216,12 +219,6 @@ def camera_action_evidence(retarget,reset,expected_pose):
             'default_reset':'rendered pose matches original CAM bytes',
             'retarget_pose':a,'target_world_matrix':target_matrix,'reset_pose':b,'expected_reset_pose':list(expected_pose),
             'remaining':'secondary view and system destination screens not implemented in host'}
-
-def orbit_world(pose):
-    height,distance,pitch,yaw,x,y,z=pose
-    sx,cx,sy,cy=math.sin(pitch),math.cos(pitch),math.sin(yaw),math.cos(yaw)
-    rows=[cy,0,-sy,0,sx*sy,cx,sx*cy,0,cx*sy,-sx,cx*cy,0]
-    return rows+[x-distance*rows[8],y+height-distance*rows[9],z-distance*rows[10],1]
 
 def primary_modes_evidence(body,first,later,off,expected_pose):
     def finite(frame,key,count):
@@ -665,6 +662,21 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(stem+extension),output/(stem+extension))
             additional.append(json.loads((output/(stem+'.json')).read_text()))
         report['primary_camera_modes']=primary_modes_evidence(*additional,expected)
+        from secondary_camera_evidence import STEMS,validate as secondary_evidence
+        secondary_frames={}
+        for stem in STEMS:
+            name='gameplay-secondary-'+stem+'-native'
+            for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(name+extension),output/(name+extension))
+            secondary_frames[stem]=json.loads((output/(name+'.json')).read_text())
+        name='gameplay-cameras-both-auto-native'
+        for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(name+extension),output/(name+extension))
+        secondary_frames['both']=json.loads((output/(name+'.json')).read_text())
+        secondary_frames['reset']=reset
+        for stem,frame in secondary_frames.items():
+            png=(output/frame['file']).read_bytes()
+            if png[:8]!=b'\x89PNG\r\n\x1a\n' or struct.unpack_from('>2I',png,16)!=(frame['width'],frame['height']):
+                raise ValueError('Secondary metadata does not match its captured PNG: '+stem)
+        report['secondary_camera']=secondary_evidence(secondary_frames,expected)
         for stem in ('gameplay-character-active-native','gameplay-character-idle-native'):
             for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(stem+extension),output/(stem+extension))
         active=json.loads((output/'gameplay-character-active-native.json').read_text())

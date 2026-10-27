@@ -319,6 +319,35 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     OK(dc_vk_geometry_render(r,layers,3,clear,rgba,sizeof(rgba)));
     CHECK(pixel(rgba,4,4,63,64,128,159,1));
     puts("PASS: multiple translucent material layers sort back to front");
+    OK(dc_vk_sprite_remove_texture(r,green_texture));
+    OK(dc_vk_sprite_upload(r,1,1,green_pixel,sizeof(green_pixel),&green_texture));
+    for(unsigned i=0;i<6;++i){far_quad[i].diffuse=near_quad[i].diffuse=0xffffffff;far_quad[i].z=.1f;near_quad[i].z=.8f;}
+    dc_vk_geometry_item primary={.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
+    dc_vk_geometry_item secondary={.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
+    dc_vk_geometry_item overlay=primary;overlay.depth_mode=DC_VK_DEPTH_DISABLED;
+    dc_vk_geometry_pass passes[3]={
+        {.items=&primary,.count=1,.clip={0,0,8,8}},
+        {.items=&secondary,.count=1,.clip={2,2,4,4},.clear_flags=DC_VK_CLEAR_COLOR|DC_VK_CLEAR_DEPTH,.clear_rgba={0,0,0,255}},
+        {.items=&overlay,.count=1,.clip={2,2,1,1}}
+    };
+    OK(dc_vk_sprite_get_info(r,&info));frame_count=info.submitted_frames;
+    OK(dc_vk_geometry_render_passes(r,passes,3,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,4,0,255,0,255,0)); /* independent secondary depth */
+    CHECK(pixel(rgba,6,4,255,0,0,255,0)); /* primary outside inset preserved */
+    CHECK(pixel(rgba,2,2,255,0,0,255,0)); /* overlay above secondary */
+    CHECK(pixel(rgba,0,0,20,40,60,100,0));
+    OK(dc_vk_sprite_get_info(r,&info));CHECK(info.submitted_frames==frame_count+1);
+    memcpy(before,rgba,sizeof(rgba));frame_count=info.submitted_frames;
+    passes[2].clip.width=9;
+    CHECK(dc_vk_geometry_render_passes(r,passes,3,clear,rgba,sizeof(rgba))==DC_RANGE);
+    CHECK(!memcmp(before,rgba,sizeof(rgba)));
+    passes[2].clip.width=1;overlay.texture=(uintptr_t)-1;
+    CHECK(dc_vk_geometry_render_passes(r,passes,3,clear,rgba,sizeof(rgba))==DC_ARGUMENT);
+    CHECK(!memcmp(before,rgba,sizeof(rgba)));OK(dc_vk_sprite_get_info(r,&info));CHECK(info.submitted_frames==frame_count);
+    overlay.texture=red_texture;passes[2].clear_flags=4;
+    CHECK(dc_vk_geometry_render_passes(r,passes,3,clear,rgba,sizeof(rgba))==DC_FORMAT);
+    OK(dc_vk_geometry_render(r,&primary,1,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,255,0,0,255,0));
+    puts("PASS: independent secondary color/depth region, final overlay, atomic late-pass rejection and single submission");
     OK(dc_vk_sprite_remove_texture(r,red_texture));OK(dc_vk_sprite_remove_texture(r,green_texture));
     puts("PASS: depth-tested overlapping geometry is submission-order independent");
     dc_vk_sprite_destroy(r);

@@ -1,6 +1,7 @@
 #ifndef DC_CAMERA_H
 #define DC_CAMERA_H
 #include "dc_pose.h"
+#include "dc_mesh.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -68,6 +69,25 @@ DC_API dc_status dc_camera_scene_node(uint32_t stage,uint32_t binding,char *out,
  * Inputs must be finite affine matrices. Coincident/vertical targets that
  * cannot supply an invertible camera fail atomically; aliasing is supported. */
 DC_API dc_status dc_camera_look_at(const dc_matrix *source,const dc_matrix *target,dc_matrix *out);
+
+typedef struct dc_camera_pointer_input {
+    int32_t dx,dy,wheel;
+    uint8_t left,right,middle,fast;
+} dc_camera_pointer_input;
+typedef struct dc_camera_pointer_limits {
+    float far_distance,near_distance,high,low,wheel_step;
+} dc_camera_pointer_limits;
+/* 00512cc0's slot0 viewport: logical (0,504,352,264), converted with the
+ * original truncation after extended-precision multiplication by scale.
+ * The input is the central 4:3 game viewport; black gutters are excluded. */
+DC_API dc_status dc_camera_secondary_viewport(const dc_viewport *main,dc_viewport *out);
+/* Numeric 00479630 pointer controller. Button latch bits use 0/3/1/2.
+ * Left rotates, right changes distance/height, both or middle pan; a wheel
+ * pulse dollies only when no mouse button is down. F1 doubles sensitivity.
+ * Single angle correction (not fmod), original clamps and world-axis motion
+ * are retained. Invalid input leaves output unchanged; aliasing is allowed. */
+DC_API dc_status dc_camera_secondary_pointer(const dc_camera_orbit *source,
+    const dc_camera_pointer_limits *limits,const dc_camera_pointer_input *input,dc_camera_orbit *out);
 
 #ifdef __cplusplus
 }
