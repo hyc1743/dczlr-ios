@@ -625,6 +625,8 @@ def library():
     lib.dc_camera_scene_resource.argtypes = [C.c_uint32,C.c_uint32,C.c_uint32,C.c_void_p,C.c_size_t]
     lib.dc_camera_retarget.argtypes = [C.POINTER(CameraOrbit),C.POINTER(Matrix),C.c_uint32,C.POINTER(CameraOrbit)]
     lib.dc_camera_retarget.restype = C.c_int
+    lib.dc_camera_scene_node.argtypes=[C.c_uint32,C.c_uint32,C.c_void_p,C.c_size_t]
+    lib.dc_camera_look_at.argtypes=[C.POINTER(Matrix),C.POINTER(Matrix),C.POINTER(Matrix)]
     lib.dc_scene_action_build.argtypes = [C.c_uint32]*5+[C.POINTER(SceneActionPlan)]
     lib.dc_scene_action_build.restype = C.c_int
     lib.dc_game_player_step.argtypes=[C.POINTER(GamePlayer),C.POINTER(GameInput),C.c_float,C.POINTER(GamePlayer)]

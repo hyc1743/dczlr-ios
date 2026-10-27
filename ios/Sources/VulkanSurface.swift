@@ -107,12 +107,12 @@ final class SpritePresenter: NSObject {
             ok = dc_gamepad_test_mouse(512, 600, 0, pulse)
         case .gameplay:
             // Exercise independent Num6 + arrow Up while the pointer is moved.
-            ok = dc_gamepad_test_key(22, !reportedControllerCamera)
-                && dc_gamepad_test_key(11, !reportedControllerCamera)
+            ok = dc_gamepad_test_key(22, !reportedControllerCamera || mouseMenuPhase == 19)
+                && dc_gamepad_test_key(11, !reportedControllerCamera || mouseMenuPhase == 19)
             // Each stage waits for native state from a presented frame.
             // Select an actual camera context row, dismiss via a fresh right
             // press, then leave the menu open for the final screenshot.
-            let leftPhase = [0, 2, 4, 10, 13].contains(mouseMenuPhase)
+            let leftPhase = [0, 2, 4, 10, 13, 16, 18, 21].contains(mouseMenuPhase)
             ok = ok && dc_gamepad_test_mouse(0, 0, leftPhase ? 1 : 0, false)
             if mouseMenuPhase == 0 {
                 ok = ok && dc_gamepad_test_mouse(968, 376, 0, pulse)
@@ -128,6 +128,12 @@ final class SpritePresenter: NSObject {
                 ok = ok && dc_gamepad_test_mouse(900, 481, 0, pulse)
             } else if mouseMenuPhase == 13 {
                 ok = ok && dc_gamepad_test_mouse(900, 271, 0, pulse)
+            } else if [15, 17, 20].contains(mouseMenuPhase) {
+                ok = ok && dc_gamepad_test_mouse(968, 600, 1, pulse)
+            } else if mouseMenuPhase == 16 {
+                ok = ok && dc_gamepad_test_mouse(850, 530, 0, pulse)
+            } else if mouseMenuPhase == 18 || mouseMenuPhase == 21 {
+                ok = ok && dc_gamepad_test_mouse(850, 565, 0, pulse)
             } else {
                 ok = ok && dc_gamepad_test_mouse(0, 0, 1, false)
                     && dc_gamepad_test_mouse(0, 0, 0, false)
@@ -307,7 +313,26 @@ final class SpritePresenter: NSObject {
                             self.mouseMenuPhase = 8
                             self.mouseEvidence.insert("finalcontext")
                         }
-                        if self.mouseMenuPhase == 8, !opened, (fields["context_dismissals"] ?? 0) >= 2 { self.mouseMenuPhase = 9 }
+                        if self.mouseMenuPhase == 8, !opened, (fields["context_dismissals"] ?? 0) >= 2 { self.mouseMenuPhase = 15 }
+                        if self.mouseMenuPhase == 15, opened, fields["context_icon"] == 3 { self.mouseMenuPhase = 16 }
+                        if self.mouseMenuPhase == 16, (fields["camera_body"] ?? 0) > 0 {
+                            self.mouseMenuPhase = 17
+                            self.mouseEvidence.insert("body-retarget")
+                            self.model.record("Primary camera used the original second target binding", event: "PORTLAB_CAMERA_BODY_RETARGET_APPLIED")
+                        }
+                        if self.mouseMenuPhase == 17, opened, fields["context_icon"] == 3 { self.mouseMenuPhase = 18 }
+                        if self.mouseMenuPhase == 18, fields["camera_mode"] == 2 { self.mouseMenuPhase = 19 }
+                        if self.mouseMenuPhase == 19, (fields["camera_auto_frames"] ?? 0) >= 8 {
+                            self.mouseMenuPhase = 20
+                            self.mouseEvidence.insert("automatic")
+                            self.model.record("Original auto_cam clip0 advanced the rendered camera while manual keys were held", event: "PORTLAB_CAMERA_AUTO_ADVANCED")
+                        }
+                        if self.mouseMenuPhase == 20, opened, fields["context_icon"] == 3 { self.mouseMenuPhase = 21 }
+                        if self.mouseMenuPhase == 21, fields["camera_mode"] == 0, (fields["camera_auto_off"] ?? 0) > 0 {
+                            self.mouseMenuPhase = 9
+                            self.mouseEvidence.insert("automatic-off")
+                            self.model.record("Context index2 toggled automatic mode off and restored the original CAM", event: "PORTLAB_CAMERA_AUTO_RESTORED")
+                        }
                         if self.mouseMenuPhase == 9, opened, fields["context_icon"] == 1 { self.mouseMenuPhase = 10 }
                         if self.mouseMenuPhase == 10, (fields["character_actions"] ?? 0) >= 1 { self.mouseMenuPhase = 11 }
                         if self.mouseMenuPhase == 11, (fields["character_starts"] ?? 0) >= 1, self.mouseEvidence.insert("character-active").inserted {
@@ -423,7 +448,7 @@ final class SpritePresenter: NSObject {
                     if fields.count == 3, let chapter = Int(fields[0]), let frame = Int(fields[1]), let fade = Int(fields[2]) {
                         self.introChapter = chapter
                         if self.testingTouch, chapter == 4, self.mouseMenuPhase == 14,
-                           self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move", "context", "selection", "retarget", "reset", "dismiss", "finalcontext", "character-active", "character-sound"]),
+                           self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move", "context", "selection", "retarget", "reset", "dismiss", "finalcontext", "body-retarget", "automatic", "automatic-off", "character-active", "character-sound"]),
                            self.mouseEvidence.insert("passed").inserted {
                             self.model.record("Original first-scene exit reached numbered script chapter4", event: "PORTLAB_CHARACTER_HANDOFF")
                             self.model.record("Bounded mouse, camera and initial character callbacks verified", event: "PORTLAB_MOUSE_INPUT_PASSED")

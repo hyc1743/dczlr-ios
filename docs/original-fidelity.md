@@ -330,3 +330,43 @@ report.json, native captures/sidecars and app.log. ZIP SHA-256 is
 1c3293af56b507512273fe37b9a6af62847e9816e27c998b61131d0fdfeb1ca8;
 CRC validation and local artifact review passed. This certifies only the
 initial type-4 progress-zero route, not later menus or the complete game.
+
+## Remaining primary camera modes (2026-10-27)
+
+FUN_005181f0 binds primary target 1 to the actor's stage prefix plus
+`_Kn_kosi` at scene +0x187c + stage*4. Primary option 1 now uses that exact
+node through the already verified retarget calculation. Option 2 preserves
+FUN_00539dd0's toggle between mode 2 and mode 0 and its active CAM reset.
+Option 6 still resets both mode bytes and the primary/secondary presets.
+Secondary options 3/4/5 and system destination scenes remain pending.
+
+FUN_00522ff0 loads RPP_17 auto_cam.xx/xa into scene +0x1058; FUN_00512cc0
+binds its `z_Nz_cam` to +0x1738. This separate model was previously absent.
+The asset has a populated looping clip 0 (frames 0..40, duration 40 seconds),
+while clip 1 is empty. The host explicitly selects clip 0 and advances it
+throughout the type-4 scene, including while automatic mode is disabled.
+Private resource tests verify movement and the loop, without exporting assets.
+
+FUN_00513690 places this camera model at the actor's `z_Nz_light` translation,
+uses its animated camera node as the eye, and raises the light-node look
+target by the original constant 2.0 at VA 0x62e664. Mode 2 now builds the
+rendered camera from those current-frame matrices. Model advancement is
+separate from geometry submission so each controller ticks once. Manual
+rotation, pan and zoom stay inactive in this original mode. Selecting option
+2 again restores the CAM pose and manual control.
+
+The generic look-at body FUN_00417ac0 and its original cross/scale leaves
+match 48 synthetic cases within 0.00000006 absolute error. D3DX normalization
+is an explicit Python math boundary, and constructors are inert. This does
+not execute an original scene or the original D3DX/GPU. Portable vectors are
+in tests/fixtures/camera-look-at-original-vectors.json. Local discovery passes
+323 tests, including real-resource bindings for all three stages and camera
+looping, aliasing/degenerate-input checks, and capture-evidence rejection.
+
+The expanded simulator route requires target-1 retarget, automatic camera
+captures at two animation frames, held Num6/Up while automatic mode is active,
+toggle-off CAM/world-matrix restoration, then the existing initial character
+actions and script-4 handoff. A separate Python calculation checks captured
+camera world matrices, actual eye motion and the +2 target height. Simulator
+execution for this change is pending; full original scene equivalence remains
+unverified.

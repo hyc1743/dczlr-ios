@@ -183,14 +183,15 @@ def mouse_input_evidence(log):
         'PORTLAB_MOUSE_MOVE_DELIVERED','PORTLAB_MOUSE_LEFT_DELIVERED','PORTLAB_MOUSE_RIGHT_DELIVERED',
         'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_CONTEXT_RENDERED',
         'PORTLAB_MOUSE_CONTEXT_SELECTED','PORTLAB_CAMERA_RETARGET_APPLIED','PORTLAB_CAMERA_RESET_APPLIED',
-        'PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_CHARACTER_ANIMATION_STARTED','PORTLAB_CHARACTER_ANIMATION_RETURNED',
+        'PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_CAMERA_BODY_RETARGET_APPLIED','PORTLAB_CAMERA_AUTO_ADVANCED',
+        'PORTLAB_CAMERA_AUTO_RESTORED','PORTLAB_CHARACTER_ANIMATION_STARTED','PORTLAB_CHARACTER_ANIMATION_RETURNED',
         'PORTLAB_CHARACTER_SOUND_COMPLETED','PORTLAB_CHARACTER_HANDOFF','PORTLAB_MOUSE_INPUT_PASSED')
     for event in required:
         if not re.search(r'(?m)^\S+ '+re.escape(event)+r'(?= |$)',log):raise ValueError('Missing mouse evidence: '+event)
     return {'scope':'bounded input on first real-resource scene','input':'visible relative drag, mouse buttons and Num6/arrow combination',
         'menu':'left click accepted by scene hit test','complete_story':'not tested',
         'right_click_menu_behavior':'initial camera menu GPU visibility, left selection and right dismissal checked',
-        'context_action_callbacks':'primary target-0 retarget, active CAM reset, initial character animation and audio-gated chapter4 handoff checked; other actions remain incomplete',
+        'context_action_callbacks':'both primary targets, automatic camera on/off, active CAM reset, initial character animation and audio-gated chapter4 handoff checked; secondary and system actions remain incomplete',
         'original_game_equivalence':'not established','physical_device':'not tested'}
 
 
@@ -214,7 +215,57 @@ def camera_action_evidence(retarget,reset,expected_pose):
     return {'primary_retarget':'rendered camera reanchored to original target node',
             'default_reset':'rendered pose matches original CAM bytes',
             'retarget_pose':a,'target_world_matrix':target_matrix,'reset_pose':b,'expected_reset_pose':list(expected_pose),
-            'remaining':'other camera modes, secondary view and system destination screens not implemented in host'}
+            'remaining':'secondary view and system destination screens not implemented in host'}
+
+def orbit_world(pose):
+    height,distance,pitch,yaw,x,y,z=pose
+    sx,cx,sy,cy=math.sin(pitch),math.cos(pitch),math.sin(yaw),math.cos(yaw)
+    rows=[cy,0,-sy,0,sx*sy,cx,sx*cy,0,cx*sy,-sx,cx*cy,0]
+    return rows+[x-distance*rows[8],y+height-distance*rows[9],z-distance*rows[10],1]
+
+def primary_modes_evidence(body,first,later,off,expected_pose):
+    def finite(frame,key,count):
+        values=frame.get(key,[])
+        if len(values)!=count or not all(math.isfinite(v) for v in values):raise ValueError('Invalid camera '+key)
+        return values
+    def close(a,b):return all(abs(x-y)<2e-5*(1+abs(y)) for x,y in zip(a,b))
+    camera_action_evidence(body,off,expected_pose)
+    if body.get('camera_modes')!=[1,0] or body.get('camera_target_binding')!=1 or body.get('camera_body_retargets',0)<1:
+        raise ValueError('Second original primary target was not used')
+    for capture in (body,off):
+        if not close(finite(capture,'camera_world',16),orbit_world(finite(capture,'camera_pose',7))):
+            raise ValueError('Rendered world matrix differs from controller pose')
+    if off.get('camera_modes')!=[0,0]:raise ValueError('Automatic mode was not disabled')
+    for capture in (first,later):
+        if capture.get('camera_modes')!=[2,0] or capture.get('camera_animation_clip')!=0:
+            raise ValueError('Original automatic camera animation is not active')
+        if capture.get('actor_visible_pixels',0)<1:raise ValueError('Automatic view did not present an actor')
+        eye_matrix=finite(capture,'automatic_eye_world',16);eye=eye_matrix[12:15]
+        target=finite(capture,'automatic_target',3);center=finite(capture,'automatic_center',3)
+        if not close(target,[center[0],center[1]+2,center[2]]):raise ValueError('Automatic target differs from original height offset')
+        back=[a-b for a,b in zip(eye,target)];length=math.sqrt(sum(x*x for x in back))
+        if not math.isfinite(length) or length==0:raise ValueError('Degenerate automatic eye/target')
+        back=[x/length for x in back]
+        right=[back[2],0,-back[0]];length=math.sqrt(sum(x*x for x in right))
+        if not math.isfinite(length) or length==0:raise ValueError('Degenerate automatic up vector')
+        right=[x/length for x in right]
+        up=[back[1]*right[2]-back[2]*right[1],back[2]*right[0]-back[0]*right[2],back[0]*right[1]-back[1]*right[0]]
+        expected=[*right,0,*up,0,*back,0,*eye,1]
+        if not close(finite(capture,'camera_world',16),expected):raise ValueError('Automatic view differs from original look-at calculation')
+        if not close(finite(capture,'camera_controller_pose',7),expected_pose):raise ValueError('Manual controls changed the automatic-mode controller')
+    first_frame=first.get('camera_animation_frame');later_frame=later.get('camera_animation_frame')
+    if not all(isinstance(v,(int,float)) and math.isfinite(v) for v in (first_frame,later_frame)):
+        raise ValueError('Missing original camera animation clock')
+    if (later_frame-first_frame)%40<.001 or later.get('camera_auto_frames',0)<=first.get('camera_auto_frames',0):
+        raise ValueError('Automatic camera animation did not advance')
+    a=first['camera_world'][12:15];b=later['camera_world'][12:15]
+    if max(abs(x-y) for x,y in zip(a,b))<.001:raise ValueError('Animated camera eye remained frozen')
+    return {'second_target':'original body binding and numeric retarget rendered',
+            'automatic':'original auto_cam clip0, animated eye and original look-at target height',
+            'manual_input':'Num6 and arrow Up held during automatic view; controller CAM stayed unchanged',
+            'toggle_off':'original active CAM restored in rendered world matrix',
+            'first_eye':a,'later_eye':b,'animation_frames':[first_frame,later_frame],
+            'remaining':'secondary view and system destination screens; original visual equivalence not established'}
 
 
 def black_gutter_evidence(log):
@@ -609,6 +660,11 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             index=next(i for i in range(pp.count) if pp.entry(i).name_bytes.decode('ascii')==reset['camera'])
             cam=pp.read(index);expected=struct.unpack_from('<7f',cam,reset['camera_preset']*84)
         report['camera_actions']=camera_action_evidence(retarget,reset,expected)
+        additional=[]
+        for stem in ('gameplay-camera-body-native','gameplay-camera-auto-first-native','gameplay-camera-auto-later-native','gameplay-camera-auto-off-native'):
+            for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(stem+extension),output/(stem+extension))
+            additional.append(json.loads((output/(stem+'.json')).read_text()))
+        report['primary_camera_modes']=primary_modes_evidence(*additional,expected)
         for stem in ('gameplay-character-active-native','gameplay-character-idle-native'):
             for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(stem+extension),output/(stem+extension))
         active=json.loads((output/'gameplay-character-active-native.json').read_text())

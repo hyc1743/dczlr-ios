@@ -38,6 +38,11 @@ typedef struct dc_morph_track_cache {
 typedef struct dc_walk_surface { float x[3],y[3],z[3]; } dc_walk_surface;
 
 static dc_matrix gameIdentity(void) { return (dc_matrix){{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1}}; }
+static NSArray<NSNumber *> *gameMatrixValues(const dc_matrix *matrix) {
+    NSMutableArray<NSNumber *> *values=[NSMutableArray arrayWithCapacity:16];
+    for(unsigned i=0;i<16;++i)[values addObject:@(matrix->values[i])];
+    return values;
+}
 static uint32_t gameColor(const dc_material_value *value) {
     uint32_t out=0;
     for(uint32_t i=0;i<4;++i) {
@@ -66,7 +71,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_xl_info _mapVariantLightInfo;
     dc_xl_light _mapVariantLight;
     dc_vk_sprite *_renderer;
-    dc_game_model _map,_actor;
+    dc_game_model _map,_actor,_autoCamera;
     dc_game_model _face;
     dc_matrix _cameraBase,_actorWorld;
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginY,_actorOriginZ;
@@ -79,6 +84,9 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_matrix _lastCameraTarget;
     uint32_t _primaryCameraMode,_secondaryCameraMode;
     uint32_t _cameraActionCount,_cameraResetCount,_cameraRetargetCount,_pendingContextActions;
+    uint32_t _cameraBodyRetargetCount,_cameraAutoEnterCount,_cameraAutoLeaveCount,_cameraAutoFrames;
+    uint32_t _lastCameraTargetBinding;
+    dc_matrix _renderedCameraWorld,_autoCameraEye,_autoCameraTarget;
     BOOL _cameraAutoSelected;
     NSMutableDictionary<NSNumber *, NSValue *> *_cameraFallbacks;
     uint32_t _actorHeadNode;
@@ -149,12 +157,13 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
     dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u context_callbacks=primary-camera-initial-character",
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u camera_mode=%u camera_body=%u camera_auto_on=%u camera_auto_off=%u camera_auto_frames=%u context_callbacks=primary-camera-initial-character",
         _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
         _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection,
         _cameraActionCount,_cameraRetargetCount,_cameraResetCount,_pendingContextActions,
         _characterActionCount,_characterAnimationStarts,animation.current,_characterReturnedIdle,_characterAction.exit_pending,
-        _exitSoundBusyObserved,_exitSoundWaitMs,_characterAction.transition_pending];
+        _exitSoundBusyObserved,_exitSoundWaitMs,_characterAction.transition_pending,
+        _primaryCameraMode,_cameraBodyRetargetCount,_cameraAutoEnterCount,_cameraAutoLeaveCount,_cameraAutoFrames];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
@@ -236,35 +245,49 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_status status=dc_scene_action_build(_sceneType,_contextMenu.icon,selection,_primaryCameraMode,_secondaryCameraMode,&plan);
     if(status==DC_NOT_FOUND){++_pendingContextActions;return nil;}
     if(status!=DC_OK)return @"Scene context action rejected";
-    if(_contextMenu.icon==3&&selection==0) {
-        /* FUN_005181f0 stores its third face-node lookup at +0x1708:
-         * prefix + _On_namida. FUN_00539dd0 option 0 retargets that node. */
-        uint32_t node=[self findNode:&_face name:[self characterNode:@"a_On_namida"]];dc_matrix target;
-        if(node==UINT32_MAX||dc_model_global(_face.model,node,&target)!=DC_OK){++_pendingContextActions;return nil;}
+    if(_contextMenu.icon==3&&selection<2) {
+        dc_matrix target;
+        if([self cameraBinding:selection matrix:&target]!=DC_OK)return @"Original primary camera target unavailable";
         dc_camera_orbit current=[self activeCameraOrbit],next;
         if(dc_camera_retarget(&current,&target,1,&next)!=DC_OK)return @"Primary camera retarget failed";
-        _lastCameraTarget=target;
+        _lastCameraTarget=target;_lastCameraTargetBinding=selection;
         [self adoptCameraOrbit:next];_primaryCameraMode=plan.camera_mode;++_cameraRetargetCount;++_cameraActionCount;
+        if(selection==1)++_cameraBodyRetargetCount;
 #if DEBUG
         if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
-            [self requestRenderCapture:@"gameplay-camera-retarget-native.png"];
+            [self requestRenderCapture:selection==0?@"gameplay-camera-retarget-native.png":@"gameplay-camera-body-native.png"];
 #endif
-    } else if(_contextMenu.icon==3&&selection==6) {
+    } else if(_contextMenu.icon==3&&(selection==2||selection==6)) {
         dc_camera_orbit preset;
         if(dc_camera_read_preset(_cameraPresetData.bytes,_cameraPresetData.length,_cameraPreset*3,&preset)!=DC_OK)return @"Original camera reset preset unavailable";
-        [self adoptCameraOrbit:preset];_secondaryCamera=preset;
-        _primaryCameraMode=plan.camera_mode;_secondaryCameraMode=plan.secondary_camera_mode;
+        [self adoptCameraOrbit:preset];
+        if(selection==6){_secondaryCamera=preset;_secondaryCameraMode=plan.secondary_camera_mode;}
+        uint32_t previousMode=_primaryCameraMode;_primaryCameraMode=plan.camera_mode;
+        if(selection==2) {
+            if(plan.camera_mode==2)++_cameraAutoEnterCount;
+            else if(previousMode==2)++_cameraAutoLeaveCount;
+        }
         ++_cameraResetCount;++_cameraActionCount;
 #if DEBUG
         if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
-            [self requestRenderCapture:@"gameplay-camera-reset-native.png"];
+            [self requestRenderCapture:selection==6?@"gameplay-camera-reset-native.png":
+                (plan.camera_mode==2?@"gameplay-camera-auto-first-native.png":@"gameplay-camera-auto-off-native.png")];
 #endif
     } else {
-        /* Other target bindings, automatic tracking, secondary-view output
-         * and save/edit destination screens remain separate port work. */
+        /* Secondary-view output and save/edit destination screens remain
+         * separate port work. Their state is not silently changed. */
         ++_pendingContextActions;
     }
     return nil;
+}
+- (dc_status)cameraBinding:(uint32_t)binding matrix:(dc_matrix *)out {
+    char name[32];dc_status status=dc_camera_scene_node(_storyStage,binding,name,sizeof(name));
+    if(status!=DC_OK)return status;
+    dc_game_model *slot=binding==DC_CAMERA_FACE_TARGET?&_face:
+        (binding==DC_CAMERA_ANIMATION_EYE?&_autoCamera:&_actor);
+    if(!slot->model)return DC_NOT_FOUND;
+    uint32_t node=[self findNode:slot name:[NSString stringWithUTF8String:name]];
+    return node==UINT32_MAX?DC_NOT_FOUND:dc_model_global(slot->model,node,out);
 }
 - (NSString *)stepContextAtX:(float)x y:(float)y left:(uint32_t)left right:(uint32_t)right {
     dc_scene_context_event event;
@@ -652,6 +675,16 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(!_map.xxData || !_actor.xxData || !_actor.xaData)return nil;
     if(![self openModel:&_map staticOnly:(_map.xaData==nil) error:error] || ![self openModel:&_actor staticOnly:NO error:error])return nil;
     if(_face.xxData && _face.xaData && ![self openModel:&_face staticOnly:YES error:error])return nil;
+    if(_sceneType==4) {
+        DCArchive *cameraArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_17.pp"]] error:&reason];
+        if(!cameraArchive){if(error)*error=@"Original automatic camera archive unavailable";return nil;}
+        _autoCamera.xxData=[self entry:@"auto_cam.xx" archive:cameraArchive error:error];
+        _autoCamera.xaData=[self entry:@"auto_cam.xa" archive:cameraArchive error:error];
+        if(!_autoCamera.xxData||!_autoCamera.xaData||![self openModel:&_autoCamera staticOnly:NO error:error])return nil;
+        /* 00522ff0 leaves the auto_cam controller on its original clip0.
+         * Clip1 is empty in this asset and would freeze the camera. */
+        if(dc_model_request(_autoCamera.model,0,0)!=DC_OK){if(error)*error=@"Original automatic camera animation unavailable";return nil;}
+    }
     NSString *morphError=nil;
     if(_face.model && ![self buildMorphCaches:&_face error:&morphError]) { if(error)*error=morphError ?: @"Game morph cache initialization failed";return nil; }
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
@@ -748,7 +781,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     /* All draws are blocking and serialized by the view's render queue.
      * Release GPU handles while their renderer is still alive, including
      * partially initialized models; dealloc can then free the CPU data. */
-    dc_game_model *models[]={&_map,&_actor,&_face};
+    dc_game_model *models[]={&_map,&_actor,&_face,&_autoCamera};
     for(size_t m=0;m<sizeof(models)/sizeof(models[0]);++m) {
         dc_game_model *slot=models[m];
         if(slot->textures)for(uint32_t i=0;i<slot->textureCount;++i) {
@@ -758,7 +791,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     [self detachSceneUI];_renderer=NULL;
 }
-- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachSceneUI];[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face]; }
+- (void)dealloc { [self savePlayerState];free(_surfaces);[self detachSceneUI];[self detachModel:&_map];[self detachModel:&_actor];[self detachModel:&_face];[self detachModel:&_autoCamera]; }
 
 - (void)detachSceneUI {
     if(_renderer)for(NSNumber *handle in _sceneUITextures.allValues)dc_vk_sprite_remove_texture(_renderer,handle.unsignedLongLongValue);
@@ -947,9 +980,9 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     return YES;
 }
-- (NSString *)append:(dc_game_model *)slot delta:(uint32_t)delta tick:(uint32_t)tick camera:(const dc_camera_matrices *)camera
+- (NSString *)append:(dc_game_model *)slot camera:(const dc_camera_matrices *)camera
     viewport:(const dc_viewport *)viewport draws:(dc_vk_geometry_item *)draws count:(size_t *)count storage:(NSMutableArray *)storage triangles:(uint32_t *)triangles {
-    dc_matrix world=slot->world;dc_status status=dc_model_tick(slot->model,delta,tick,&world);if(status!=DC_OK)return @"Game model tick failed";
+    dc_status status;
     dc_mesh_vertex **morphVertices=NULL;uint32_t *morphCounts=NULL;
     if(slot->xaInfo.morph_tracks) {
         morphVertices=calloc(slot->info.submeshes?slot->info.submeshes:1,sizeof(*morphVertices));
@@ -1105,6 +1138,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     } else if(!touching) { [self savePlayerState]; }
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     NSString *cameraSelectionError=[self autoSelectCameraAtTick:tick];if(cameraSelectionError)return cameraSelectionError;
+    if(_primaryCameraMode!=2) {
     if(controller.pressed&DC_PAD_R3){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
     float cameraX=controller.rx/32767.f,cameraY=controller.ry/32767.f;
     if(pcNum4)cameraX-=1.f;if(pcNum6)cameraX+=1.f;
@@ -1121,20 +1155,47 @@ static void freeMorphCaches(dc_game_model *slot) {
     float panX=(pcArrowRight?1.f:0.f)-(pcArrowLeft?1.f:0.f);
     float panZ=(pcArrowDown?1.f:0.f)-(pcArrowUp?1.f:0.f);
     _padCameraPanX+=panX*padDelta*2.0f;_padCameraPanZ+=panZ*padDelta*2.0f;
+    }
+    /* Advance each model exactly once before selecting the rendered camera.
+     * The original automatic view uses this frame's animated nodes. */
+    if(dc_model_tick(_map.model,delta,tick,&_map.world)!=DC_OK||
+       dc_model_tick(_actor.model,delta,tick,&_actor.world)!=DC_OK)return @"Game model tick failed";
+    if(_face.model) {
+        if(![self updateFaceAttachment])return @"Game face anchor lookup failed";
+        if(dc_model_tick(_face.model,0,tick,&_face.world)!=DC_OK)return @"Game face tick failed";
+    }
+    if(_autoCamera.model) {
+        dc_matrix target;
+        if([self cameraBinding:DC_CAMERA_ANIMATION_TARGET matrix:&target]!=DC_OK)return @"Original animated camera target unavailable";
+        _autoCamera.world=gameIdentity();
+        for(unsigned i=0;i<3;++i)_autoCamera.world.values[12+i]=target.values[12+i];
+        if(dc_model_tick(_autoCamera.model,delta,tick,&_autoCamera.world)!=DC_OK)return @"Original camera animation tick failed";
+    }
     dc_camera_orbit orbit=[self activeCameraOrbit];
+    if(_primaryCameraMode==2) {
+        dc_matrix cameraWorld;
+        if([self cameraBinding:DC_CAMERA_ANIMATION_EYE matrix:&_autoCameraEye]!=DC_OK||
+           [self cameraBinding:DC_CAMERA_ANIMATION_TARGET matrix:&_autoCameraTarget]!=DC_OK)return @"Original automatic camera binding failed";
+        /* 00513690 raises the look target by DAT_0062e664 (2.0), then calls
+         * 00417ac0 on the eye supplied by the separate auto_cam animation. */
+        _autoCameraTarget.values[13]+=2.f;
+        if(dc_camera_look_at(&_autoCameraEye,&_autoCameraTarget,&cameraWorld)!=DC_OK)return @"Original automatic camera orientation failed";
+        orbit=(dc_camera_orbit){.base=cameraWorld};++_cameraAutoFrames;
+#if DEBUG
+        if(_cameraAutoFrames==8&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+            [self requestRenderCapture:@"gameplay-camera-auto-later-native.png"];
+#endif
+    }
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
+    _renderedCameraWorld=camera.world;
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
     size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes+22+self.transitionScene.transitionMeshCapacity;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
-    NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
+    NSString *failure=[self append:&_map camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
     size_t mapDrawCount=count;
-    if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
+    if(!failure)failure=[self append:&_actor camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;
-    if(!failure && _face.model) {
-        if(![self updateFaceAttachment])
-            failure=@"Game face anchor lookup failed";
-        if(!failure)failure=[self append:&_face delta:0 tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
-    }
+    if(!failure && _face.model)failure=[self append:&_face camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
     size_t sceneDrawCount=count;
     if(!failure)failure=[self appendSceneUI:draws count:&count storage:storage viewport:viewport];
     if(!failure&&_characterAction.transition_pending) {
@@ -1191,10 +1252,20 @@ static void freeMorphCaches(dc_game_model *slot) {
             if(saved) {
                 _sceneUIVisiblePixels=uiVisible;if(_contextOpen)_sceneContextVisiblePixels=contextVisible;
                 dc_animation_state pose={0};dc_model_get_animation(_actor.model,&pose);
+                dc_animation_state cameraAnimation={0};
+                if(_autoCamera.model)dc_model_get_animation(_autoCamera.model,&cameraAnimation);
+                dc_camera_orbit controllerPose=[self activeCameraOrbit];
                 _lastRenderCapture=@{@"file":captureName,@"chapter":@(_storyChapter),@"map":@(_mapSelector),
                     @"stage":@(_storyStage),@"anchor":_anchorName?:@"",@"camera":_cameraSource?:@"",
                     @"camera_preset":@(_cameraPreset),@"camera_modes":@[@(_primaryCameraMode),@(_secondaryCameraMode)],
                     @"camera_pose":@[@(orbit.height),@(orbit.stored_distance),@(orbit.pitch),@(orbit.yaw),@(orbit.base.values[12]),@(orbit.base.values[13]),@(orbit.base.values[14])],
+                    @"camera_controller_pose":@[@(controllerPose.height),@(controllerPose.stored_distance),@(controllerPose.pitch),@(controllerPose.yaw),@(controllerPose.base.values[12]),@(controllerPose.base.values[13]),@(controllerPose.base.values[14])],
+                    @"camera_world":gameMatrixValues(&_renderedCameraWorld),@"camera_target_binding":@(_lastCameraTargetBinding),
+                    @"camera_body_retargets":@(_cameraBodyRetargetCount),@"camera_auto_frames":@(_cameraAutoFrames),
+                    @"camera_animation_clip":@(cameraAnimation.current),@"camera_animation_frame":@(cameraAnimation.frame),
+                    @"automatic_eye_world":_cameraAutoFrames?gameMatrixValues(&_autoCameraEye):@[],
+                    @"automatic_target":_cameraAutoFrames?@[@(_autoCameraTarget.values[12]),@(_autoCameraTarget.values[13]),@(_autoCameraTarget.values[14])]:@[],
+                    @"automatic_center":_autoCamera.model?@[@(_autoCamera.world.values[12]),@(_autoCamera.world.values[13]),@(_autoCamera.world.values[14])]:@[],
                     @"camera_actions":@(_cameraActionCount),@"camera_resets":@(_cameraResetCount),@"camera_retargets":@(_cameraRetargetCount),
                     @"camera_target":_cameraRetargetCount?@[@(_lastCameraTarget.values[12]),@(_lastCameraTarget.values[13]),@(_lastCameraTarget.values[14])]:@[],
                     @"camera_target_matrix":_cameraRetargetCount?@[@(_lastCameraTarget.values[0]),@(_lastCameraTarget.values[1]),@(_lastCameraTarget.values[2]),@(_lastCameraTarget.values[3]),

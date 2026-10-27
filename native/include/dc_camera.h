@@ -54,6 +54,21 @@ DC_API dc_status dc_camera_scene_resource(uint32_t scene_type,uint32_t map,uint3
 DC_API dc_status dc_camera_retarget(const dc_camera_orbit *source,const dc_matrix *target,
     uint32_t primary,dc_camera_orbit *out);
 
+enum dc_camera_scene_binding {
+    DC_CAMERA_FACE_TARGET=0,DC_CAMERA_BODY_TARGET=1,
+    DC_CAMERA_ANIMATION_TARGET=2,DC_CAMERA_ANIMATION_EYE=3
+};
+/* Type-4 bindings from 005181f0/00512cc0. FACE belongs to the face model;
+ * BODY and ANIMATION_TARGET to the actor; ANIMATION_EYE to the separate
+ * RPP17 auto_cam model. No substitute node is returned for a missing binding. */
+DC_API dc_status dc_camera_scene_node(uint32_t stage,uint32_t binding,char *out,size_t capacity);
+
+/* Original 00417ac0: orient a world matrix toward target translation using
+ * world up (0,1,0), preserving its eye and affine column. No roll is added.
+ * Inputs must be finite affine matrices. Coincident/vertical targets that
+ * cannot supply an invertible camera fail atomically; aliasing is supported. */
+DC_API dc_status dc_camera_look_at(const dc_matrix *source,const dc_matrix *target,dc_matrix *out);
+
 #ifdef __cplusplus
 }
 #endif

@@ -3,6 +3,43 @@
 #include <string.h>
 #include <stdio.h>
 
+dc_status dc_camera_scene_node(uint32_t stage,uint32_t binding,char *out,size_t capacity) {
+    if(!out)return DC_ARGUMENT;
+    if(stage>2||binding>3)return DC_RANGE;
+    const char *suffix=binding==0?"_On_namida":"_Kn_kosi";
+    char name[32];
+    int n=binding<2?snprintf(name,sizeof(name),"%c%s","bca"[stage],suffix):
+        snprintf(name,sizeof(name),"%s",binding==2?"z_Nz_light":"z_Nz_cam");
+    if(n<0||(size_t)n>=capacity)return DC_RANGE;
+    memcpy(out,name,(size_t)n+1);return DC_OK;
+}
+
+static int normalize3(float *v) {
+    float length=sqrtf(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+    if(!isfinite(length)||length==0)return 0;
+    for(unsigned i=0;i<3;++i)v[i]/=length;
+    return 1;
+}
+static void cross3(const float *a,const float *b,float *out) {
+    float value[3]={a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};
+    memcpy(out,value,sizeof(value));
+}
+dc_status dc_camera_look_at(const dc_matrix *source,const dc_matrix *target,dc_matrix *out) {
+    if(!source||!target||!out)return DC_ARGUMENT;
+    for(unsigned i=0;i<16;++i)if(!isfinite(source->values[i])||!isfinite(target->values[i]))return DC_RANGE;
+    if(source->values[3]!=0||source->values[7]!=0||source->values[11]!=0||source->values[15]!=1||
+       target->values[3]!=0||target->values[7]!=0||target->values[11]!=0||target->values[15]!=1)return DC_FORMAT;
+    dc_matrix next=*source;
+    float back[3],right[3],up[3]={0,1,0};
+    for(unsigned i=0;i<3;++i)back[i]=target->values[12+i]-source->values[12+i];
+    if(!normalize3(back))return DC_RANGE;
+    for(unsigned i=0;i<3;++i)back[i]*=-1;
+    cross3(up,back,right);if(!normalize3(right))return DC_RANGE;
+    cross3(back,right,up);if(!normalize3(up))return DC_RANGE;
+    for(unsigned i=0;i<3;++i){next.values[i]=right[i];next.values[4+i]=up[i];next.values[8+i]=back[i];}
+    *out=next;return DC_OK;
+}
+
 dc_status dc_camera_scene_resource(uint32_t type,uint32_t map,uint32_t stage,char *out,size_t capacity) {
     if(!out)return DC_ARGUMENT;
     if(stage>2||map>8||map==2)return DC_RANGE;
