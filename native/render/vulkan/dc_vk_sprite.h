@@ -27,7 +27,7 @@ typedef struct dc_vk_sprite_item {
     uint8_t blend_mode, hidden, point_filter, software_vertex;
 } dc_vk_sprite_item;
 /* Preprojected, non-indexed triangle-list vertices. RGB and alpha modulate
- * texture with diffuse; blend modes 0/3 standard, 1 additive, 2 modulation.
+ * texture with diffuse; blend modes 0/3 standard, 1 additive, 2 inverse color.
  * Explicit unlit one-texture profile; optional framebuffer winding culling.
  * Positive rhw enables perspective-correct interpolation through the shader. */
 typedef struct dc_vk_geometry_item {
@@ -45,7 +45,8 @@ enum dc_vk_depth_mode {
     DC_VK_DEPTH_DISABLED=0,
     DC_VK_DEPTH_WRITE=1, /* LESS_OR_EQUAL test and write. */
     DC_VK_DEPTH_READ_ONLY=2, /* LESS_OR_EQUAL test without writes. */
-    DC_VK_DEPTH_AUTO=3 /* Opaque write first; translucent read-only, back to front. */
+    DC_VK_DEPTH_AUTO=3, /* Opaque write first; translucent read-only, back to front. */
+    DC_VK_DEPTH_AUTO_TRANSLUCENT=4 /* Original transparent queue, even with opaque texels. */
 };
 typedef struct dc_vk_clip_rect { uint32_t x,y,width,height; } dc_vk_clip_rect;
 

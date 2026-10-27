@@ -160,7 +160,51 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     return dc_model_query(_model,&clip,ready);
 }
 - (dc_status)requestTransition:(uint32_t)request tick:(uint32_t)tick {
-    return dc_model_request(_model,request,tick);
+    dc_status status=dc_model_request(_model,request,tick);
+    if(status==DC_OK){_tickInitialized=YES;_lastTick=tick;}
+    return status;
+}
+- (size_t)transitionMeshCapacity { return _info.submeshes; }
+- (NSString *)appendTransitionAtTick:(uint32_t)tick viewport:(dc_viewport)viewport
+        draws:(dc_vk_geometry_item *)draws capacity:(size_t)capacity count:(size_t *)count storage:(NSMutableArray *)storage {
+    if(!draws||!count||*count>capacity||capacity-*count<_info.submeshes)return @"Transition draw capacity rejected";
+    dc_matrix world=dcStartupIdentity();
+    dc_status status=dc_model_tick(_model,_tickInitialized?tick-_lastTick:0,tick,&world);
+    if(status!=DC_OK)return @"Gameplay transition model tick failed";
+    _tickInitialized=YES;_lastTick=tick;
+    dc_camera_orbit orbit={.base=dcStartupIdentity(),.stored_distance=-1.5f};
+    dc_camera_lens lens={.5f,.5f,10000,1024,768};dc_camera_matrices camera;
+    if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Gameplay transition camera failed";
+    for(uint32_t i=0;i<_info.submeshes;++i) {
+        uint32_t visible;dc_xx_submesh mesh;dc_material_value material;
+        if(dc_model_mesh_visible(_model,i,&visible)!=DC_OK)return @"Transition visibility failed";
+        if(!visible)continue;
+        if(dc_model_mesh(_model,i,&mesh)!=DC_OK||dc_model_material(_model,mesh.material,&material)!=DC_OK)return @"Transition material failed";
+        if(material.components[3]==0)continue;
+        dc_xx_material binding;
+        if(dc_xx_material_at(_xx,mesh.material,&binding)!=DC_OK)return @"Transition texture binding failed";
+        uint32_t image=UINT32_MAX;
+        for(uint32_t j=0;j<_info.textures;++j) {
+            dc_xx_texture texture;dc_xx_texture_at(_xx,j,&texture);
+            const uint8_t *a=(const uint8_t *)_xxData.bytes+binding.texture_names[0].offset;
+            const uint8_t *b=(const uint8_t *)_xxData.bytes+texture.name.offset;
+            size_t an=0,bn=0;
+            while(an<binding.texture_names[0].length&&a[an]!=255)++an;
+            while(bn<texture.name.length&&b[bn]!=255)++bn;
+            if(an==bn&&an<binding.texture_names[0].length&&bn<texture.name.length&&!memcmp(a,b,an)){image=j;break;}
+        }
+        if(image==UINT32_MAX)return @"Transition texture unavailable";
+        size_t written=0;
+        status=dc_model_project_clipped(_model,i,&camera.view_projection,&viewport,dcStartupColor(&material),NULL,0,&written);
+        if(status!=DC_OK)return @"Transition clip query failed";
+        if(!written)continue;
+        NSMutableData *vertices=[NSMutableData dataWithLength:written*sizeof(dc_sprite_vertex)];
+        status=dc_model_project_clipped(_model,i,&camera.view_projection,&viewport,dcStartupColor(&material),vertices.mutableBytes,written,&written);
+        if(status!=DC_OK)return @"Transition projection failed";
+        [storage addObject:vertices];
+        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=written,.texture=_textures[image],.blend_mode=3};
+    }
+    return nil;
 }
 - (NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
         tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height {

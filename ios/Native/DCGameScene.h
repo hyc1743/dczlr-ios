@@ -2,6 +2,7 @@
 #include "dc_vk_sprite.h"
 #include "dc_gamepad.h"
 #include "dc_pc_input.h"
+@class DCStartupScene;
 
 NS_ASSUME_NONNULL_BEGIN
 /* Story-scene host for the original chapter scene kinds (gameplay, watch,
@@ -34,6 +35,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t sceneKind;
 @property(nonatomic,readonly) uint32_t sceneType;
 @property(nonatomic,readonly) BOOL interactiveScene;
+@property(nonatomic,strong,nullable) DCStartupScene *transitionScene;
+- (uint32_t)takePendingEffectSlot;
+- (nullable NSString *)updateCharacterWithExitSoundBusy:(BOOL)busy tick:(uint32_t)tick;
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
     mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress resumeSavedPlayer:(BOOL)resume error:(NSString **)error;

@@ -13,6 +13,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)prepareGameplayAudio;
 - (BOOL)playGameplayEffectNamed:(NSString *)name;
 - (BOOL)playGameplaySlot:(NSUInteger)slot;
+- (BOOL)gameplaySlotBusy:(NSUInteger)slot;
+- (BOOL)resumeGameplayEffects;
 - (BOOL)playGameplayVoiceNamed:(NSString *)name;
 - (BOOL)playMenuSelection;
 - (void)pause;

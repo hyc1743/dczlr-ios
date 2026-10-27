@@ -3,6 +3,50 @@
 #include <stdio.h>
 #include <string.h>
 
+dc_status dc_scene_effect_name(uint32_t slot,char *out,size_t capacity) {
+    static const char *const names[]={"se100.wav","se101.wav","se015.wav","se200.wav","se300.wav",
+        "se301.wav","se302.wav","se310.wav","se311.wav","se312.wav","se016.wav","se017.wav",
+        "se018.wav","se019.wav","se020.wav","se320.wav","se321.wav","se322.wav","se330.wav",
+        "se331.wav","se332.wav","se201.wav","se021.wav","se023.wav","se024.wav","se025.wav",
+        "se026.wav","se029.wav","se030.wav","se031.wav"};
+    if(!out)return DC_ARGUMENT;
+    if(slot>=35)return DC_RANGE;
+    if(slot>=30)return DC_NOT_FOUND;
+    size_t length=strlen(names[slot])+1;
+    if(capacity<length)return DC_RANGE;
+    memcpy(out,names[slot],length);return DC_OK;
+}
+
+static dc_scene_character_event character_event(void) {
+    return (dc_scene_character_event){.request_clip=DC_SCENE_NO_REQUEST,.play_slot=DC_SCENE_NO_REQUEST};
+}
+dc_status dc_scene_character_select(dc_scene_character_state *state,uint32_t type,uint32_t progress,uint32_t option,dc_scene_character_event *out) {
+    if(!state||!out)return DC_ARGUMENT;
+    if(type!=4||progress)return DC_NOT_FOUND;
+    if(option>1)return DC_RANGE;
+    dc_scene_character_state next=*state;dc_scene_character_event event=character_event();
+    if(next.exit_pending||next.transition_pending)return DC_NOT_FOUND;
+    if(option==0) {
+        if(next.activation_count<10000)++next.activation_count;
+        next.delay_pending=1;next.delay_ms=0;event.configure_animation=1;
+    } else {
+        next.exit_pending=1;event.play_slot=28;
+    }
+    *state=next;*out=event;return DC_OK;
+}
+dc_status dc_scene_character_step(dc_scene_character_state *state,uint32_t delta,uint32_t busy,dc_scene_character_event *out) {
+    if(!state||!out)return DC_ARGUMENT;
+    if(busy>1)return DC_RANGE;
+    dc_scene_character_state next=*state;dc_scene_character_event event=character_event();
+    if(next.exit_pending) {
+        if(!busy){next.exit_pending=0;next.transition_pending=1;event.request_transition=2;}
+    } else if(!next.transition_pending&&next.delay_pending) {
+        next.delay_ms+=delta;
+        if(next.delay_ms>1499){next.delay_ms=0;next.delay_pending=0;event.request_clip=2;event.play_slot=22;}
+    }
+    *state=next;*out=event;return DC_OK;
+}
+
 dc_status dc_scene_icon_uv(uint32_t stage,uint32_t icon,float *u0,float *u1) {
     if(!u0||!u1||u0==u1)return DC_ARGUMENT;
     if(stage>2||icon<1||icon>4)return DC_RANGE;

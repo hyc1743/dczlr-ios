@@ -29,6 +29,8 @@ DC_API dc_status dc_model_open(const void *xx,size_t xx_length,const void *xa,si
 DC_API dc_status dc_model_open_static(const void *xx,size_t xx_length,dc_model **out);
 DC_API void dc_model_close(dc_model *model);
 DC_API dc_status dc_model_request(dc_model *model,uint32_t clip,uint32_t now);
+DC_API dc_status dc_model_set_chain(dc_model *model,uint32_t clip,int32_t next_clip);
+DC_API dc_status dc_model_set_loop(dc_model *model,uint32_t clip,int32_t limit);
 DC_API dc_status dc_model_query(const dc_model *model,uint32_t *clip,uint32_t *ready);
 /* Snapshot of the animated controller for scene logic. Static models return
  * DC_NOT_FOUND without writing a fabricated controller state. */

@@ -1,6 +1,19 @@
 #include "dc_animation.h"
 #include <math.h>
 
+dc_status dc_animation_set_chain(dc_animation_timing *timing,size_t count,uint32_t clip,int32_t next_clip) {
+    if(!timing||!count||count>DC_ANIMATION_CLIP_LIMIT||clip>=count||(next_clip>=0&&(uint32_t)next_clip>=count))return DC_ARGUMENT;
+    timing[clip].chain=next_clip>=0;
+    timing[clip].next_clip=next_clip<0?0:(uint32_t)next_clip;
+    return DC_OK;
+}
+dc_status dc_animation_set_loop(dc_animation_clip *clips,dc_animation_timing *timing,size_t count,uint32_t clip,int32_t limit) {
+    if(!clips||!timing||!count||count>DC_ANIMATION_CLIP_LIMIT||clip>=count)return DC_ARGUMENT;
+    clips[clip].loop=limit>=0;
+    if(limit>=0)timing[clip].loop_limit=(uint8_t)limit;
+    return DC_OK;
+}
+
 dc_status dc_animation_request(dc_animation_state *state,
         dc_animation_clip *clips, size_t count, uint32_t requested,
         uint8_t force, uint32_t now) {

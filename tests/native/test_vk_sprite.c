@@ -105,7 +105,8 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
         OK(dc_vk_sprite_render(r, &draw, 1, clear, rgba, sizeof(rgba)));
         if (mode == 0) CHECK(pixel(rgba,3,3,127,0,0,255,1));
         if (mode == 1) CHECK(pixel(rgba,3,3,147,40,60,255,1));
-        if (mode == 2) CHECK(pixel(rgba,3,3,10,0,0,100,1));
+        /* D3DBLEND_INVSRCCOLOR (4), not D3DBLEND_SRCCOLOR (3). */
+        if (mode == 2) CHECK(pixel(rgba,3,3,10,40,60,0,1));
     }
     /* Ordered mode transitions, including restoration after modulation. */
     pair[0] = draw; pair[0].blend_mode = 3; pair[0].texture = transparent;
@@ -260,7 +261,7 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     depth_items[0].depth_mode=DC_VK_DEPTH_WRITE;depth_items[1].depth_mode=DC_VK_DEPTH_DISABLED;
     OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));CHECK(pixel(rgba,4,4,255,0,0,255,0));
     memcpy(before,rgba,sizeof(rgba));OK(dc_vk_sprite_get_info(r,&info));frame_count=info.submitted_frames;
-    depth_items[1].depth_mode=4;
+    depth_items[1].depth_mode=5;
     CHECK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba))==DC_FORMAT);
     CHECK(!memcmp(before,rgba,sizeof(rgba)));OK(dc_vk_sprite_get_info(r,&info));CHECK(info.submitted_frames==frame_count);
     /* A translucent foreground submitted before an opaque actor must not
@@ -283,6 +284,22 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));
     CHECK(pixel(rgba,4,4,255,0,0,255,0));
     puts("PASS: material alpha sorting, read-only transparency and zero-alpha depth holes");
+    /* RGB-only shadow BMP: black border leaves the floor untouched; gray
+     * darkens it. Opaque alpha must not turn the shadow into a depth writer. */
+    OK(dc_vk_sprite_remove_texture(r,green_texture));
+    const uint8_t shadow_pixels[12]={0,0,0,255,128,128,128,255,255,255,255,255};
+    OK(dc_vk_sprite_upload(r,3,1,shadow_pixels,sizeof(shadow_pixels),&green_texture));
+    for(unsigned sample=0;sample<3;++sample) {
+        for(unsigned i=0;i<6;++i){near_quad[i].u=(sample+.5f)/3;near_quad[i].v=.5f;}
+        depth_items[0]=(dc_vk_geometry_item){.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=2,.point_filter=1,.depth_mode=DC_VK_DEPTH_AUTO};
+        depth_items[1]=(dc_vk_geometry_item){.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
+        OK(dc_vk_geometry_render(r,depth_items,2,clear,rgba,sizeof(rgba)));
+        CHECK(pixel(rgba,4,4,sample==0?255:sample==1?127:0,0,0,0,1));
+    }
+    OK(dc_vk_sprite_remove_texture(r,green_texture));
+    OK(dc_vk_sprite_upload(r,1,1,green_pixel,sizeof(green_pixel),&green_texture));
+    for(unsigned i=0;i<6;++i){near_quad[i].u=near_quad[i].v=0;}
+    puts("PASS: inverse-color RGB shadow preserves floor at black edges and does not write depth");
     OK(dc_vk_sprite_remove_texture(r,green_texture));
     const uint8_t white_pixel[4]={255,255,255,255};
     OK(dc_vk_sprite_upload(r,1,1,white_pixel,sizeof(white_pixel),&green_texture));

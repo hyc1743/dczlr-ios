@@ -54,6 +54,25 @@ typedef struct dc_scene_action_plan {
  * System options request SAVE/EDIT; neither advances the chapter. */
 DC_API dc_status dc_scene_action_build(uint32_t scene_type,uint32_t icon,uint32_t option,
     uint32_t camera_mode,uint32_t secondary_camera_mode,dc_scene_action_plan *out);
+typedef struct dc_scene_character_state {
+    uint32_t activation_count,delay_ms;
+    uint8_t delay_pending,exit_pending,transition_pending,reserved;
+} dc_scene_character_state;
+typedef struct dc_scene_character_event {
+    uint32_t configure_animation,request_clip,play_slot,request_transition;
+} dc_scene_character_event;
+#define DC_SCENE_NO_REQUEST UINT32_MAX
+/* 35 original slots from 005201e0 / VA 63c278, stride12. Empty trailing
+ * entries report NOT_FOUND. The table order is significant. */
+DC_API dc_status dc_scene_effect_name(uint32_t slot,char *out,size_t capacity);
+/* Initial type-4, progress-zero branches of 005358c0/00513690. Selected
+ * option0 configures 6->7 and loop5 once, waits >=1500 update ticks, then
+ * requests clip2 and slot22. Option1 starts slot28 and waits for actual
+ * player idle before requesting shared transition clip2. The caller must
+ * wait for transition readiness before installing the next callback.
+ * Evolved/alternate-visible-node paths are outside this bounded profile. */
+DC_API dc_status dc_scene_character_select(dc_scene_character_state *state,uint32_t scene_type,uint32_t progress,uint32_t option,dc_scene_character_event *out);
+DC_API dc_status dc_scene_character_step(dc_scene_character_state *state,uint32_t delta,uint32_t exit_sound_busy,dc_scene_character_event *out);
 #ifdef __cplusplus
 }
 #endif

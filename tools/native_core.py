@@ -366,6 +366,15 @@ class XXMaterial(C.Structure):
 class XXTexture(C.Structure):
     _fields_ = [("name", XXSpan), ("image", XXSpan), ("descriptor_offset", C.c_size_t)]
 
+class XXMeshRenderState(C.Structure):
+    _fields_ = [(n,C.c_uint8) for n in ('hidden','blend_mode','point_filter','two_sided','order','transparent_queue','priority','reserved')]
+
+class SceneCharacterState(C.Structure):
+    _fields_ = [('activation_count',C.c_uint32),('delay_ms',C.c_uint32)]+[(n,C.c_uint8) for n in ('delay_pending','exit_pending','transition_pending','reserved')]
+
+class SceneCharacterEvent(C.Structure):
+    _fields_ = [(n,C.c_uint32) for n in ('configure_animation','request_clip','play_slot','request_transition')]
+
 
 class XXSkin(C.Structure):
     _fields_ = [('shared_vertices',XXSpan)]+[(n,C.c_uint32) for n in ('node','shared_count','first_bone','bones','vertex_format')]
@@ -511,6 +520,11 @@ def library():
     lib.dc_animation_query.argtypes = [C.POINTER(AnimationState), C.POINTER(AnimationClip),
         C.c_size_t, C.POINTER(C.c_uint32), C.POINTER(C.c_uint32)]
     lib.dc_animation_query.restype = C.c_int
+    lib.dc_animation_set_chain.argtypes=[C.POINTER(AnimationTiming),C.c_size_t,C.c_uint32,C.c_int32]
+    lib.dc_animation_set_loop.argtypes=[C.POINTER(AnimationClip),C.POINTER(AnimationTiming),C.c_size_t,C.c_uint32,C.c_int32]
+    lib.dc_scene_character_select.argtypes=[C.POINTER(SceneCharacterState),C.c_uint32,C.c_uint32,C.c_uint32,C.POINTER(SceneCharacterEvent)]
+    lib.dc_scene_character_step.argtypes=[C.POINTER(SceneCharacterState),C.c_uint32,C.c_uint32,C.POINTER(SceneCharacterEvent)]
+    lib.dc_scene_effect_name.argtypes=[C.c_uint32,C.c_void_p,C.c_size_t]
     lib.dc_animation_advance.argtypes = [C.POINTER(AnimationState), C.POINTER(AnimationClip),
         C.POINTER(AnimationTiming), C.c_size_t, C.c_uint32, C.c_uint32,
         C.c_float, C.c_uint32, C.POINTER(C.c_float)]
@@ -558,6 +572,8 @@ def library():
     lib.dc_model_close.restype = None
     lib.dc_model_request.argtypes = [C.c_void_p,C.c_uint32,C.c_uint32]
     lib.dc_model_request.restype = C.c_int
+    lib.dc_model_set_chain.argtypes=[C.c_void_p,C.c_uint32,C.c_int32]
+    lib.dc_model_set_loop.argtypes=[C.c_void_p,C.c_uint32,C.c_int32]
     lib.dc_model_query.argtypes = [C.c_void_p,C.POINTER(C.c_uint32),C.POINTER(C.c_uint32)]
     lib.dc_model_query.restype = C.c_int
     lib.dc_model_tick.argtypes = [C.c_void_p,C.c_uint32,C.c_uint32,C.POINTER(Matrix)]
@@ -667,6 +683,7 @@ def library():
     lib.dc_xx_close.restype = None
     lib.dc_xx_get_info.argtypes = [C.c_void_p, C.POINTER(XXInfo)]
     lib.dc_xx_get_info.restype = C.c_int
+    lib.dc_xx_mesh_render_state_at.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(XXMeshRenderState)]
     for method, structure in (("node", XXNode), ("submesh", XXSubmesh), ("material", XXMaterial), ("texture", XXTexture),('skin',XXSkin),('bone',XXBone)):
         function = getattr(lib, "dc_xx_" + method + "_at")
         function.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(structure)]

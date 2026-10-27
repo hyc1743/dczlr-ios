@@ -189,6 +189,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter
         mapSelector:_story.map stage:_story.stage stageProgress:_story.stage<DC_STORY_STAGES?_story.stages[_story.stage].progress:0 resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
+    _gameScene.transitionScene=_startupScene;
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
     return nil;
@@ -232,6 +233,13 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if (!name) return nil;
     if (!_gameAudio || ![_gameAudio playGameplayVoiceNamed:name])
         return [NSString stringWithFormat:@"Gameplay voice %@ did not start",name];
+    return nil;
+}
+- (NSString *)playPendingGameplayEffect {
+    uint32_t slot=[_gameScene takePendingEffectSlot];
+    if(slot==UINT32_MAX)return nil;
+    if(!_gameAudio||![_gameAudio playGameplaySlot:slot])
+        return [NSString stringWithFormat:@"Original gameplay effect slot %u did not start",slot];
     return nil;
 }
 - (void)resetStory {
@@ -740,6 +748,10 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         }
     } else {
         if(_gameScene) {
+            if(![_gameAudio resumeGameplayEffects])return @"Gameplay effect resume failed";
+            NSString *characterFailure=[_gameScene updateCharacterWithExitSoundBusy:[_gameAudio gameplaySlotBusy:28] tick:sceneTick];
+            if(characterFailure)return characterFailure;
+            NSString *effectFailure=[self playPendingGameplayEffect];if(effectFailure)return effectFailure;
             if(controller.pressed&DC_PAD_B)[_gameAudio cancelGameplayVoice];
             dc_pad_frame gameController=controller;
             BOOL suppressInput=_gameAudio.gameplayVoiceBusy || _suppressGameplayTouch;
@@ -756,6 +768,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             if(suppressInput) gamePC=(dc_pc_frame){0};
             NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController pcInput:gamePC width:_width height:_height];
             if(gameFailure)return gameFailure;
+            effectFailure=[self playPendingGameplayEffect];if(effectFailure)return effectFailure;
             NSString *voiceFailure=[self playPendingGameplayVoice];
             if(voiceFailure)return voiceFailure;
             NSString *transitionFailure=[self handleGameplayTransitionFromDirectory:directory];

@@ -112,7 +112,7 @@ final class SpritePresenter: NSObject {
             // Each stage waits for native state from a presented frame.
             // Select an actual camera context row, dismiss via a fresh right
             // press, then leave the menu open for the final screenshot.
-            let leftPhase = mouseMenuPhase == 0 || mouseMenuPhase == 2 || mouseMenuPhase == 4
+            let leftPhase = [0, 2, 4, 10, 13].contains(mouseMenuPhase)
             ok = ok && dc_gamepad_test_mouse(0, 0, leftPhase ? 1 : 0, false)
             if mouseMenuPhase == 0 {
                 ok = ok && dc_gamepad_test_mouse(968, 376, 0, pulse)
@@ -120,10 +120,17 @@ final class SpritePresenter: NSObject {
                 ok = ok && dc_gamepad_test_mouse(900, 495, 0, pulse)
             } else if mouseMenuPhase == 4 {
                 ok = ok && dc_gamepad_test_mouse(900, 705, 0, pulse)
-            } else if mouseMenuPhase < 8 {
+            } else if mouseMenuPhase < 9 {
                 ok = ok && dc_gamepad_test_mouse(968, 600, 1, pulse)
+            } else if mouseMenuPhase == 9 || mouseMenuPhase == 12 {
+                ok = ok && dc_gamepad_test_mouse(968, 376, 1, pulse)
+            } else if mouseMenuPhase == 10 {
+                ok = ok && dc_gamepad_test_mouse(900, 481, 0, pulse)
+            } else if mouseMenuPhase == 13 {
+                ok = ok && dc_gamepad_test_mouse(900, 271, 0, pulse)
             } else {
                 ok = ok && dc_gamepad_test_mouse(0, 0, 1, false)
+                    && dc_gamepad_test_mouse(0, 0, 0, false)
             }
         default: return true
         }
@@ -300,6 +307,22 @@ final class SpritePresenter: NSObject {
                             self.mouseMenuPhase = 8
                             self.mouseEvidence.insert("finalcontext")
                         }
+                        if self.mouseMenuPhase == 8, !opened, (fields["context_dismissals"] ?? 0) >= 2 { self.mouseMenuPhase = 9 }
+                        if self.mouseMenuPhase == 9, opened, fields["context_icon"] == 1 { self.mouseMenuPhase = 10 }
+                        if self.mouseMenuPhase == 10, (fields["character_actions"] ?? 0) >= 1 { self.mouseMenuPhase = 11 }
+                        if self.mouseMenuPhase == 11, (fields["character_starts"] ?? 0) >= 1, self.mouseEvidence.insert("character-active").inserted {
+                            self.model.record("Character context index 0 started the original delayed animation chain", event: "PORTLAB_CHARACTER_ANIMATION_STARTED")
+                        }
+                        if self.mouseMenuPhase == 11, fields["character_idle"] == 1 {
+                            self.mouseMenuPhase = 12
+                            self.model.record("Original animation chain returned to idle", event: "PORTLAB_CHARACTER_ANIMATION_RETURNED")
+                        }
+                        if self.mouseMenuPhase == 12, opened, fields["context_icon"] == 1 { self.mouseMenuPhase = 13 }
+                        if self.mouseMenuPhase == 13, fields["character_exit"] == 1 { self.mouseMenuPhase = 14 }
+                        if self.mouseMenuPhase == 14, fields["exit_transition"] == 1, fields["exit_sound_busy"] == 1,
+                           (fields["exit_sound_ms"] ?? 0) >= 5500, self.mouseEvidence.insert("character-sound").inserted {
+                            self.model.record("Slot28 player became idle after actual playback before transition clip2", event: "PORTLAB_CHARACTER_SOUND_COMPLETED")
+                        }
                     }
                 }
                 if let status = self.view?.renderProbeStatus, !status.isEmpty, status != self.lastRenderProbeStatus {
@@ -336,11 +359,6 @@ final class SpritePresenter: NSObject {
                     if pcInput.pointer_active != 0, pcInput.dx != 0 || pcInput.dy != 0 {
                         self.model.record("Relative drag moved the persistent pointer", event: "PORTLAB_MOUSE_MOVE_DELIVERED")
                         self.mouseEvidence.insert("move")
-                    }
-                    if self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move", "context", "selection", "retarget", "reset", "dismiss", "finalcontext"]), self.reportedControllerCamera {
-                        if self.mouseEvidence.insert("passed").inserted {
-                            self.model.record("Bounded virtual mouse input verified; original scene equivalence remains unverified", event: "PORTLAB_MOUSE_INPUT_PASSED")
-                        }
                     }
                 }
                 if let error = error {
@@ -404,6 +422,12 @@ final class SpritePresenter: NSObject {
                     let fields = introState.split(separator: ":")
                     if fields.count == 3, let chapter = Int(fields[0]), let frame = Int(fields[1]), let fade = Int(fields[2]) {
                         self.introChapter = chapter
+                        if self.testingTouch, chapter == 4, self.mouseMenuPhase == 14,
+                           self.mouseEvidence.isSuperset(of: ["menu", "left", "right", "move", "context", "selection", "retarget", "reset", "dismiss", "finalcontext", "character-active", "character-sound"]),
+                           self.mouseEvidence.insert("passed").inserted {
+                            self.model.record("Original first-scene exit reached numbered script chapter4", event: "PORTLAB_CHARACTER_HANDOFF")
+                            self.model.record("Bounded mouse, camera and initial character callbacks verified", event: "PORTLAB_MOUSE_INPUT_PASSED")
+                        }
                         let record = "\(chapter):\(frame)"
                         if record != self.lastIntroRecord {
                             self.lastIntroRecord = record

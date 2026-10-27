@@ -51,6 +51,11 @@ DC_API dc_status dc_animation_request(dc_animation_state *state,
 DC_API dc_status dc_animation_query(const dc_animation_state *state,
     const dc_animation_clip *clips, size_t count,
     uint32_t *current, uint32_t *ready);
+/* Original 00404630/00404680 configuration leaves. Negative values disable
+ * chaining/looping; disabling a loop preserves its iteration-limit byte.
+ * Nonnegative loop limits truncate to a byte, matching the original store. */
+DC_API dc_status dc_animation_set_chain(dc_animation_timing *timing,size_t count,uint32_t clip,int32_t next_clip);
+DC_API dc_status dc_animation_set_loop(dc_animation_clip *clips,dc_animation_timing *timing,size_t count,uint32_t clip,int32_t limit);
 
 /* Numeric frame getter/update reconstructed from 0x00404bd0. lane 0 advances
  * current; lane 1 advances pending. Exact fixed_frame==1 returns current frame

@@ -38,6 +38,10 @@ typedef struct dc_xx_texture {
     dc_xx_span name, image;
     size_t descriptor_offset;
 } dc_xx_texture;
+typedef struct dc_xx_mesh_render_state {
+    uint8_t hidden,blend_mode,point_filter,two_sided;
+    uint8_t order,transparent_queue,priority,reserved;
+} dc_xx_mesh_render_state;
 
 typedef struct dc_xx_skin {
     dc_xx_span shared_vertices;
@@ -71,6 +75,11 @@ DC_API dc_status dc_xx_node_at(const dc_xx *model, uint32_t index, dc_xx_node *o
 DC_API dc_status dc_xx_submesh_at(const dc_xx *model, uint32_t index, dc_xx_submesh *out);
 DC_API dc_status dc_xx_material_at(const dc_xx *model, uint32_t index, dc_xx_material *out);
 DC_API dc_status dc_xx_texture_at(const dc_xx *model, uint32_t index, dc_xx_texture *out);
+/* Serialized subset flags copied by 0040a200, interpreted by 004132e0:
+ * bit0 hide, bits2..4 blend (1 additive, 2 inverse-source-color shadow,
+ * 3 alpha), bit5 point sampling, byte2 disables culling. Node byte +0x159
+ * selects the transparent queue; +0x15c is its priority. No name heuristics. */
+DC_API dc_status dc_xx_mesh_render_state_at(const dc_xx *model,uint32_t index,dc_xx_mesh_render_state *out);
 /* Per-node shared vertex table/FVF and bone ranges. Bone indices retain the
  * serialized values; no dense-index or palette-order inference is applied.
  * Original 0x40a6d0 copies the 64-byte matrix verbatim after the name/index. */

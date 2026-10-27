@@ -635,7 +635,7 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
     VkPipelineDepthStencilStateCreateInfo depth = {.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE, .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL};
     const VkBlendFactor sources[] = {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ZERO};
-    const VkBlendFactor destinations[] = {VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC_COLOR};
+    const VkBlendFactor destinations[] = {VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR};
     for (uint32_t i = 0; i < 36; ++i) {
         uint32_t base=i%12,cull=i/12,blend_index=base%3;
         raster.cullMode=cull?VK_CULL_MODE_BACK_BIT:VK_CULL_MODE_NONE;
@@ -649,7 +649,7 @@ static dc_status create_resources(dc_vk_sprite *r, const dc_vk_sprite_config *co
         VkPipelineColorBlendAttachmentState blend = {.blendEnable = VK_TRUE,
             .srcColorBlendFactor = sources[blend_index], .dstColorBlendFactor = destinations[blend_index], .colorBlendOp = VK_BLEND_OP_ADD,
             .srcAlphaBlendFactor = sources[blend_index],
-            .dstAlphaBlendFactor = blend_index == 2 ? VK_BLEND_FACTOR_SRC_ALPHA : destinations[blend_index],
+            .dstAlphaBlendFactor = blend_index == 2 ? VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA : destinations[blend_index],
             .alphaBlendOp = VK_BLEND_OP_ADD, .colorWriteMask = 15};
         VkPipelineColorBlendStateCreateInfo blending = {.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .attachmentCount = 1, .pAttachments = &blend};
@@ -907,10 +907,10 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (!item->vertices || !item->vertex_count || item->vertex_count % 3 || item->vertex_count > 1048576 - total) {
             status = DC_RANGE; break;
         }
-        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_AUTO || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
+        if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_AUTO_TRANSLUCENT || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
         texture *image = find_texture(r, item->texture);
         if (!image) { status = DC_ARGUMENT; break; }
-        uint32_t translucent=!image->opaque;
+        uint32_t translucent=!image->opaque||item->blend_mode==1||item->blend_mode==2||item->depth_mode==DC_VK_DEPTH_AUTO_TRANSLUCENT;
         double sort_depth=0;
         for (size_t j = 0; j < item->vertex_count; ++j) {
             const dc_sprite_vertex *v = &item->vertices[j];
@@ -922,10 +922,10 @@ dc_status dc_vk_geometry_render_region(dc_vk_sprite *r,const dc_vk_geometry_item
         if (status != DC_OK) break;
         uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
         uint32_t depth=item->depth_mode;
-        if(depth==DC_VK_DEPTH_AUTO)depth=translucent?DC_VK_DEPTH_READ_ONLY:DC_VK_DEPTH_WRITE;
+        if(depth>=DC_VK_DEPTH_AUTO)depth=translucent?DC_VK_DEPTH_READ_ONLY:DC_VK_DEPTH_WRITE;
         draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
             .image = image, .pipeline = 3 + blend + 3*depth + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
-            .alpha_op = 4,.auto_depth=item->depth_mode==DC_VK_DEPTH_AUTO,
+            .alpha_op = 4,.auto_depth=item->depth_mode>=DC_VK_DEPTH_AUTO,
             .translucent=translucent,.original_order=i,.sort_depth=sort_depth/item->vertex_count};
         total += item->vertex_count;
     }

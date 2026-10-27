@@ -1,0 +1,211 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "original_function_sha256": {
+    "0x404630": "1931f13fd8074a544d136551a905e68fb4aaf6846c2ddd287b3c5f895e73ec8a",
+    "0x404680": "3e3834c420759d232ac9fbccd6ca2281d546e42ad09c780eda99eaf462abe413"
+  },
+  "cases": 20,
+  "coverage": "synthetic configuration bytes; no animation tick, asset or scene execution",
+  "vectors": [
+    {
+      "operation": "chain",
+      "value": -2147483648,
+      "expected": [
+        165,
+        165,
+        0,
+        0
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": -2,
+      "expected": [
+        165,
+        165,
+        0,
+        0
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": -1,
+      "expected": [
+        165,
+        165,
+        0,
+        0
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": 0,
+      "expected": [
+        165,
+        165,
+        1,
+        0
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": 1,
+      "expected": [
+        165,
+        165,
+        1,
+        1
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": 7,
+      "expected": [
+        165,
+        165,
+        1,
+        7
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": 255,
+      "expected": [
+        165,
+        165,
+        1,
+        255
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": 256,
+      "expected": [
+        165,
+        165,
+        1,
+        256
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": 257,
+      "expected": [
+        165,
+        165,
+        1,
+        257
+      ]
+    },
+    {
+      "operation": "chain",
+      "value": 511,
+      "expected": [
+        165,
+        165,
+        1,
+        511
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": -2147483648,
+      "expected": [
+        0,
+        165,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": -2,
+      "expected": [
+        0,
+        165,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": -1,
+      "expected": [
+        0,
+        165,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": 0,
+      "expected": [
+        1,
+        0,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": 1,
+      "expected": [
+        1,
+        1,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": 7,
+      "expected": [
+        1,
+        7,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": 255,
+      "expected": [
+        1,
+        255,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": 256,
+      "expected": [
+        1,
+        0,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": 257,
+      "expected": [
+        1,
+        1,
+        165,
+        2779096485
+      ]
+    },
+    {
+      "operation": "loop",
+      "value": 511,
+      "expected": [
+        1,
+        255,
+        165,
+        2779096485
+      ]
+    }
+  ]
+}

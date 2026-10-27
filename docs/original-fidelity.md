@@ -242,3 +242,52 @@ Artifact 12693474951 is retained in out/primary-camera-evidence-14be47a with
 report.json, native GPU captures, complete target matrices and app.log. Its
 ZIP passed CRC validation; SHA-256 is
 774469831f1fc9d867e5b6ccfa64f41df6bcfb20436e7420ac3c7973ac31e070.
+
+## RGB shadows and initial character context (2026-10-27)
+
+The supplied device log records two accepted character context selections,
+each incrementing pending_actions. The pointer route worked; the original
+character callback was missing. The supplied image also exposes z_On_kage
+as a black rectangle. All three actor XX resources encode subset blend2,
+transparent queue1, priority30 for that mesh, despite fully opaque BMP alpha.
+
+FUN_0040a200 copies each serialized 16-byte subset header. FUN_004132e0
+reads hide bit0, blend bits2..4, point-sampling bit5, order byte1 and
+two-sided byte2. Blend2 establishes D3D factors ZERO/INVSRCCOLOR (1/4).
+The host previously ignored these flags and always used alpha blending;
+the backend also translated factor4 to SRC_COLOR instead of its inverse.
+Both are corrected, including the alpha counterpart. Explicit transparent
+queue admission prevents an RGB-only shadow from becoming a depth occluder.
+Node queue/priority are exposed; complete original priority sorting, lighting
+and special effect programs remain outside this change.
+
+The local Intel Vulkan pixel gate verifies black/gray/white RGB shadow
+samples preserve/darken/blacken the floor, independent of submission order.
+All prior pixel, clipping, depth, filter, scissor and admission gates pass.
+Validation layers are disabled on this local run; Apple execution is pending.
+
+FUN_00404630/00404680 are now available as model configuration operations.
+20 isolated original-instruction cases match chain enable/disable and loop
+limit byte stores; no external helper executes. The public fixture is
+tests/fixtures/animation-config-original-vectors.json. Synthetic native tests
+cover the 1499/1500-tick delay, repeat/saturation, player-busy gating and
+unsupported profile atomicity. Private asset checks show all three initial
+body animation chains run 2->5->6->7->1 after loop5 is limited to one cycle.
+
+Initial type4/progress0 character context option0 configures chain6->7 and
+loop5 once, arms the recovered delay, then requests clip2 plus effect slot22.
+Option1 starts slot28 and blocks further menu input until the actual player
+is idle, requests shared transition clip2 and waits for its original ready
+query before chapter advancement. Evolved/alternate-node branches are not
+admitted. The shared transition is composited over the current scene with
+its original camera and resources. The effect table now preserves all35
+original slots, including slot22 se021.wav and slot28 se030.wav; five empty
+trailing slots remain unavailable. Missing/undecodable audio reports failure.
+Pausing effects preserves their playback positions for the completion gate.
+
+The simulator mouse route now additionally requires rendered character clip2
+and restored clip1, actual slot28 busy-to-idle playback, original transition,
+and arrival at numbered script chapter4. The route still does not certify
+full story equivalence, later character actions, outfit actions, secondary
+camera modes or save/edit screens. Local unittest discovery passes314 tests.
+GitHub/Apple validation for this change is pending.

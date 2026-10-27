@@ -183,13 +183,14 @@ def mouse_input_evidence(log):
         'PORTLAB_MOUSE_MOVE_DELIVERED','PORTLAB_MOUSE_LEFT_DELIVERED','PORTLAB_MOUSE_RIGHT_DELIVERED',
         'PORTLAB_MOUSE_MENU_ACCEPTED','PORTLAB_GAMEPAD_CAMERA_ADVANCED','PORTLAB_MOUSE_CONTEXT_RENDERED',
         'PORTLAB_MOUSE_CONTEXT_SELECTED','PORTLAB_CAMERA_RETARGET_APPLIED','PORTLAB_CAMERA_RESET_APPLIED',
-        'PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_MOUSE_INPUT_PASSED')
+        'PORTLAB_MOUSE_CONTEXT_DISMISSED','PORTLAB_CHARACTER_ANIMATION_STARTED','PORTLAB_CHARACTER_ANIMATION_RETURNED',
+        'PORTLAB_CHARACTER_SOUND_COMPLETED','PORTLAB_CHARACTER_HANDOFF','PORTLAB_MOUSE_INPUT_PASSED')
     for event in required:
         if not re.search(r'(?m)^\S+ '+re.escape(event)+r'(?= |$)',log):raise ValueError('Missing mouse evidence: '+event)
     return {'scope':'bounded input on first real-resource scene','input':'visible relative drag, mouse buttons and Num6/arrow combination',
         'menu':'left click accepted by scene hit test','complete_story':'not tested',
         'right_click_menu_behavior':'initial camera menu GPU visibility, left selection and right dismissal checked',
-        'context_action_callbacks':'primary target-0 retarget and active CAM reset checked; other actions remain incomplete',
+        'context_action_callbacks':'primary target-0 retarget, active CAM reset, initial character animation and audio-gated chapter4 handoff checked; other actions remain incomplete',
         'original_game_equivalence':'not established','physical_device':'not tested'}
 
 
@@ -608,6 +609,14 @@ def check(app, output, runtime, expected_scene="checker", startup_fixture=False,
             index=next(i for i in range(pp.count) if pp.entry(i).name_bytes.decode('ascii')==reset['camera'])
             cam=pp.read(index);expected=struct.unpack_from('<7f',cam,reset['camera_preset']*84)
         report['camera_actions']=camera_action_evidence(retarget,reset,expected)
+        for stem in ('gameplay-character-active-native','gameplay-character-idle-native'):
+            for extension in ('.json','.png'):shutil.copyfile(container/'Documents'/(stem+extension),output/(stem+extension))
+        active=json.loads((output/'gameplay-character-active-native.json').read_text())
+        idle=json.loads((output/'gameplay-character-idle-native.json').read_text())
+        if active.get('animation_clip')!=2 or idle.get('animation_clip')!=1 or min(active.get('actor_visible_pixels',0),idle.get('actor_visible_pixels',0))<1:
+            raise ValueError('Character action did not render the original active and restored clips')
+        report['character_actions']={'active_clip':2,'restored_clip':1,'exit':'actual sound slot28 idle, shared transition clip2, numbered chapter4',
+                                     'scope':'initial type4 progress0 only; complete story not tested'}
     if startup_fixture:
         report['startup_fixture']=startup_evidence(log,require_audio=True,require_skin=True)
         if not {'startup','warning','title'}<=captured:raise ValueError('Missing startup stage screenshots')

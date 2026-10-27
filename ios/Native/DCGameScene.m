@@ -1,5 +1,6 @@
 #import "DCGameScene.h"
 #import "DCArchive.h"
+#import "DCStartupScene.h"
 #import <ImageIO/ImageIO.h>
 #include "dc_camera.h"
 #include "dc_eyeneck.h"
@@ -98,6 +99,11 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSMutableDictionary<NSString *,NSNumber *> *_sceneUITextures;
     dc_scene_context _contextMenu;
     BOOL _contextOpen;
+    dc_scene_character_state _characterAction;
+    uint32_t _pendingEffectSlot,_characterActionCount,_characterAnimationStarts;
+    BOOL _hasPendingEffect,_characterClockInitialized;
+    uint32_t _characterLastTick,_exitSoundWaitMs,_exitSoundStartTick;
+    BOOL _exitSoundBusyObserved,_characterReturnedIdle;
     int32_t _mainIconHover,_lastContextSelection;
     uint32_t _stageProgress,_contextOpens,_contextSelections,_contextDismissals,_sceneUIDraws;
     uint32_t _sceneUIIconDraws;
@@ -142,16 +148,62 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSDictionary *)lastRenderCapture { return _lastRenderCapture; }
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u context_callbacks=primary-camera-partial",
+    dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u context_callbacks=primary-camera-initial-character",
         _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
         _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection,
-        _cameraActionCount,_cameraRetargetCount,_cameraResetCount,_pendingContextActions];
+        _cameraActionCount,_cameraRetargetCount,_cameraResetCount,_pendingContextActions,
+        _characterActionCount,_characterAnimationStarts,animation.current,_characterReturnedIdle,_characterAction.exit_pending,
+        _exitSoundBusyObserved,_exitSoundWaitMs,_characterAction.transition_pending];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
         _requestedRenderCapture=[name copy];
 }
 - (NSString *)takePendingVoiceName { NSString *name=_pendingVoiceName;_pendingVoiceName=nil;return name; }
+- (uint32_t)takePendingEffectSlot {
+    if(!_hasPendingEffect)return DC_SCENE_NO_REQUEST;
+    _hasPendingEffect=NO;return _pendingEffectSlot;
+}
+- (NSString *)applyCharacterEvent:(dc_scene_character_event)event tick:(uint32_t)tick {
+    if(event.configure_animation) {
+        if(dc_model_set_chain(_actor.model,6,7)!=DC_OK||dc_model_set_loop(_actor.model,5,1)!=DC_OK)
+            return @"Original character animation configuration failed";
+    }
+    if(event.request_clip!=DC_SCENE_NO_REQUEST) {
+        if(dc_model_request(_actor.model,event.request_clip,tick)!=DC_OK)return @"Original character animation request failed";
+        ++_characterAnimationStarts;
+#if DEBUG
+        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+            [self requestRenderCapture:@"gameplay-character-active-native.png"];
+#endif
+    }
+    if(event.play_slot!=DC_SCENE_NO_REQUEST){_pendingEffectSlot=event.play_slot;_hasPendingEffect=YES;}
+    if(event.request_transition) {
+        if(!self.transitionScene||[self.transitionScene requestTransition:event.request_transition tick:tick]!=DC_OK)
+            return @"Original character exit transition failed";
+    }
+    return nil;
+}
+- (NSString *)updateCharacterWithExitSoundBusy:(BOOL)busy tick:(uint32_t)tick {
+    /* Called after the preceding frame's effect request has been started.
+     * Busy is the actual slot28 player, never a guessed duration. */
+    uint32_t delta=_characterClockInitialized?tick-_characterLastTick:0;
+    _characterClockInitialized=YES;_characterLastTick=tick;
+    if(_characterAction.exit_pending&&busy)_exitSoundBusyObserved=YES;
+    dc_scene_character_event event;
+    if(dc_scene_character_step(&_characterAction,delta,busy,&event)!=DC_OK)return @"Character action update failed";
+    if(event.request_transition)_exitSoundWaitMs=tick-_exitSoundStartTick;
+    dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
+    if(_characterAnimationStarts&&animation.current==1&&!_characterReturnedIdle) {
+        _characterReturnedIdle=YES;
+#if DEBUG
+        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+            [self requestRenderCapture:@"gameplay-character-idle-native.png"];
+#endif
+    }
+    return [self applyCharacterEvent:event tick:tick];
+}
 - (dc_camera_orbit)activeCameraOrbit {
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance*expf(_padCameraZoom),
         .height=_cameraHeight,.pitch=_cameraPitch+_padCameraPitch,.yaw=_cameraYaw+_padCameraYaw};
@@ -171,6 +223,15 @@ static void freeMorphCaches(dc_game_model *slot) {
     _cameraAutoSelected=YES;
 }
 - (NSString *)applyContextSelection:(uint32_t)selection {
+    if(_contextMenu.icon==1) {
+        dc_scene_character_event event;
+        dc_status result=dc_scene_character_select(&_characterAction,_sceneType,_stageProgress,selection,&event);
+        if(result==DC_NOT_FOUND){++_pendingContextActions;return nil;}
+        if(result!=DC_OK)return @"Original character menu action rejected";
+        if(selection==1)_exitSoundStartTick=_lastTick;
+        ++_characterActionCount;
+        return [self applyCharacterEvent:event tick:_lastTick];
+    }
     dc_scene_action_plan plan;
     dc_status status=dc_scene_action_build(_sceneType,_contextMenu.icon,selection,_primaryCameraMode,_secondaryCameraMode,&plan);
     if(status==DC_NOT_FOUND){++_pendingContextActions;return nil;}
@@ -912,7 +973,12 @@ static void freeMorphCaches(dc_game_model *slot) {
     for(uint32_t i=0;i<slot->info.submeshes;++i) {
         uint32_t visible;if(dc_model_mesh_visible(slot->model,i,&visible)!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices?morphVertices[j]:NULL);free(morphVertices);free(morphCounts);return @"Game mesh visibility failed";}if(!visible)continue;
         dc_xx_submesh mesh;dc_material_value material;if(dc_model_mesh(slot->model,i,&mesh)!=DC_OK||dc_model_material(slot->model,mesh.material,&material)!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices?morphVertices[j]:NULL);free(morphVertices);free(morphCounts);return @"Game mesh metadata failed";}
-        if(material.components[3]<=0)continue;uint32_t texture=[self textureFor:slot mesh:&mesh];if(texture==UINT32_MAX){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices?morphVertices[j]:NULL);free(morphVertices);free(morphCounts);return @"Game material texture not found";}
+        dc_xx_mesh_render_state renderState;
+        if(dc_xx_mesh_render_state_at(slot->xx,i,&renderState)!=DC_OK)return @"Game mesh render flags rejected";
+        if(renderState.hidden||material.components[3]<=0)continue;
+        uint8_t depth=renderState.transparent_queue?DC_VK_DEPTH_AUTO_TRANSLUCENT:DC_VK_DEPTH_AUTO;
+        uint8_t cull=renderState.two_sided?DC_VK_CULL_NONE:DC_VK_FRONT_NEGATIVE_AREA;
+        uint32_t texture=[self textureFor:slot mesh:&mesh];if(texture==UINT32_MAX){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices?morphVertices[j]:NULL);free(morphVertices);free(morphCounts);return @"Game material texture not found";}
         size_t vertexCount=0;
         if(morphVertices) {
             uint16_t *indices=calloc(mesh.index_count?mesh.index_count:1,sizeof(*indices));dc_matrix mvp=camera->view_projection;uint32_t space=0;
@@ -921,12 +987,12 @@ static void freeMorphCaches(dc_game_model *slot) {
             status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){free(indices);for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh clip query failed";}
             if(!vertexCount){free(indices);continue;}
             NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);free(indices);if(status!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh projection failed";}
-            [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO,.cull_mode=DC_VK_FRONT_NEGATIVE_AREA};*triangles+=(uint32_t)(vertexCount/3);continue;
+            [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=renderState.blend_mode,.point_filter=renderState.point_filter,.depth_mode=depth,.cull_mode=cull};*triangles+=(uint32_t)(vertexCount/3);continue;
         }
         status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){return @"Game mesh clip query failed";}if(!vertexCount)continue;
         NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);if(status!=DC_OK)return @"Game mesh projection failed";
         [storage addObject:vertices];
-        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO,.cull_mode=DC_VK_FRONT_NEGATIVE_AREA};
+        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=renderState.blend_mode,.point_filter=renderState.point_filter,.depth_mode=depth,.cull_mode=cull};
         *triangles+=(uint32_t)(vertexCount/3);
     }
     if(morphVertices){for(uint32_t i=0;i<slot->info.submeshes;++i)free(morphVertices[i]);free(morphVertices);free(morphCounts);}
@@ -960,7 +1026,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     /* Non-gameplay callbacks have separate state machines. Do not invent
      * tap-to-skip behavior for watch/night/ending chapters. */
-    if(gameplayScene) {
+    if(gameplayScene&&!_characterAction.exit_pending&&!_characterAction.transition_pending) {
         float scale=fminf((float)width/1024.f,(float)height/768.f);
         float px=((x+1)*.5f*width-(width-1024*scale)*.5f)/scale;
         float py=((1-y)*.5f*height-(height-768*scale)*.5f)/scale;
@@ -1059,7 +1125,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return @"Game camera build failed";
     float scale=fminf((float)width/1024,(float)height/768);dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
-    size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes+22;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
+    size_t capacity=_map.info.submeshes+_actor.info.submeshes+_face.info.submeshes+22+self.transitionScene.transitionMeshCapacity;dc_vk_geometry_item *draws=calloc(capacity,sizeof(*draws));NSMutableArray *storage=[NSMutableArray array];size_t count=0;_visibleMapTriangles=_visibleActorTriangles=0;
     NSString *failure=[self append:&_map delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleMapTriangles];
     size_t mapDrawCount=count;
     if(!failure)failure=[self append:&_actor delta:delta tick:tick camera:&camera viewport:&viewport draws:draws count:&count storage:storage triangles:&_visibleActorTriangles];
@@ -1071,6 +1137,14 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     size_t sceneDrawCount=count;
     if(!failure)failure=[self appendSceneUI:draws count:&count storage:storage viewport:viewport];
+    if(!failure&&_characterAction.transition_pending) {
+        failure=[self.transitionScene appendTransitionAtTick:tick viewport:viewport draws:draws capacity:capacity count:&count storage:storage];
+        uint32_t ready=0;
+        if(!failure&&[self.transitionScene queryTransitionReady:&ready]!=DC_OK)failure=@"Character exit transition query failed";
+        /* Only the initial progress-zero type-4 callback is admitted here.
+         * Evolved progress and special ending routing require separate ports. */
+        if(!failure&&ready&&_sceneType==4&&_stageProgress==0)_chapterEndAction=2;
+    }
     if(!failure) {
         uint32_t left=(uint32_t)fmaxf(0,ceilf(viewport.x-.5f)),top=(uint32_t)fmaxf(0,ceilf(viewport.y-.5f)),right=(uint32_t)fminf(width,ceilf(viewport.x+viewport.width-.5f)),bottom=(uint32_t)fminf(height,ceilf(viewport.y+viewport.height-.5f));
         dc_vk_clip_rect clip={left,top,right-left,bottom-top};uint8_t clear[4]={0,0,0,255};
@@ -1132,6 +1206,7 @@ static void freeMorphCaches(dc_game_model *slot) {
                     @"actor_visible_pixels":@(visible),@"actor_bbox":visible?@[@(minX),@(minY),@(maxX),@(maxY)]:@[],
                     @"interaction_active":@(_interactionActive),@"interaction_completed":@(_interactionCompleted),
                     @"pose_frame":@(pose.frame),@"depth_policy":@"material_auto",
+                    @"animation_clip":@(pose.current),@"character_actions":@(_characterActionCount),@"character_starts":@(_characterAnimationStarts),
                     @"map_animation":@(_map.xaData!=nil),
                     @"world_position":@[@(_actor.world.values[12]),@(_actor.world.values[13]),@(_actor.world.values[14])]};
                 NSData *metadata=[NSJSONSerialization dataWithJSONObject:_lastRenderCapture options:NSJSONWritingPrettyPrinted error:nil];

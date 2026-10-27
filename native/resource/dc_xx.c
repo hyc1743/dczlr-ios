@@ -144,6 +144,19 @@ static dc_status parse(reader *r) {
     return DC_OK;
 }
 
+dc_status dc_xx_mesh_render_state_at(const dc_xx *model,uint32_t index,dc_xx_mesh_render_state *out) {
+    if(!model||!out||overlap(model->data,model->length,out,sizeof(*out)))return DC_ARGUMENT;
+    if(index>=model->info.submeshes)return DC_RANGE;
+    const dc_xx_submesh *mesh=&model->meshes[index];
+    const uint8_t *flags=model->data+mesh->indices.offset-24;
+    const uint8_t *node_flags=model->data+model->nodes[mesh->node].matrix_offset+64;
+    dc_xx_mesh_render_state state={.hidden=flags[0]&1,.blend_mode=(flags[0]>>2)&7,
+        .point_filter=(flags[0]>>5)&1,.two_sided=flags[2]!=0,.order=flags[1],
+        .transparent_queue=node_flags[1]!=0,.priority=node_flags[4]};
+    if(state.blend_mode>3)return DC_FORMAT;
+    *out=state;return DC_OK;
+}
+
 dc_status dc_xx_probe(const void *bytes, size_t length, dc_xx_info *out) {
     if (!bytes || !out || overlap(bytes, length, out, sizeof(*out))) return DC_ARGUMENT;
     reader r = {.data = bytes, .length = length};

@@ -227,6 +227,16 @@ dc_status dc_model_query(const dc_model *m,uint32_t *clip,uint32_t *ready) {
     }
     return dc_animation_query(&m->animation,m->clips,512,clip,ready);
 }
+dc_status dc_model_set_chain(dc_model *m,uint32_t clip,int32_t next_clip) {
+    if(!m)return DC_ARGUMENT;
+    if(m->static_only)return DC_NOT_FOUND;
+    return dc_animation_set_chain(m->timing,512,clip,next_clip);
+}
+dc_status dc_model_set_loop(dc_model *m,uint32_t clip,int32_t limit) {
+    if(!m)return DC_ARGUMENT;
+    if(m->static_only)return DC_NOT_FOUND;
+    return dc_animation_set_loop(m->clips,m->timing,512,clip,limit);
+}
 dc_status dc_model_get_animation(const dc_model *m,dc_animation_state *out) {
     if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
     if (m->static_only) return DC_NOT_FOUND;
