@@ -370,3 +370,10 @@ actions and script-4 handoff. A separate Python calculation checks captured
 camera world matrices, actual eye motion and the +2 target height. Simulator
 execution for this change is pending; full original scene equivalence remains
 unverified.
+
+The presentation log's automatic sample count saturates at eight; the GPU
+sidecars retain the full animation/frame counters. This avoids opening and
+appending to the on-device log on every automatic-camera frame. Initial
+simulator run 40430406391 was cancelled before scene validation after this
+logging issue was identified. Vulkan run 40430409561 passed Linux and Apple
+pixel/surface gates on the unchanged camera C code at source 4703cd7.

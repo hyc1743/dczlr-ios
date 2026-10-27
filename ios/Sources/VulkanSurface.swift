@@ -322,7 +322,7 @@ final class SpritePresenter: NSObject {
                         }
                         if self.mouseMenuPhase == 17, opened, fields["context_icon"] == 3 { self.mouseMenuPhase = 18 }
                         if self.mouseMenuPhase == 18, fields["camera_mode"] == 2 { self.mouseMenuPhase = 19 }
-                        if self.mouseMenuPhase == 19, (fields["camera_auto_frames"] ?? 0) >= 8 {
+                        if self.mouseMenuPhase == 19, (fields["camera_auto_samples"] ?? 0) >= 8 {
                             self.mouseMenuPhase = 20
                             self.mouseEvidence.insert("automatic")
                             self.model.record("Original auto_cam clip0 advanced the rendered camera while manual keys were held", event: "PORTLAB_CAMERA_AUTO_ADVANCED")

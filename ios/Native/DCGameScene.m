@@ -157,13 +157,13 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSString *)presentationContext {
     if(!_framePresented)return @"";
     dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
-    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u camera_mode=%u camera_body=%u camera_auto_on=%u camera_auto_off=%u camera_auto_frames=%u context_callbacks=primary-camera-initial-character",
+    return [NSString stringWithFormat:@"chapter=%u scene=%u type=%u map=%u stage=%u actor=%c anchor=%@ camera=%@ resumed=%d menu_events=%u menu_row=%u ui_draws=%u ui_pixels=%zu context_pixels=%zu context_open=%d context_icon=%u context_count=%u context_opens=%u context_selections=%u context_dismissals=%u context_selected=%d camera_actions=%u camera_retargets=%u camera_resets=%u pending_actions=%u character_actions=%u character_starts=%u character_clip=%u character_idle=%d character_exit=%u exit_sound_busy=%d exit_sound_ms=%u exit_transition=%u camera_mode=%u camera_body=%u camera_auto_on=%u camera_auto_off=%u camera_auto_samples=%u context_callbacks=primary-camera-initial-character",
         _storyChapter,_sceneKind,_sceneType,_mapSelector,_storyStage,_characterPrefix,_anchorName,_cameraSource,_resumedPlayer,_acceptedMenuEvents,_lastAcceptedMenuRow,
         _sceneUIDraws,_sceneUIVisiblePixels,_sceneContextVisiblePixels,_contextOpen,_contextMenu.icon,_contextMenu.count,_contextOpens,_contextSelections,_contextDismissals,_lastContextSelection,
         _cameraActionCount,_cameraRetargetCount,_cameraResetCount,_pendingContextActions,
         _characterActionCount,_characterAnimationStarts,animation.current,_characterReturnedIdle,_characterAction.exit_pending,
         _exitSoundBusyObserved,_exitSoundWaitMs,_characterAction.transition_pending,
-        _primaryCameraMode,_cameraBodyRetargetCount,_cameraAutoEnterCount,_cameraAutoLeaveCount,_cameraAutoFrames];
+        _primaryCameraMode,_cameraBodyRetargetCount,_cameraAutoEnterCount,_cameraAutoLeaveCount,MIN(_cameraAutoFrames,8u)];
 }
 - (void)requestRenderCapture:(NSString *)name {
     if([name.lastPathComponent isEqualToString:name]&&[name.pathExtension isEqualToString:@"png"])
