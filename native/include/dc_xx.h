@@ -117,6 +117,11 @@ DC_API dc_status dc_xx_find_material_encoded(const dc_xx *model,
  * Node matrix copies the serialized local baseline; no hierarchy executes. */
 DC_API dc_status dc_xx_find_node_encoded(const dc_xx *model,
     const void *name, size_t length, uint32_t *index);
+/* Original morph binding uses the track's node name plus the index-set
+ * submesh selector. Vector-set names are independent lookup keys and are
+ * never parsed as node names. Failure preserves the output. */
+DC_API dc_status dc_xx_morph_mesh(const dc_xx *model,const void *name,size_t length,
+    uint32_t selector,uint32_t *mesh);
 DC_API dc_status dc_xx_node_matrix(const dc_xx *model, uint32_t index, dc_matrix *out);
 
 /* Fresh material baseline: negate original components 0..15, preserve power

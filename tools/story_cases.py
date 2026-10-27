@@ -139,8 +139,8 @@ def main():
         assert record['state'][3][i][2] == 1, f'stage {i} progress'
     # Invalid lookups and states fail without side effects.
     profile = StoryChapter()
-    assert lib.dc_story_chapter_profile(26, C.byref(profile)) != 0
-    bad = StoryState(chapter=26, map=0, stage=0)
+    assert lib.dc_story_chapter_profile(29, C.byref(profile)) != 0
+    bad = StoryState(chapter=29, map=0, stage=0)
     assert lib.dc_story_script_finish(C.byref(bad), C.byref(plan)) != 0
     assert lib.dc_story_menu_action(C.byref(state), 9, C.byref(plan)) != 0
     print({'story_cases': run_story_cases(), 'chapter24_unlock': True})

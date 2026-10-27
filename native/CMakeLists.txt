@@ -4,6 +4,7 @@ add_library(portlab_native STATIC resource/dc_pp.c resource/dc_image.c resource/
 target_include_directories(portlab_native PUBLIC include)
 target_sources(portlab_native PRIVATE game/dc_gamepad.c game/dc_pc_input.c game/dc_touch_controls.c game/dc_pc_touch.c)
 target_sources(portlab_native PRIVATE game/dc_scene_ui.c)
+target_sources(portlab_native PRIVATE game/dc_config.c game/dc_story.c game/dc_flow.c game/dc_morph.c)
 target_compile_features(portlab_native PUBLIC c_std_11)
 if(NOT WIN32)
   target_link_libraries(portlab_native PUBLIC m)

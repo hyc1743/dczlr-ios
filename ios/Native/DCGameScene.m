@@ -52,11 +52,11 @@ static dc_vk_clip_rect gameClip(dc_viewport viewport,uint32_t width,uint32_t hei
 static dc_status gameRenderPasses(dc_vk_sprite *renderer,const dc_vk_geometry_item *draws,
         size_t primaryCount,size_t secondaryStart,size_t secondaryCount,size_t overlayStart,size_t overlayCount,
         dc_vk_clip_rect primaryClip,dc_vk_clip_rect secondaryClip,BOOL secondaryVisible,
-        uint8_t *pixels,size_t bytes) {
-    const uint8_t clear[4]={0,0,0,255};
+        const uint8_t clear[4],uint8_t *pixels,size_t bytes) {
     dc_vk_geometry_pass passes[3]={{.items=draws,.count=primaryCount,.clip=primaryClip}};size_t count=1;
     if(secondaryVisible)passes[count++]=(dc_vk_geometry_pass){.items=draws+secondaryStart,.count=secondaryCount,.clip=secondaryClip,
         .clear_flags=DC_VK_CLEAR_COLOR|DC_VK_CLEAR_DEPTH,.clear_rgba={0,0,0,255}};
+    if(secondaryVisible)memcpy(passes[1].clear_rgba,clear,4);
     if(overlayCount)passes[count++]=(dc_vk_geometry_pass){.items=draws+overlayStart,.count=overlayCount,.clip=primaryClip};
     return dc_vk_geometry_render_passes(renderer,passes,count,clear,pixels,bytes);
 }
@@ -150,6 +150,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     char _characterPrefix;
     uint32_t _acceptedMenuEvents,_lastAcceptedMenuRow;
     uint32_t _stageOutcomeA,_stageOutcomeB,_chapterEndAction;
+    uint32_t _pendingSystemAction;
+    uint8_t _backgroundColor[4];
     BOOL _editMode;
     BOOL _gameFinished;
     NSString *_pendingVoiceName;
@@ -243,6 +245,42 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     return [self applyCharacterEvent:event tick:tick];
 }
+- (NSString *)updateSystemWithSelectionSoundBusy:(BOOL)busy tick:(uint32_t)tick {
+    if(!_pendingSystemAction)return nil;
+    uint32_t ready=0;
+    if(!self.transitionScene||[self.transitionScene queryTransitionReady:&ready]!=DC_OK)return @"System-page transition query failed";
+    if(ready&&!busy){_chapterEndAction=_pendingSystemAction;_pendingSystemAction=0;}
+    return nil;
+}
+- (void)resumeAtTick:(uint32_t)tick {
+    uint32_t elapsed=_tickInitialized?tick-_lastTick:0;
+    dc_model_shift_clock(_map.model,elapsed);dc_model_shift_clock(_actor.model,elapsed);
+    if(_face.model)dc_model_shift_clock(_face.model,elapsed);
+    if(_autoCamera.model)dc_model_shift_clock(_autoCamera.model,elapsed);
+    _lastTick=_characterLastTick=tick;_characterClockInitialized=YES;
+    _exitSoundStartTick+=elapsed;_interactionStartTick+=elapsed;_interactionState.start_tick+=elapsed;
+    _pointerCameraOwner=0;_inputInitialized=NO;_previousGameMenuTouch=NO;
+}
+- (NSString *)applyConfiguration:(const dc_config *)configuration {
+    if(!configuration)return @"Missing scene configuration";
+    uint32_t secondary=0;float wheel=4;
+    dc_config_switch_value(configuration,4,&secondary);dc_config_slider_value(configuration,6,&wheel);
+    _secondaryVisible=_sceneType==4&&secondary!=0;_secondaryLimits.wheel_step=wheel;
+    for(unsigned i=0;i<3;++i){
+        uint32_t visible;dc_config_switch_value(configuration,i,&visible);
+        uint32_t node=[self findNode:&_map name:[NSString stringWithFormat:@"m_Nn_level%u",i+1]];
+        if(node!=UINT32_MAX&&dc_model_hide_node(_map.model,node,!visible)!=DC_OK)return @"Configured map visibility failed";
+        float channel;dc_config_slider_value(configuration,7+i,&channel);_backgroundColor[i]=(uint8_t)channel;
+    }
+    _backgroundColor[3]=255;
+    uint32_t fourth=[self findNode:&_map name:@"m_Nn_level4"];
+    if(fourth!=UINT32_MAX){
+        uint32_t visible=0;
+        if((_mapSelector==0&&_sceneType==4)||(_mapSelector==1&&_sceneType==5))dc_config_switch_value(configuration,2,&visible);
+        dc_model_hide_node(_map.model,fourth,!visible);
+    }
+    return nil;
+}
 - (dc_camera_orbit)activeCameraOrbit {
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance*expf(_padCameraZoom),
         .height=_cameraHeight,.pitch=_cameraPitch+_padCameraPitch,.yaw=_cameraYaw+_padCameraYaw};
@@ -329,8 +367,16 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(selection==5&&_secondaryCameraMode==2&&_primaryCameraMode==2&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
             [self requestRenderCapture:@"gameplay-cameras-both-auto-native.png"];
 #endif
+    } else if(_contextMenu.icon==4) {
+        for(unsigned i=0;i<plan.count;++i){
+            if(plan.commands[i].kind==DC_SCENE_ENTER_CONFIG_MENU)_pendingSystemAction=3;
+            else if(plan.commands[i].kind==DC_SCENE_ENTER_SAVE_MENU)_pendingSystemAction=4;
+        }
+        if(_pendingSystemAction){
+            if(!self.transitionScene||[self.transitionScene requestTransition:2 tick:_lastTick]!=DC_OK)return @"Original system-page transition failed";
+            _pendingEffectSlot=0;_hasPendingEffect=YES;
+        }
     } else {
-        /* Original system destination screens have their own pending port. */
         ++_pendingContextActions;
     }
     return nil;
@@ -693,6 +739,7 @@ static void freeMorphCaches(dc_game_model *slot) {
      * wheel step4. Camera limits come from 00512cc0/00479490. */
     _secondaryVisible=_sceneType==4;
     _secondaryLimits=(dc_camera_pointer_limits){100,5,20,-30,4};
+    _backgroundColor[3]=255;
     _stageProgress=progress;_mainIconHover=-1;_lastContextSelection=-1;
     _sceneUITextures=[NSMutableDictionary dictionary];
     _storyStage=profile.stage>=0 ? (uint32_t)profile.stage : (stage<=2 ? stage : 0);
@@ -959,19 +1006,6 @@ static void freeMorphCaches(dc_game_model *slot) {
     return [self decodedName:(const uint8_t *)slot->xaData.bytes+key.value_offset length:key.value_length];
 }
 
-- (uint32_t)morphMeshForVectorName:(NSString *)vectorName model:(dc_game_model *)slot {
-    NSRange marker=[vectorName rangeOfString:@"_n" options:NSBackwardsSearch];
-    if(marker.location==NSNotFound || marker.location==0)return UINT32_MAX;
-    NSString *nodeName=[vectorName substringToIndex:marker.location];
-    for(uint32_t mesh=0;mesh<slot->info.submeshes;++mesh) {
-        dc_xx_submesh meshView;if(dc_model_mesh(slot->model,mesh,&meshView)!=DC_OK)continue;
-        dc_xx_node node;if(dc_xx_node_at(slot->xx,meshView.node,&node)!=DC_OK)continue;
-        NSString *meshNode=[self decodedName:(const uint8_t *)slot->xxData.bytes+node.name.offset length:node.name.length];
-        if([meshNode isEqualToString:nodeName])return mesh;
-    }
-    return UINT32_MAX;
-}
-
 - (BOOL)buildMorphCaches:(dc_game_model *)slot error:(NSString **)error {
     freeMorphCaches(slot);
     if(!slot->xaData || !slot->xaInfo.morph_tracks)return YES;
@@ -997,6 +1031,10 @@ static void freeMorphCaches(dc_game_model *slot) {
         dc_xa_morph_index_set indexView;
         if(dc_xa_morph_index_set_at(slot->xaData.bytes,slot->xaData.length,indexSet,&indexView)!=DC_OK) { if(error)*error=@"Game morph cache index metadata failed";free(vectorViews);freeMorphCaches(slot);return NO; }
         dc_morph_track_cache *cache=&slot->morphTracks[track];cache->meshIndex=UINT32_MAX;cache->indexCount=indexView.count;
+        if(dc_xx_morph_mesh(slot->xx,(const uint8_t *)slot->xaData.bytes+trackView.name_offset,
+            trackView.name_length,indexView.selector,&cache->meshIndex)!=DC_OK) {
+            if(error)*error=@"Game morph track node/submesh binding failed";free(vectorViews);freeMorphCaches(slot);return NO;
+        }
         cache->indices=calloc(indexView.count?indexView.count:1,sizeof(*cache->indices));
         if(!cache->indices || dc_xa_load_morph_indices(slot->xaData.bytes,slot->xaData.length,indexSet,cache->indices,indexView.count)!=DC_OK) { if(error)*error=@"Game morph cache indices failed";free(vectorViews);freeMorphCaches(slot);return NO; }
         cache->keyCount=trackView.key_count;cache->keys=calloc(cache->keyCount?cache->keyCount:1,sizeof(*cache->keys));
@@ -1007,7 +1045,6 @@ static void freeMorphCaches(dc_game_model *slot) {
             NSValue *boxed=vectorTable[vectorName];dc_morph_key_cache ref={0};
             if(!boxed){if(error)*error=@"Game morph cache vector metadata failed";free(vectorViews);freeMorphCaches(slot);return NO;}
             [boxed getValue:&ref];ref.frame=frame;cache->keys[keyIndex]=ref;
-            if(keyIndex==0)cache->meshIndex=[self morphMeshForVectorName:vectorName model:slot];
         }
         if(cache->meshIndex==UINT32_MAX || cache->meshIndex>=slot->info.submeshes){if(error)*error=@"Game morph cache mesh binding failed";free(vectorViews);freeMorphCaches(slot);return NO;}
     }
@@ -1336,21 +1373,21 @@ static void freeMorphCaches(dc_game_model *slot) {
         dc_vk_clip_rect clip=gameClip(viewport,width,height),secondaryClip=_secondaryVisible?gameClip(_secondaryViewport,width,height):(dc_vk_clip_rect){0};
         BOOL capture=(_captureGameplayFrame&&!_capturedGameplayFrame)||_requestedRenderCapture!=nil;
         NSMutableData *pixels=capture?[NSMutableData dataWithLength:(size_t)width*height*4]:nil;
-        if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,count-sceneDrawCount,clip,secondaryClip,_secondaryVisible,pixels.mutableBytes,pixels.length)!=DC_OK)failure=@"Game Vulkan draw failed";
+        if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,count-sceneDrawCount,clip,secondaryClip,_secondaryVisible,_backgroundColor,pixels.mutableBytes,pixels.length)!=DC_OK)failure=@"Game Vulkan draw failed";
         if(!failure&&capture) {
             // Compare against the same GPU scene with no actor/face. A blue
             // background cannot masquerade as character visibility this way.
             NSMutableData *background=[NSMutableData dataWithLength:pixels.length];
-            if(gameRenderPasses(_renderer,draws,mapDrawCount,secondaryStart,secondaryMapCount,sceneDrawCount,0,clip,secondaryClip,_secondaryVisible,background.mutableBytes,background.length)!=DC_OK)
+            if(gameRenderPasses(_renderer,draws,mapDrawCount,secondaryStart,secondaryMapCount,sceneDrawCount,0,clip,secondaryClip,_secondaryVisible,_backgroundColor,background.mutableBytes,background.length)!=DC_OK)
                 failure=@"Actor visibility background readback failed";
             if(failure){free(draws);return failure;}
             NSMutableData *scenePixels=[NSMutableData dataWithLength:pixels.length];
-            if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,0,clip,secondaryClip,_secondaryVisible,scenePixels.mutableBytes,scenePixels.length)!=DC_OK){free(draws);return @"Scene-only visibility readback failed";}
+            if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,0,clip,secondaryClip,_secondaryVisible,_backgroundColor,scenePixels.mutableBytes,scenePixels.length)!=DC_OK){free(draws);return @"Scene-only visibility readback failed";}
             NSMutableData *iconPixels=_contextOpen?[NSMutableData dataWithLength:pixels.length]:nil;
-            if(iconPixels&&gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,_sceneUIIconDraws,clip,secondaryClip,_secondaryVisible,iconPixels.mutableBytes,iconPixels.length)!=DC_OK){free(draws);return @"Scene context visibility readback failed";}
+            if(iconPixels&&gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,_sceneUIIconDraws,clip,secondaryClip,_secondaryVisible,_backgroundColor,iconPixels.mutableBytes,iconPixels.length)!=DC_OK){free(draws);return @"Scene context visibility readback failed";}
             NSMutableData *primaryOnly=_secondaryVisible?[NSMutableData dataWithLength:pixels.length]:nil;
-            if(primaryOnly&&gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,0,sceneDrawCount,0,clip,secondaryClip,NO,primaryOnly.mutableBytes,primaryOnly.length)!=DC_OK){free(draws);return @"Primary-only visibility readback failed";}
-            if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,count-sceneDrawCount,clip,secondaryClip,_secondaryVisible,NULL,0)!=DC_OK){free(draws);return @"Scene UI presentation restore failed";}
+            if(primaryOnly&&gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,0,sceneDrawCount,0,clip,secondaryClip,NO,_backgroundColor,primaryOnly.mutableBytes,primaryOnly.length)!=DC_OK){free(draws);return @"Primary-only visibility readback failed";}
+            if(gameRenderPasses(_renderer,draws,primarySceneCount,secondaryStart,secondarySceneCount,sceneDrawCount,count-sceneDrawCount,clip,secondaryClip,_secondaryVisible,_backgroundColor,NULL,0)!=DC_OK){free(draws);return @"Scene UI presentation restore failed";}
             const uint8_t *base=background.bytes,*scene=scenePixels.bytes;uint8_t *frame=pixels.mutableBytes;
             const uint8_t *icons=iconPixels.bytes;size_t uiVisible=0,contextVisible=0;
             size_t visible=0,primaryActorVisible=0,secondaryActorVisible=0,secondaryVisiblePixels=0,secondaryChangedOutside=0;uint32_t minX=width,minY=height,maxX=0,maxY=0;

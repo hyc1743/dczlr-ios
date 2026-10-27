@@ -11,11 +11,18 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) NSString *presentationState;
 @property(nonatomic,readonly) BOOL completed;
 @property(nonatomic,readonly) BOOL audioAdvanced;
+@property(nonatomic,readonly) uint32_t auxiliaryDestination;
+@property(nonatomic,readonly) NSData *numericState;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;
 /* Mid-story entry: start directly at a numbered script chapter without the
  * new-game transition sequence. */
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     startChapter:(uint32_t)chapter error:(NSString **)error;
+- (nullable instancetype)initWithDirectory:(NSString *)directory startChapter:(uint32_t)chapter
+    numericState:(NSMutableData *)state savedFrame:(uint32_t)frame error:(NSString **)error;
+- (nullable NSString *)requestAuxiliary:(uint32_t)destination transition:(DCStartupScene *)transition tick:(uint32_t)tick;
+- (void)consumeAuxiliaryDestination;
+- (void)resumeAtTick:(uint32_t)tick;
 - (void)detachRenderer;
 - (void)pause;
 - (nullable NSString *)drawWithRenderer:(dc_vk_sprite *)renderer transition:(DCStartupScene *)transition

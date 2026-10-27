@@ -8,15 +8,15 @@ extern "C" {
 
 /* Original story dispatcher tables recovered from the local Windows
  * executable (SHA-256 70aebdcd...) at the following addresses:
- * - 0x006d39d0: per-chapter next-scene callback table (26 entries)
- * - 0x006d3a44: per-chapter story stage selector (26 bytes)
- * - 0x006d3a84: per-chapter map selector (26 bytes)
- * - 0x0078d908: per-chapter script descriptor table (26 x 2 bytes)
+ * - 0x006d39d0: per-chapter next-scene callback table (29 entries)
+ * - 0x006d3a44: per-chapter story stage selector (29 bytes)
+ * - 0x006d3a84: per-chapter map selector (29 bytes)
+ * - 0x0078d908: per-chapter script descriptor table (29 x 2 bytes)
  * The chapter-end semantics follow FUN_00523380 (action 2) and the
  * transition actions 3/4/5 install FUN_0050de60 (configuration), FUN_0052e070
  * (save/load menu) and FUN_0051e010 (fade transition). */
 
-#define DC_STORY_CHAPTERS 26u
+#define DC_STORY_CHAPTERS 29u
 #define DC_STORY_STAGES 3u
 #define DC_STORY_STAGE_BYTES 0x2198u
 #define DC_STORY_SAVE_BYTES 72u

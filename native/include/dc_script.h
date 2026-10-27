@@ -42,7 +42,7 @@ typedef struct dc_script_decoded {
 DC_API dc_status dc_script_decode(const void *bytes,size_t length,size_t cursor,
     uint32_t frame,const dc_script_control *controls,size_t count,dc_script_decoded *out);
 
-#define DC_INTRO_CHAPTERS 26u
+#define DC_INTRO_CHAPTERS 29u
 typedef struct dc_intro_descriptor { int32_t script,last_frame; } dc_intro_descriptor;
 typedef struct dc_intro_state { uint32_t chapter,action,waiting,progress; } dc_intro_state;
 enum dc_intro_operation {
@@ -62,8 +62,9 @@ typedef struct dc_intro_plan {
  * continue through 0x52bcf0 below. finish is admitted only while not waiting. */
 DC_API dc_status dc_intro_finish(const dc_intro_state *state,
     const dc_intro_descriptor *table,size_t count,dc_intro_plan *out);
-/* Original pending-action helper. BACKUP value 1 is save/load, 2 options.
- * ENTER_AUX values: 2 save,5 options,6 title,7 load. STOP_AUDIO order is
+/* Original pending-action helper. BACKUP value1 is the root callback bank,
+ * value2 is the temporary-screen bank. ENTER_AUX values:2 configuration,
+ * 5 dummy/boss screen,6 title,7 save/load. STOP_AUDIO order is
  * 2 music,0 voice,1 effects. ENTER_CHAPTER installs callback/selector/stage
  * from the host's chapter table and clears active callbacks. Progress refers
  * to context+0x1355b; chapter 24 promotes all three corresponding flags from

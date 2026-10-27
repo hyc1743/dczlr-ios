@@ -3,6 +3,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import <dispatch/dispatch.h>
 #include "dc_scene_ui.h"
+#include "dc_config.h"
+#include <math.h>
 
 @interface DCGameAudio () <AVAudioPlayerDelegate>
 @end
@@ -17,6 +19,9 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     AVAudioPlayer *_music,*_selection;
     NSMutableDictionary<NSString *,AVAudioPlayer *> *_gameplayEffects,*_gameplayVoices;
     NSMutableSet<NSString *> *_pausedGameplayEffects;
+    NSMutableSet<NSString *> *_pausedGameplayVoices;
+    BOOL _resumeTitleAfterSystem;
+    float _voiceVolume,_effectVolume,_musicVolume;
     NSString *_directory;
     NSString *_voiceChainNext;
     BOOL _advanced;
@@ -38,6 +43,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
 - (instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error {
     if (!(self=[super init])) return nil;
     _directory=[directory copy];
+    _voiceVolume=_effectVolume=_musicVolume=1;
     NSData *music=[self sound:@"bgm000.wav" inArchive:@"RPP_01.pp" directory:directory error:error];
     NSData *selection=[self sound:@"se100.wav" inArchive:@"RPP_14.pp" directory:directory error:error];
     if(!music || !selection)return nil;
@@ -67,7 +73,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     NSError *reason=nil;AVAudioSession *session=AVAudioSession.sharedInstance;
     if(![session setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&reason] ||
        ![session setActive:YES error:&reason]) return NO;
-    player.currentTime=0;return [player play];
+    player.currentTime=0;player.volume=_effectVolume;return [player play];
 }
 - (BOOL)playGameplaySlot:(NSUInteger)slot {
     NSString *name=DCGameplaySlotName(slot);
@@ -101,6 +107,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     if(![session setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&reason] ||
        ![session setActive:YES error:&reason]) return NO;
     player.currentTime=0;
+    player.volume=_voiceVolume;
     return [player play];
 }
 - (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
@@ -122,6 +129,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     return _advanced;
 }
 - (BOOL)playMenuSelection {
+    _selection.volume=_effectVolume;
     _selection.currentTime=0;
     return [_selection play];
 }
@@ -144,6 +152,27 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
         [player pause];
     }
     for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop];
+}
+- (void)applyConfiguration:(NSData *)configuration {
+    dc_config state;if(dc_config_decode(configuration.bytes,configuration.length,&state)!=DC_OK)return;
+    float voice,bgm,se;dc_config_slider_value(&state,0,&voice);dc_config_slider_value(&state,1,&bgm);dc_config_slider_value(&state,2,&se);
+    _voiceVolume=powf(10,voice/2000);_effectVolume=powf(10,se/2000);_musicVolume=powf(10,bgm/2000);
+    _music.volume=_musicVolume;_selection.volume=_effectVolume;
+    for(AVAudioPlayer *player in _gameplayEffects.allValues)player.volume=_effectVolume;
+    for(AVAudioPlayer *player in _gameplayVoices.allValues)player.volume=_voiceVolume;
+}
+- (void)suspendForSystemPage {
+    _resumeTitleAfterSystem=_music.isPlaying;[_music pause];[_selection stop];
+    if(!_pausedGameplayEffects)_pausedGameplayEffects=[NSMutableSet set];
+    if(!_pausedGameplayVoices)_pausedGameplayVoices=[NSMutableSet set];
+    for(NSString *name in _gameplayEffects){AVAudioPlayer *player=_gameplayEffects[name];if(player.isPlaying)[_pausedGameplayEffects addObject:name];[player pause];}
+    for(NSString *name in _gameplayVoices){AVAudioPlayer *player=_gameplayVoices[name];if(player.isPlaying)[_pausedGameplayVoices addObject:name];[player pause];}
+}
+- (BOOL)resumeAfterSystemPage {
+    if(_resumeTitleAfterSystem&&![_music play])return NO;_resumeTitleAfterSystem=NO;
+    if(![self resumeGameplayEffects])return NO;
+    for(NSString *name in _pausedGameplayVoices)if(![_gameplayVoices[name] play])return NO;
+    [_pausedGameplayVoices removeAllObjects];return YES;
 }
 - (void)dealloc { [_music stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
 @end

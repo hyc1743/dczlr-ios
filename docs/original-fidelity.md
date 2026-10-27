@@ -1,4 +1,4 @@
-# Original behavior audit (2026-10-27)
+﻿# Original behavior audit (2026-10-27)
 
 The current native port is incomplete. Original files, projected models, and
 passing input checks do not demonstrate original gameplay or full-story
@@ -451,7 +451,7 @@ retain separate actor visibility, inset/world matrices, pointer inputs and
 the controller before/after. The expanded UIKit route exercises all secondary
 options, V hide/show, held left dragging outside the inset, right dragging,
 both buttons with F1, wheel, simultaneous automatic views and both resets.
-Local unittest discovery passes330 tests. System pages and complete flow
+Local unittest discovery passes349 tests. System pages and complete flow
 are not complete; the simulator evidence is recorded below.
 
 ### Confirmed secondary-camera simulator run
@@ -491,7 +491,14 @@ byte for byte, and the original restores its in-memory state after writing.
 CRT/path/Win32 I/O, menu refresh and security-cookie checks are explicit
 synthetic boundaries; no original process or filesystem write was performed.
 Fixtures are tests/fixtures/save-slot-original-vectors.json. Discovery passes
-334 local tests. UI-based save/relaunch/load remains an open acceptance item.
+349 local tests. The host now instantiates the original save page from the
+system action, keeps its 85-record bitmap table and hit geometry, writes a
+selected slot only after the page raises its save request, and decodes the
+selected encoded slot before restoring the owner scene. The type9 configuration
+page is also integrated with the exact slider/switch state, `Data\\gcd.cfg`
+persistence and owner-scene resume. These paths are source-integrated but need
+a GitHub simulator route with actual page captures plus a fresh relaunch/load
+check before they certify the full acceptance item.
 
 Further static inventory found29 valid chapter callbacks (0..28), including
 three additional script branches and an interactive chapter24 selector.

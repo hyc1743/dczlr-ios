@@ -14,7 +14,7 @@
 static const dc_intro_descriptor dcIntroChapters[DC_INTRO_CHAPTERS]={
     {0,2},{1,31},{2,9},{-1,-1},{15,2},{-1,-1},{3,38},{-1,-1},
     {4,31},{5,5},{-1,-1},{16,2},{-1,-1},{6,42},{-1,-1},{7,43},
-    {8,4},{-1,-1},{9,4},{-1,-1},{10,51},{-1,-1},{11,74},{13,4},{-1,-1},{12,13}
+    {8,4},{-1,-1},{9,4},{-1,-1},{10,51},{-1,-1},{11,74},{13,4},{-1,-1},{12,13},{14,4},{17,1},{18,2}
 };
 static NSString *dcIntroDecode(const void *bytes,size_t length) {
     NSStringEncoding encoding=CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingDOSChineseSimplif);
@@ -46,17 +46,32 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     dc_text_plan _textPlan;
     dc_intro_state _flow;
     uint32_t _lastTick,_pendingChapter;
+    uint32_t _entryFrame,_auxiliaryDestination;
     uint8_t _finishFlags[3];
     size_t _cursor;
     BOOL _touching,_completed,_dirty,_tickInitialized,_textStarted,_initialUpdateSkipped,_hasTextPlan;
     AVAudioPlayer *_music,*_sound,*_voice;
     BOOL _pausedMusic,_pausedVoice;
+    BOOL _seeking;
     BOOL _musicAdvanced,_voiceAdvanced,_soundAdvanced;
     BOOL _captureEnabled,_capturedFirstRecord;
 }
 - (uint32_t)frame { return _text.frame<0 ? 0 : (uint32_t)_text.frame; }
 - (uint32_t)chapter { return _flow.chapter; }
 - (uint32_t)pendingChapter { return _pendingChapter; }
+- (uint32_t)auxiliaryDestination {return _auxiliaryDestination;}
+- (NSData *)numericState {return _gameState;}
+- (void)consumeAuxiliaryDestination {_auxiliaryDestination=0;}
+- (void)resumeAtTick:(uint32_t)tick {
+    if(_tickInitialized)_text.wait_stamp+=tick-_lastTick;
+    _lastTick=tick;_tickInitialized=YES;_touching=NO;
+}
+- (NSString *)requestAuxiliary:(uint32_t)destination transition:(DCStartupScene *)transition tick:(uint32_t)tick {
+    if(_flow.waiting||_auxiliaryDestination)return nil;
+    if(destination!=2&&destination!=5&&destination!=7)return @"Unknown original script system destination";
+    if([transition requestTransition:destination==5?3:2 tick:tick]!=DC_OK)return @"Script system transition failed";
+    _flow.action=destination;_flow.waiting=1;return nil;
+}
 - (NSString *)presentationState {
     return _hasTextPlan && _textTexture ? [NSString stringWithFormat:@"%u:%u:%u",_flow.chapter,self.frame,_text.fade_index] : @"";
 }
@@ -71,14 +86,19 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     return [self initWithDirectory:directory startChapter:0 error:error];
 }
 - (instancetype)initWithDirectory:(NSString *)directory startChapter:(uint32_t)startChapter error:(NSString **)error {
+    NSMutableData *state=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
+    if(dc_game_state_init(state.mutableBytes,state.length)!=DC_OK){if(error)*error=@"New-game numeric state initialization failed";return nil;}
+    return [self initWithDirectory:directory startChapter:startChapter numericState:state savedFrame:0 error:error];
+}
+- (instancetype)initWithDirectory:(NSString *)directory startChapter:(uint32_t)startChapter
+        numericState:(NSMutableData *)state savedFrame:(uint32_t)frame error:(NSString **)error {
     if(!(self=[super init]))return nil;
     if(startChapter>=DC_INTRO_CHAPTERS) { if(error)*error=@"Story chapter is outside the script table";return nil; }
     _directory=[directory copy];
     _captureEnabled=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_STARTUP"] isEqualToString:@"1"];
-    _gameState=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
-    if(dc_game_state_init(_gameState.mutableBytes,_gameState.length)!=DC_OK) {
-        if(error)*error=@"New-game numeric state initialization failed";return nil;
-    }
+    if(state.length!=DC_GAME_STATE_BYTES){if(error)*error=@"Original numeric state size rejected";return nil;}
+    if(frame>(uint32_t)dcIntroChapters[startChapter].last_frame){if(error)*error=@"Saved script frame outside original descriptor";return nil;}
+    _gameState=state;_entryFrame=frame;
     NSError *reason=nil;
     _scripts=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_16.pp"]] error:&reason];
     _images=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
@@ -90,6 +110,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     } else {
         _flow=(dc_intro_state){.waiting=1};
     }
+    _flow.progress=((const uint8_t *)_gameState.bytes)[0x23];
     NSString *failure=[self loadChapter:startChapter];
     if(failure) {if(error)*error=failure;return nil;}
     return self;
@@ -109,7 +130,14 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         .wait_state=-1,.wait_glyph=-1,.frame=-1,.last_frame=dcIntroChapters[chapter].last_frame,
         .wait_line=255,.active=1,.x=135,.y=652,.font_size=29,.scale=1,.rgb=0xffffff};
     _textStarted=NO;_hasTextPlan=NO;
-    return [self loadRecord];
+    uint32_t entryFrame=_entryFrame;_entryFrame=0;_seeking=entryFrame!=0;
+    NSString *failure=nil;
+    for(uint32_t frame=0;frame<=entryFrame;++frame){
+        _text.frame=frame;failure=[self loadRecord];if(failure){_seeking=NO;return failure;}
+    }
+    _text.frame=(int32_t)entryFrame-1;_seeking=NO;
+    if(entryFrame){if(_music&&![_music play])return @"Saved script music did not start";if(_voice&&![_voice play])return @"Saved script voice did not start";if(_sound&&![_sound play])return @"Saved script sound did not start";}
+    return nil;
 }
 - (AVAudioPlayer *)playerForName:(const uint8_t *)name archive:(NSString *)archiveName loop:(BOOL)loop error:(NSString **)error {
     NSString *nameString=[[NSString alloc] initWithUTF8String:(const char *)name];
@@ -169,9 +197,9 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         if(_backgroundTexture)dc_vk_sprite_remove_texture(_renderer,_backgroundTexture);
         _backgroundTexture=0;_background=image;
     }
-    if(next.music[0]) {[_music stop];_music=music;if(_music && ![_music play])return @"Intro music did not start";}
-    if(sound) {[_sound stop];_sound=sound;if(![_sound play])return @"Intro sound did not start";}
-    if(voice) {[_voice stop];_voice=voice;if(![_voice play])return @"Intro voice did not start";}
+    if(next.music[0]) {[_music stop];_music=music;if(_music&&!_seeking&&![_music play])return @"Intro music did not start";}
+    if(sound) {[_sound stop];_sound=sound;if(!_seeking&&![_sound play])return @"Intro sound did not start";}
+    if(voice) {[_voice stop];_voice=voice;if(!_seeking&&![_voice play])return @"Intro voice did not start";}
     _decoded=next;_cursor=next.record.next_offset;_speaker=speaker;
     _bodyBytes=[_script subdataWithRange:NSMakeRange(next.record.body.offset,next.record.body.length)];
     if(_bodyBytes.length>=DC_TEXT_BYTE_LIMIT || _bodyBytes.length<2)return @"Intro text exceeds the native controller profile";
@@ -261,6 +289,11 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         case DC_INTRO_STOP_AUDIO:
             if(command.value==2)[_music stop];else if(command.value==0)[_voice stop];else [_sound stop];break;
         case DC_INTRO_QUIT: return @"Game session ended";
+        case DC_INTRO_BACKUP: break;
+        case DC_INTRO_ENTER_AUX:
+            if(command.value==6){_pendingChapter=DC_INTRO_CHAPTERS;_completed=YES;}
+            else _auxiliaryDestination=command.value;
+            break;
         default: return @"Intro auxiliary destination is not implemented";
         }
     }

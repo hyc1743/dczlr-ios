@@ -45,6 +45,11 @@ struct dc_model {
     uint32_t static_only;
     skin_node *skins;
 };
+dc_status dc_model_shift_clock(dc_model *model,uint32_t elapsed) {
+    if(!model)return DC_ARGUMENT;
+    model->animation.blend_start+=elapsed;model->animation.blend_end+=elapsed;
+    return DC_OK;
+}
 static int overlap(const void *a,size_t al,const void *b,size_t bl) {
     uintptr_t aa=(uintptr_t)a,bb=(uintptr_t)b;
     return al && bl && (aa<=bb ? bb-aa<al : aa-bb<bl);
@@ -86,8 +91,11 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
     /* Event tracks are admitted after full XA framing validation. Type 0/1
      * target UV scrolling is applied during ticks; other event types remain
      * inert while their serialized views stay available to the host. */
-    if (m->xa_info.morph_tracks || m->xa_info.morph_index_sets ||
-        m->xa_info.morph_vector_sets || m->xa_info.bone_tracks>4096 || m->xa_info.material_tracks>4096) { status=DC_FORMAT;goto failed; }
+    /* Morph sections are parsed and retained by dc_morph. The base model
+     * loader keeps its pose/material/event admission independent; callers
+     * that render morph resources must apply the persistent local morph
+     * buffers before skinning. */
+    if (m->xa_info.bone_tracks>4096 || m->xa_info.material_tracks>4096) { status=DC_FORMAT;goto failed; }
     if (!static_only) TRY(dc_xa_load_clips(xa,xa_length,m->clips,m->timing,512));
     ALLOC(nodes,m->info.nodes);ALLOC(scratch_nodes,m->info.nodes);
     ALLOC(render_hidden,m->info.nodes);

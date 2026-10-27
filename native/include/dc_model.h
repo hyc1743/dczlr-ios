@@ -35,6 +35,9 @@ DC_API dc_status dc_model_query(const dc_model *model,uint32_t *clip,uint32_t *r
 /* Snapshot of the animated controller for scene logic. Static models return
  * DC_NOT_FOUND without writing a fabricated controller state. */
 DC_API dc_status dc_model_get_animation(const dc_model *model,dc_animation_state *out);
+/* Host lifecycle: preserve animation deadlines when a scene's callbacks are
+ * suspended while an independently timed system page runs. */
+DC_API dc_status dc_model_shift_clock(dc_model *model,uint32_t elapsed);
 /* Controller, per-track local pose/material, then hierarchy. Failed updates
  * preserve all externally visible model state, clips and matrices. */
 DC_API dc_status dc_model_tick(dc_model *model,uint32_t delta,uint32_t now,const dc_matrix *world);

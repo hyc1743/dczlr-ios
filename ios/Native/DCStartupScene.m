@@ -221,14 +221,18 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
 }
 - (NSString *)renderSprites:(const dc_vk_sprite_item *)items count:(size_t)itemCount
         width:(uint32_t)width height:(uint32_t)height readback:(NSMutableData *)readback {
-    if(itemCount>8 || (itemCount && !items))return @"Scene sprite profile rejected";
+    if(itemCount>512 || (itemCount && !items))return @"Scene sprite profile rejected";
     if(readback && readback.length!=(size_t)width*height*4)return @"Scene readback capacity rejected";
     dc_status status;uint32_t clip,ready;
     float scale=fminf((float)width/1024,(float)height/768);
     dc_viewport viewport={(width-1024*scale)*.5f,(height-768*scale)*.5f,1024*scale,768*scale,0,1};
-    dc_vk_geometry_item draws[25]={0};
+    size_t drawCapacity=itemCount+_info.submeshes+1;
+    if(drawCapacity>4096)return @"Scene draw capacity rejected";
+    __attribute__((objc_precise_lifetime)) NSMutableData *drawMemory=[NSMutableData dataWithLength:drawCapacity*sizeof(dc_vk_geometry_item)];
+    dc_vk_geometry_item *draws=drawMemory.mutableBytes;
     dc_sprite_vertex card[6];size_t count=0;
-    dc_sprite_vertex sprites[8][6];
+    __attribute__((objc_precise_lifetime)) NSMutableData *spriteMemory=[NSMutableData dataWithLength:itemCount*6*sizeof(dc_sprite_vertex)];
+    dc_sprite_vertex (*sprites)[6]=spriteMemory.mutableBytes;
     const unsigned order[6]={0,1,2,2,1,3};
     for(size_t i=0;i<itemCount;++i) {
         dc_sprite_vertex corners[4];

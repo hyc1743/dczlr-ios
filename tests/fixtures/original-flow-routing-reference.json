@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "scheduler": {
+    "function": "0047d2d0",
+    "cases": 2306,
+    "mismatches": 0,
+    "function_sha256": "b362b2be45109c218b5e5aee91808a41892516a07172fdb360a7a0d3ca55195d",
+    "report": "out/flow-analysis/scheduler-replay.json"
+  },
+  "selector_action1": {
+    "function": "0052c230",
+    "cases": 532,
+    "mismatches": 0,
+    "function_sha256": "4f769fa9711b60dbba4588c11d0b8622e418a5c1d6f0e8e9c35dddb9ff1621b6",
+    "report": "out/flow-analysis/selector-replay.json"
+  },
+  "execution": "isolated original x86 numeric replays; no original process, host API, resources, graphics, audio or network"
+}

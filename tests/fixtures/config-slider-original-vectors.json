@@ -1,0 +1,2352 @@
+{
+  "method": "Unicorn x86 isolated original code with synthetic contexts; no original process/resources",
+  "artifact_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "unicorn_version": "2.1.4",
+  "slider_entry": "0050f220",
+  "numeric_helper": "0061e344",
+  "x87_control_word": "027f",
+  "cross_checked_control_word": "037f",
+  "all_float_outputs_identical_between_precision_modes": true,
+  "limits": [
+    "static/emulated evidence, not original process runtime",
+    "only numeric function and Reset branch exercised",
+    "audio, scene application, hit tester, keyboard and transition calls are stubs"
+  ],
+  "specs": [
+    {
+      "name": "voice",
+      "group": 0,
+      "index": 0,
+      "cfg": 0,
+      "track": [
+        260,
+        103,
+        650,
+        17
+      ],
+      "kind": "i32"
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "index": 1,
+      "cfg": 8,
+      "track": [
+        260,
+        156,
+        650,
+        17
+      ],
+      "kind": "i32"
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "index": 2,
+      "cfg": 4,
+      "track": [
+        260,
+        209,
+        650,
+        17
+      ],
+      "kind": "i32"
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "index": 0,
+      "cfg": 12,
+      "track": [
+        260,
+        289,
+        230,
+        17
+      ],
+      "kind": "f32"
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "index": 1,
+      "cfg": 16,
+      "track": [
+        260,
+        349,
+        230,
+        17
+      ],
+      "kind": "f32"
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "index": 2,
+      "cfg": 20,
+      "track": [
+        260,
+        409,
+        230,
+        17
+      ],
+      "kind": "f32"
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "index": 3,
+      "cfg": 44,
+      "track": [
+        260,
+        573,
+        230,
+        17
+      ],
+      "kind": "f32"
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "index": 0,
+      "cfg": 32,
+      "track": [
+        610,
+        434,
+        295,
+        22
+      ],
+      "kind": "f32"
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "index": 1,
+      "cfg": 36,
+      "track": [
+        610,
+        458,
+        295,
+        22
+      ],
+      "kind": "f32"
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "index": 2,
+      "cfg": 40,
+      "track": [
+        610,
+        482,
+        295,
+        22
+      ],
+      "kind": "f32"
+    }
+  ],
+  "vectors": [
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 160.0,
+      "requested_center_bits": "43200000",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 260.0,
+      "requested_center_bits": "43820000",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 260.0010070800781,
+      "requested_center_bits": "43820021",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.00100708007812,
+      "knob_center": 260.0010070800781,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 340.24639892578125,
+      "requested_center_bits": "43aa1f8a",
+      "value": -5260,
+      "value_bits": "74ebffff",
+      "knob_left": 328.24639892578125,
+      "knob_center": 340.24639892578125,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294962036
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 585.0,
+      "requested_center_bits": "44124000",
+      "value": -3001,
+      "value_bits": "47f4ffff",
+      "knob_left": 573.0,
+      "knob_center": 585.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294964295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 909.219970703125,
+      "requested_center_bits": "44634e14",
+      "value": -8,
+      "value_bits": "f8ffffff",
+      "knob_left": 897.219970703125,
+      "knob_center": 909.219970703125,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294967288
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 909.3499755859375,
+      "requested_center_bits": "44635666",
+      "value": -7,
+      "value_bits": "f9ffffff",
+      "knob_left": 897.3499755859375,
+      "knob_center": 909.3499755859375,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294967289
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 909.4149780273438,
+      "requested_center_bits": "44635a8f",
+      "value": -6,
+      "value_bits": "faffffff",
+      "knob_left": 897.4149780273438,
+      "knob_center": 909.4149780273438,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294967290
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 910.0,
+      "requested_center_bits": "44638000",
+      "value": -1,
+      "value_bits": "ffffffff",
+      "knob_left": 898.0,
+      "knob_center": 910.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294967295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 0,
+      "cfg_offset": 0,
+      "requested_center_f32": 1010.0,
+      "requested_center_bits": "447c8000",
+      "value": -1,
+      "value_bits": "ffffffff",
+      "knob_left": 898.0,
+      "knob_center": 910.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294967295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "voice",
+      "group": 0,
+      "hit_index": 3,
+      "cfg_offset": 0,
+      "requested_center_f32": 476.66644287109375,
+      "requested_center_bits": "43ee554e",
+      "value": -4001,
+      "value_bits": "5ff0ffff",
+      "knob_left": 464.66644287109375,
+      "knob_center": 476.66644287109375,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            286326784,
+            4294963295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 160.0,
+      "requested_center_bits": "43200000",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 260.0,
+      "requested_center_bits": "43820000",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 260.0010070800781,
+      "requested_center_bits": "43820021",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.00100708007812,
+      "knob_center": 260.0010070800781,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 340.24639892578125,
+      "requested_center_bits": "43aa1f8a",
+      "value": -5260,
+      "value_bits": "74ebffff",
+      "knob_left": 328.24639892578125,
+      "knob_center": 340.24639892578125,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294962036
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 585.0,
+      "requested_center_bits": "44124000",
+      "value": -3001,
+      "value_bits": "47f4ffff",
+      "knob_left": 573.0,
+      "knob_center": 585.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294964295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 909.219970703125,
+      "requested_center_bits": "44634e14",
+      "value": -8,
+      "value_bits": "f8ffffff",
+      "knob_left": 897.219970703125,
+      "knob_center": 909.219970703125,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294967288
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 909.3499755859375,
+      "requested_center_bits": "44635666",
+      "value": -7,
+      "value_bits": "f9ffffff",
+      "knob_left": 897.3499755859375,
+      "knob_center": 909.3499755859375,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294967289
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 909.4149780273438,
+      "requested_center_bits": "44635a8f",
+      "value": -6,
+      "value_bits": "faffffff",
+      "knob_left": 897.4149780273438,
+      "knob_center": 909.4149780273438,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294967290
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 910.0,
+      "requested_center_bits": "44638000",
+      "value": -1,
+      "value_bits": "ffffffff",
+      "knob_left": 898.0,
+      "knob_center": 910.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294967295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 1,
+      "cfg_offset": 8,
+      "requested_center_f32": 1010.0,
+      "requested_center_bits": "447c8000",
+      "value": -1,
+      "value_bits": "ffffffff",
+      "knob_left": 898.0,
+      "knob_center": 910.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294967295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bgm",
+      "group": 0,
+      "hit_index": 4,
+      "cfg_offset": 8,
+      "requested_center_f32": 476.66644287109375,
+      "requested_center_bits": "43ee554e",
+      "value": -4001,
+      "value_bits": "5ff0ffff",
+      "knob_left": 464.66644287109375,
+      "knob_center": 476.66644287109375,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            1145307136,
+            4294963295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 160.0,
+      "requested_center_bits": "43200000",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294961296
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 260.0,
+      "requested_center_bits": "43820000",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294961296
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 260.0010070800781,
+      "requested_center_bits": "43820021",
+      "value": -6000,
+      "value_bits": "90e8ffff",
+      "knob_left": 248.00100708007812,
+      "knob_center": 260.0010070800781,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294961296
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294961296
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 340.24639892578125,
+      "requested_center_bits": "43aa1f8a",
+      "value": -5260,
+      "value_bits": "74ebffff",
+      "knob_left": 328.24639892578125,
+      "knob_center": 340.24639892578125,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294962036
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294962036
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 585.0,
+      "requested_center_bits": "44124000",
+      "value": -3001,
+      "value_bits": "47f4ffff",
+      "knob_left": 573.0,
+      "knob_center": 585.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294964295
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294964295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 909.219970703125,
+      "requested_center_bits": "44634e14",
+      "value": -8,
+      "value_bits": "f8ffffff",
+      "knob_left": 897.219970703125,
+      "knob_center": 909.219970703125,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294967288
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294967288
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 909.3499755859375,
+      "requested_center_bits": "44635666",
+      "value": -7,
+      "value_bits": "f9ffffff",
+      "knob_left": 897.3499755859375,
+      "knob_center": 909.3499755859375,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294967289
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294967289
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 909.4149780273438,
+      "requested_center_bits": "44635a8f",
+      "value": -6,
+      "value_bits": "faffffff",
+      "knob_left": 897.4149780273438,
+      "knob_center": 909.4149780273438,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294967290
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294967290
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 910.0,
+      "requested_center_bits": "44638000",
+      "value": -1,
+      "value_bits": "ffffffff",
+      "knob_left": 898.0,
+      "knob_center": 910.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294967295
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294967295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 2,
+      "cfg_offset": 4,
+      "requested_center_f32": 1010.0,
+      "requested_center_bits": "447c8000",
+      "value": -1,
+      "value_bits": "ffffffff",
+      "knob_left": 898.0,
+      "knob_center": 910.0,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294967295
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294967295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "se",
+      "group": 0,
+      "hit_index": 5,
+      "cfg_offset": 4,
+      "requested_center_f32": 476.66644287109375,
+      "requested_center_bits": "43ee554e",
+      "value": -4001,
+      "value_bits": "5ff0ffff",
+      "knob_left": 464.66644287109375,
+      "knob_center": 476.66644287109375,
+      "calls": [
+        {
+          "function": "00402530",
+          "args": [
+            572653568,
+            4294963295
+          ]
+        },
+        {
+          "function": "00402530",
+          "args": [
+            858980352,
+            4294963295
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 160.0,
+      "requested_center_bits": "43200000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 260.0,
+      "requested_center_bits": "43820000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 260.0010070800781,
+      "requested_center_bits": "43820021",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.00100708007812,
+      "knob_center": 260.0010070800781,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 288.3948669433594,
+      "requested_center_bits": "4390328b",
+      "value": 0.1233999952673912,
+      "value_bits": "23b9fc3d",
+      "knob_left": 276.3948669433594,
+      "knob_center": 288.3948669433594,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1039972643
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 375.0,
+      "requested_center_bits": "43bb8000",
+      "value": 0.4998999834060669,
+      "value_bits": "e4f2ff3e",
+      "knob_left": 363.0,
+      "knob_center": 375.0,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1056961252
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 489.7239990234375,
+      "requested_center_bits": "43f4dcac",
+      "value": 0.998699963092804,
+      "value_bits": "cdaa7f3f",
+      "knob_left": 477.7239990234375,
+      "knob_center": 489.7239990234375,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1065331405
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 489.7699890136719,
+      "requested_center_bits": "43f4e28f",
+      "value": 0.9988999962806702,
+      "value_bits": "e9b77f3f",
+      "knob_left": 477.7699890136719,
+      "knob_center": 489.7699890136719,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1065334761
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 489.7929992675781,
+      "requested_center_bits": "43f4e581",
+      "value": 0.9989999532699585,
+      "value_bits": "76be7f3f",
+      "knob_left": 477.7929992675781,
+      "knob_center": 489.7929992675781,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1065336438
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 490.0,
+      "requested_center_bits": "43f50000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1065353216
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 0,
+      "cfg_offset": 12,
+      "requested_center_f32": 590.0,
+      "requested_center_bits": "44138000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1065353216
+          ]
+        }
+      ]
+    },
+    {
+      "name": "hand_alpha",
+      "group": 1,
+      "hit_index": 4,
+      "cfg_offset": 12,
+      "requested_center_f32": 336.6665954589844,
+      "requested_center_bits": "43a85553",
+      "value": 0.33329999446868896,
+      "value_bits": "4ca6aa3e",
+      "knob_left": 324.6665954589844,
+      "knob_center": 336.6665954589844,
+      "calls": [
+        {
+          "function": "0047c4a0",
+          "args": [
+            536870912,
+            1051371084
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 160.0,
+      "requested_center_bits": "43200000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 260.0,
+      "requested_center_bits": "43820000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 260.0010070800781,
+      "requested_center_bits": "43820021",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.00100708007812,
+      "knob_center": 260.0010070800781,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 288.3948669433594,
+      "requested_center_bits": "4390328b",
+      "value": 0.1233999952673912,
+      "value_bits": "23b9fc3d",
+      "knob_left": 276.3948669433594,
+      "knob_center": 288.3948669433594,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1039972643
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 375.0,
+      "requested_center_bits": "43bb8000",
+      "value": 0.4998999834060669,
+      "value_bits": "e4f2ff3e",
+      "knob_left": 363.0,
+      "knob_center": 375.0,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1056961252
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 489.7239990234375,
+      "requested_center_bits": "43f4dcac",
+      "value": 0.998699963092804,
+      "value_bits": "cdaa7f3f",
+      "knob_left": 477.7239990234375,
+      "knob_center": 489.7239990234375,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1065331405
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 489.7699890136719,
+      "requested_center_bits": "43f4e28f",
+      "value": 0.9988999962806702,
+      "value_bits": "e9b77f3f",
+      "knob_left": 477.7699890136719,
+      "knob_center": 489.7699890136719,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1065334761
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 489.7929992675781,
+      "requested_center_bits": "43f4e581",
+      "value": 0.9989999532699585,
+      "value_bits": "76be7f3f",
+      "knob_left": 477.7929992675781,
+      "knob_center": 489.7929992675781,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1065336438
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 490.0,
+      "requested_center_bits": "43f50000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1065353216
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 1,
+      "cfg_offset": 16,
+      "requested_center_f32": 590.0,
+      "requested_center_bits": "44138000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1065353216
+          ]
+        }
+      ]
+    },
+    {
+      "name": "body_alpha",
+      "group": 1,
+      "hit_index": 5,
+      "cfg_offset": 16,
+      "requested_center_f32": 336.6665954589844,
+      "requested_center_bits": "43a85553",
+      "value": 0.33329999446868896,
+      "value_bits": "4ca6aa3e",
+      "knob_left": 324.6665954589844,
+      "knob_center": 336.6665954589844,
+      "calls": [
+        {
+          "function": "0047c500",
+          "args": [
+            536870912,
+            1051371084
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 160.0,
+      "requested_center_bits": "43200000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 260.0,
+      "requested_center_bits": "43820000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 260.0010070800781,
+      "requested_center_bits": "43820021",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 248.00100708007812,
+      "knob_center": 260.0010070800781,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 288.3948669433594,
+      "requested_center_bits": "4390328b",
+      "value": 0.1233999952673912,
+      "value_bits": "23b9fc3d",
+      "knob_left": 276.3948669433594,
+      "knob_center": 288.3948669433594,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1039972643
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 375.0,
+      "requested_center_bits": "43bb8000",
+      "value": 0.4998999834060669,
+      "value_bits": "e4f2ff3e",
+      "knob_left": 363.0,
+      "knob_center": 375.0,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1056961252
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 489.7239990234375,
+      "requested_center_bits": "43f4dcac",
+      "value": 0.998699963092804,
+      "value_bits": "cdaa7f3f",
+      "knob_left": 477.7239990234375,
+      "knob_center": 489.7239990234375,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1065331405
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 489.7699890136719,
+      "requested_center_bits": "43f4e28f",
+      "value": 0.9988999962806702,
+      "value_bits": "e9b77f3f",
+      "knob_left": 477.7699890136719,
+      "knob_center": 489.7699890136719,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1065334761
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 489.7929992675781,
+      "requested_center_bits": "43f4e581",
+      "value": 0.9989999532699585,
+      "value_bits": "76be7f3f",
+      "knob_left": 477.7929992675781,
+      "knob_center": 489.7929992675781,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1065336438
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 490.0,
+      "requested_center_bits": "43f50000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1065353216
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 2,
+      "cfg_offset": 20,
+      "requested_center_f32": 590.0,
+      "requested_center_bits": "44138000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1065353216
+          ]
+        }
+      ]
+    },
+    {
+      "name": "underwear_alpha",
+      "group": 1,
+      "hit_index": 6,
+      "cfg_offset": 20,
+      "requested_center_f32": 336.6665954589844,
+      "requested_center_bits": "43a85553",
+      "value": 0.33329999446868896,
+      "value_bits": "4ca6aa3e",
+      "knob_left": 324.6665954589844,
+      "knob_center": 336.6665954589844,
+      "calls": [
+        {
+          "function": "0047c680",
+          "args": [
+            536870912,
+            1051371084
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 160.0,
+      "requested_center_bits": "43200000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 260.0,
+      "requested_center_bits": "43820000",
+      "value": 1.0,
+      "value_bits": "0000803f",
+      "knob_left": 248.0,
+      "knob_center": 260.0,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 260.0010070800781,
+      "requested_center_bits": "43820021",
+      "value": 1.0000394582748413,
+      "value_bits": "4b01803f",
+      "knob_left": 248.00100708007812,
+      "knob_center": 260.0010070800781,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 288.3948669433594,
+      "requested_center_bits": "4390328b",
+      "value": 2.1111035346984863,
+      "value_bits": "521c0740",
+      "knob_left": 276.3948669433594,
+      "knob_center": 288.3948669433594,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 375.0,
+      "requested_center_bits": "43bb8000",
+      "value": 5.5,
+      "value_bits": "0000b040",
+      "knob_left": 363.0,
+      "knob_center": 375.0,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 489.7239990234375,
+      "requested_center_bits": "43f4dcac",
+      "value": 9.9891996383667,
+      "value_bits": "c3d31f41",
+      "knob_left": 477.7239990234375,
+      "knob_center": 489.7239990234375,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 489.7699890136719,
+      "requested_center_bits": "43f4e28f",
+      "value": 9.990999221801758,
+      "value_bits": "22db1f41",
+      "knob_left": 477.7699890136719,
+      "knob_center": 489.7699890136719,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 489.7929992675781,
+      "requested_center_bits": "43f4e581",
+      "value": 9.991899490356445,
+      "value_bits": "d2de1f41",
+      "knob_left": 477.7929992675781,
+      "knob_center": 489.7929992675781,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 490.0,
+      "requested_center_bits": "43f50000",
+      "value": 10.0,
+      "value_bits": "00002041",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 3,
+      "cfg_offset": 44,
+      "requested_center_f32": 590.0,
+      "requested_center_bits": "44138000",
+      "value": 10.0,
+      "value_bits": "00002041",
+      "knob_left": 478.0,
+      "knob_center": 490.0,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wheel_speed",
+      "group": 1,
+      "hit_index": 7,
+      "cfg_offset": 44,
+      "requested_center_f32": 336.6665954589844,
+      "requested_center_bits": "43a85553",
+      "value": 3.999997138977051,
+      "value_bits": "f4ff7f40",
+      "knob_left": 324.6665954589844,
+      "knob_center": 336.6665954589844,
+      "calls": [
+        {
+          "function": "0047c990",
+          "args": [
+            536870912
+          ]
+        }
+      ]
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 510.0,
+      "requested_center_bits": "43ff0000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 598.0,
+      "knob_center": 610.0,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 610.0,
+      "requested_center_bits": "44188000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 598.0,
+      "knob_center": 610.0,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 610.0009765625,
+      "requested_center_bits": "44188010",
+      "value": 0.000844147230964154,
+      "value_bits": "c3495d3a",
+      "knob_left": 598.0009765625,
+      "knob_center": 610.0009765625,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 646.4194946289062,
+      "requested_center_bits": "44219ad9",
+      "value": 31.481258392333984,
+      "value_bits": "9ed9fb41",
+      "knob_left": 634.4194946289062,
+      "knob_center": 646.4194946289062,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 757.5,
+      "requested_center_bits": "443d6000",
+      "value": 127.5,
+      "value_bits": "0000ff42",
+      "knob_left": 745.5,
+      "knob_center": 757.5,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 904.64599609375,
+      "requested_center_bits": "44622958",
+      "value": 254.69398498535156,
+      "value_bits": "a9b17e43",
+      "knob_left": 892.64599609375,
+      "knob_center": 904.64599609375,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 904.7050170898438,
+      "requested_center_bits": "44622d1f",
+      "value": 254.74501037597656,
+      "value_bits": "b9be7e43",
+      "knob_left": 892.7050170898438,
+      "knob_center": 904.7050170898438,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 904.7344970703125,
+      "requested_center_bits": "44622f02",
+      "value": 254.77049255371094,
+      "value_bits": "3fc57e43",
+      "knob_left": 892.7344970703125,
+      "knob_center": 904.7344970703125,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 905.0,
+      "requested_center_bits": "44624000",
+      "value": 255.0,
+      "value_bits": "00007f43",
+      "knob_left": 893.0,
+      "knob_center": 905.0,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 0,
+      "cfg_offset": 32,
+      "requested_center_f32": 1005.0,
+      "requested_center_bits": "447b4000",
+      "value": 255.0,
+      "value_bits": "00007f43",
+      "knob_left": 893.0,
+      "knob_center": 905.0,
+      "calls": []
+    },
+    {
+      "name": "background_r",
+      "group": 2,
+      "hit_index": 3,
+      "cfg_offset": 32,
+      "requested_center_f32": 708.333251953125,
+      "requested_center_bits": "44311554",
+      "value": 84.99993133544922,
+      "value_bits": "f7ffa942",
+      "knob_left": 696.333251953125,
+      "knob_center": 708.333251953125,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 510.0,
+      "requested_center_bits": "43ff0000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 598.0,
+      "knob_center": 610.0,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 610.0,
+      "requested_center_bits": "44188000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 598.0,
+      "knob_center": 610.0,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 610.0009765625,
+      "requested_center_bits": "44188010",
+      "value": 0.000844147230964154,
+      "value_bits": "c3495d3a",
+      "knob_left": 598.0009765625,
+      "knob_center": 610.0009765625,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 646.4194946289062,
+      "requested_center_bits": "44219ad9",
+      "value": 31.481258392333984,
+      "value_bits": "9ed9fb41",
+      "knob_left": 634.4194946289062,
+      "knob_center": 646.4194946289062,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 757.5,
+      "requested_center_bits": "443d6000",
+      "value": 127.5,
+      "value_bits": "0000ff42",
+      "knob_left": 745.5,
+      "knob_center": 757.5,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 904.64599609375,
+      "requested_center_bits": "44622958",
+      "value": 254.69398498535156,
+      "value_bits": "a9b17e43",
+      "knob_left": 892.64599609375,
+      "knob_center": 904.64599609375,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 904.7050170898438,
+      "requested_center_bits": "44622d1f",
+      "value": 254.74501037597656,
+      "value_bits": "b9be7e43",
+      "knob_left": 892.7050170898438,
+      "knob_center": 904.7050170898438,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 904.7344970703125,
+      "requested_center_bits": "44622f02",
+      "value": 254.77049255371094,
+      "value_bits": "3fc57e43",
+      "knob_left": 892.7344970703125,
+      "knob_center": 904.7344970703125,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 905.0,
+      "requested_center_bits": "44624000",
+      "value": 255.0,
+      "value_bits": "00007f43",
+      "knob_left": 893.0,
+      "knob_center": 905.0,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 1,
+      "cfg_offset": 36,
+      "requested_center_f32": 1005.0,
+      "requested_center_bits": "447b4000",
+      "value": 255.0,
+      "value_bits": "00007f43",
+      "knob_left": 893.0,
+      "knob_center": 905.0,
+      "calls": []
+    },
+    {
+      "name": "background_g",
+      "group": 2,
+      "hit_index": 4,
+      "cfg_offset": 36,
+      "requested_center_f32": 708.333251953125,
+      "requested_center_bits": "44311554",
+      "value": 84.99993133544922,
+      "value_bits": "f7ffa942",
+      "knob_left": 696.333251953125,
+      "knob_center": 708.333251953125,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 510.0,
+      "requested_center_bits": "43ff0000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 598.0,
+      "knob_center": 610.0,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 610.0,
+      "requested_center_bits": "44188000",
+      "value": 0.0,
+      "value_bits": "00000000",
+      "knob_left": 598.0,
+      "knob_center": 610.0,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 610.0009765625,
+      "requested_center_bits": "44188010",
+      "value": 0.000844147230964154,
+      "value_bits": "c3495d3a",
+      "knob_left": 598.0009765625,
+      "knob_center": 610.0009765625,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 646.4194946289062,
+      "requested_center_bits": "44219ad9",
+      "value": 31.481258392333984,
+      "value_bits": "9ed9fb41",
+      "knob_left": 634.4194946289062,
+      "knob_center": 646.4194946289062,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 757.5,
+      "requested_center_bits": "443d6000",
+      "value": 127.5,
+      "value_bits": "0000ff42",
+      "knob_left": 745.5,
+      "knob_center": 757.5,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 904.64599609375,
+      "requested_center_bits": "44622958",
+      "value": 254.69398498535156,
+      "value_bits": "a9b17e43",
+      "knob_left": 892.64599609375,
+      "knob_center": 904.64599609375,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 904.7050170898438,
+      "requested_center_bits": "44622d1f",
+      "value": 254.74501037597656,
+      "value_bits": "b9be7e43",
+      "knob_left": 892.7050170898438,
+      "knob_center": 904.7050170898438,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 904.7344970703125,
+      "requested_center_bits": "44622f02",
+      "value": 254.77049255371094,
+      "value_bits": "3fc57e43",
+      "knob_left": 892.7344970703125,
+      "knob_center": 904.7344970703125,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 905.0,
+      "requested_center_bits": "44624000",
+      "value": 255.0,
+      "value_bits": "00007f43",
+      "knob_left": 893.0,
+      "knob_center": 905.0,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 2,
+      "cfg_offset": 40,
+      "requested_center_f32": 1005.0,
+      "requested_center_bits": "447b4000",
+      "value": 255.0,
+      "value_bits": "00007f43",
+      "knob_left": 893.0,
+      "knob_center": 905.0,
+      "calls": []
+    },
+    {
+      "name": "background_b",
+      "group": 2,
+      "hit_index": 5,
+      "cfg_offset": 40,
+      "requested_center_f32": 708.333251953125,
+      "requested_center_bits": "44311554",
+      "value": 84.99993133544922,
+      "value_bits": "f7ffa942",
+      "knob_left": 696.333251953125,
+      "knob_center": 708.333251953125,
+      "calls": []
+    }
+  ],
+  "reset": {
+    "entry": "0050f6f0",
+    "trigger": "stub hit tester returns group5 item0 click",
+    "initial_hex": "b0ffffffa6ffffff9cffffffcdcc4c3e9a99993ecdcccc3e000000000000a55a00009a420000b0420000c64200001041",
+    "actual_hex": "50fbffff50fbffff50fbffff0000803f0000803f0000803f010101010101a55a00000000000000000000000000008040",
+    "expected_hex": "50fbffff50fbffff50fbffff0000803f0000803f0000803f010101010101a55a00000000000000000000000000008040",
+    "padding_preserved": true,
+    "calls": [
+      {
+        "function": "0052aef0",
+        "args": [
+          536870912,
+          8597152
+        ]
+      },
+      {
+        "function": "004024b0",
+        "args": [
+          0,
+          0
+        ]
+      },
+      {
+        "function": "00402530",
+        "args": [
+          0,
+          4294966096
+        ]
+      },
+      {
+        "function": "00402530",
+        "args": [
+          0,
+          4294966096
+        ]
+      },
+      {
+        "function": "00402530",
+        "args": [
+          0,
+          4294966096
+        ]
+      },
+      {
+        "function": "00402530",
+        "args": [
+          0,
+          4294966096
+        ]
+      },
+      {
+        "function": "0047b4b0",
+        "args": [
+          536870912
+        ]
+      },
+      {
+        "function": "0047c170",
+        "args": [
+          536870912
+        ]
+      },
+      {
+        "function": "0047c4a0",
+        "args": [
+          536870912,
+          1065353216
+        ]
+      },
+      {
+        "function": "0047c500",
+        "args": [
+          536870912,
+          1065353216
+        ]
+      },
+      {
+        "function": "0047c680",
+        "args": [
+          536870912,
+          1065353216
+        ]
+      },
+      {
+        "function": "0047c990",
+        "args": [
+          536870912
+        ]
+      }
+    ]
+  }
+}

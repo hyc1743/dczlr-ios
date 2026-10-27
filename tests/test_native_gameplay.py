@@ -8,6 +8,27 @@ from native_core import library,GamePlayer,GameInput,GameInteractionState,GameIn
 class NativeGameplayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):cls.lib=library()
+    def test_actual_face_tracks_bind_all_three_stages_by_node_and_submesh(self):
+        from native_core import PPArchive,XXModel,XAInfo,XAMorphTrack,XAMorphIndexSet
+        data=ROOT/'Data'
+        if not data.is_dir():self.skipTest('Private original resources unavailable')
+        for prefix in 'bca':
+            with PPArchive(data/'RPP_09.pp') as pp:
+                entries={pp.entry(i).name_bytes.decode():i for i in range(pp.count)}
+                xx=pp.read(entries[f'{prefix}k00_00.xx']);xa=pp.read(entries[f'{prefix}n00_01.xa'])
+            info=XAInfo();self.assertEqual(self.lib.dc_xa_probe(xa,len(xa),C.byref(info)),0)
+            self.assertGreater(info.morph_tracks,0)
+            with XXModel(xx) as model:
+                indices={}
+                for i in range(info.morph_index_sets):
+                    view=XAMorphIndexSet();self.assertEqual(self.lib.dc_xa_morph_index_set_at(xa,len(xa),i,C.byref(view)),0)
+                    indices[xa[view.data_offset:view.data_offset+view.data_length]]=view
+                for i in range(info.morph_tracks):
+                    track=XAMorphTrack();self.assertEqual(self.lib.dc_xa_morph_track_at(xa,len(xa),i,C.byref(track)),0)
+                    index=indices[xa[track.target_offset:track.target_offset+track.target_length]]
+                    name=xa[track.name_offset:track.name_offset+track.name_length];mesh=C.c_uint32(0xffffffff)
+                    self.assertEqual(self.lib.dc_xx_morph_mesh(model.handle,name,len(name),index.selector,C.byref(mesh)),0)
+                    self.assertLess(mesh.value,model.info().submeshes)
     def test_each_original_stage_selects_its_own_actor_prefix_and_resources(self):
         from native_core import PPArchive,XXModel
         self.lib.dc_game_actor_prefix.argtypes=[C.c_uint32,C.POINTER(C.c_char)]

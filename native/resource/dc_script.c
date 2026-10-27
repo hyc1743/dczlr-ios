@@ -109,7 +109,7 @@ dc_status dc_script_decode(const void *bytes,size_t length,size_t cursor,uint32_
 
 static dc_status intro_valid(const dc_intro_state *s,const dc_intro_descriptor *table,size_t count,dc_intro_plan *out) {
     if (!s || !table || !out) return DC_ARGUMENT;
-    if (count!=DC_INTRO_CHAPTERS || s->chapter>26 || s->action>7 || s->waiting>1 || s->progress>255) return DC_RANGE;
+    if (count<26 || count>DC_INTRO_CHAPTERS || s->chapter>=DC_INTRO_CHAPTERS || s->action>7 || s->waiting>1 || s->progress>255) return DC_RANGE;
     for (size_t i=0;i<count;++i) {
         if (table[i].script < -1 || table[i].script>99 || table[i].last_frame < -1 || table[i].last_frame>9999 ||
             (table[i].script==-1 ? table[i].last_frame!=-1 : table[i].last_frame<0)) return DC_RANGE;
@@ -133,14 +133,15 @@ dc_status dc_intro_finish(const dc_intro_state *state,const dc_intro_descriptor 
     } else {
         p.next.waiting=1;p.next.action=1;
         intro_command(&p,DC_INTRO_TRANSITION,2);
-        p.next.action=6;intro_command(&p,DC_INTRO_CLEAR_FINISH,0);
+        if(p.next.chapter==25||p.next.chapter==26){p.next.action=6;intro_command(&p,DC_INTRO_CLEAR_FINISH,0);}
+        else p.next.chapter=24;
     }
     *out=p;return DC_OK;
 }
 dc_status dc_intro_transition(const dc_intro_state *state,const dc_intro_descriptor *table,size_t count,
         uint32_t ready,dc_intro_plan *out) {
     dc_status status=intro_valid(state,table,count,out);if (status!=DC_OK) return status;
-    if (ready>1 || (state->chapter==26 && (state->action==1 || state->action==4))) return DC_RANGE;
+    if (ready>1 || (state->chapter>=count && (state->action==1 || state->action==4))) return DC_RANGE;
     dc_intro_plan p={0};p.next=*state;
     if (p.next.waiting && ready) {
         uint32_t action=p.next.action;

@@ -36,6 +36,16 @@ class NativeXXTests(unittest.TestCase):
         with XXModel(fixture()) as model:
             self.assertEqual(list(model.baseline(0).components), [0.25 + i * 0.125 for i in range(16)] + [7.5])
 
+    def test_morph_node_submesh_selector_ignores_vector_naming(self):
+        with XXModel(fixture()) as model:
+            child=model.at('node',1);encoded=model.span(child.name);mesh=C.c_uint32(123)
+            self.assertEqual(self.lib.dc_xx_morph_mesh(model.handle,encoded,len(encoded),0,C.byref(mesh)),0)
+            self.assertEqual(mesh.value,child.first_submesh)
+            for selector in (1,255,0xffffffff):
+                before=mesh.value
+                self.assertEqual(self.lib.dc_xx_morph_mesh(model.handle,encoded,len(encoded),selector,C.byref(mesh)),4)
+                self.assertEqual(mesh.value,before)
+
     def test_recorded_original_last_node_name_match_and_serialized_matrix(self):
         reference=json.loads((ROOT/'tests/fixtures/node-lookup-original-vectors.json').read_text())
         for row in reference['vectors']:

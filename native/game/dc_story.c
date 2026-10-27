@@ -4,17 +4,17 @@
 /* Static tables recovered byte-exact from the original executable. */
 static const uint8_t story_map_table[DC_STORY_CHAPTERS] = {
     0xff,0xff,0xff,0x00,0xff,0x01,0xff,0x03,0xff,0xff,0x00,0xff,0x01,
-    0xff,0x06,0xff,0xff,0x00,0xff,0x01,0xff,0x04,0xff,0xff,0xff,0xff
+    0xff,0x06,0xff,0xff,0x00,0xff,0x01,0xff,0x04,0xff,0xff,0xff,0xff,0xff,0xff,0xff
 };
 static const uint8_t story_stage_table[DC_STORY_CHAPTERS] = {
     0xff,0xff,0xff,0x02,0xff,0x02,0xff,0x02,0xff,0xff,0x01,0xff,0x01,
-    0xff,0x01,0xff,0xff,0x00,0xff,0x00,0xff,0x00,0xff,0xff,0xff,0xff
+    0xff,0x01,0xff,0xff,0x00,0xff,0x00,0xff,0x00,0xff,0xff,0xff,0xff,0xff,0xff,0xff
 };
 static const uint8_t story_script_table[DC_STORY_CHAPTERS][2] = {
     {0,2},{1,31},{2,9},{255,255},{15,2},{255,255},{3,38},{255,255},
     {4,31},{5,5},{255,255},{16,2},{255,255},{6,42},{255,255},{7,43},
     {8,4},{255,255},{9,4},{255,255},{10,51},{255,255},{11,74},{13,4},
-    {255,255},{12,13}
+    {255,255},{12,13},{14,4},{17,1},{18,2}
 };
 /* Original next-scene callbacks from 0x006d39d0; classified by the scene
  * initializer's chapter-type byte (0x1352e). */
@@ -23,7 +23,7 @@ static const uint32_t story_callback_table[DC_STORY_CHAPTERS] = {
     0x00605510,0x00483510,0x00605510,0x00605510,0x00512cc0,0x00605510,
     0x00489f20,0x00605510,0x00483510,0x00605510,0x00605510,0x00512cc0,
     0x00605510,0x00489f20,0x00605510,0x00483510,0x00605510,0x00605510,
-    0x0051abb0,0x00605510
+    0x0051abb0,0x00605510,0x00605510,0x00605510,0x00605510
 };
 static const uint32_t story_callback_scene[DC_STORY_CHAPTERS] = {
     DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_SCRIPT,
@@ -34,10 +34,11 @@ static const uint32_t story_callback_scene[DC_STORY_CHAPTERS] = {
     DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_GAMEPLAY,
     DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_WATCH,DC_STORY_SCENE_SCRIPT,
     DC_STORY_SCENE_NIGHT,DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_SCRIPT,
-    DC_STORY_SCENE_ENDING,DC_STORY_SCENE_SCRIPT
+    DC_STORY_SCENE_ENDING,DC_STORY_SCENE_SCRIPT,
+    DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_SCRIPT,DC_STORY_SCENE_SCRIPT
 };
 static const uint32_t story_callback_type[DC_STORY_CHAPTERS] = {
-    3,3,3,4,3,5,3,6,3,3,4,3,5,3,6,3,3,4,3,5,3,6,3,3,2,3
+    3,3,3,4,3,5,3,6,3,3,4,3,5,3,6,3,3,4,3,5,3,6,3,3,2,3,3,3,3
 };
 
 static int valid_state(const dc_story_state *s) {
@@ -86,6 +87,7 @@ static dc_status story_advance_core(const dc_story_state *state,
          * the chapter, install the original next-scene callback and commit
          * the map/stage selectors from the static tables. */
         uint32_t stage = state->stage;
+        if(stage>=DC_STORY_STAGES)return DC_RANGE;
         if (outcomes->a[stage] != 0) p.next.stages[stage].flag_a = 1;
         else if (outcomes->b[stage] != 0) p.next.stages[stage].flag_b = 1;
         if (p.next.chapter + 1 >= DC_STORY_CHAPTERS) return DC_RANGE;
@@ -137,7 +139,7 @@ dc_status dc_story_menu_action(const dc_story_state *state,
 dc_status dc_story_script_finish(const dc_story_state *state,
         dc_story_plan *out) {
     if (!state || !out) return DC_ARGUMENT;
-    if (!valid_state(state) || state->chapter + 1 >= DC_STORY_CHAPTERS)
+    if (!valid_state(state) || state->chapter >= 25)
         return DC_RANGE;
     dc_story_plan p = {0};
     p.next = *state;

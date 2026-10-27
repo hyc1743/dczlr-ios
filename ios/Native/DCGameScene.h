@@ -2,6 +2,7 @@
 #include "dc_vk_sprite.h"
 #include "dc_gamepad.h"
 #include "dc_pc_input.h"
+#include "dc_config.h"
 @class DCStartupScene;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -39,6 +40,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,strong,nullable) DCStartupScene *transitionScene;
 - (uint32_t)takePendingEffectSlot;
 - (nullable NSString *)updateCharacterWithExitSoundBusy:(BOOL)busy tick:(uint32_t)tick;
+- (nullable NSString *)updateSystemWithSelectionSoundBusy:(BOOL)busy tick:(uint32_t)tick;
+- (nullable NSString *)applyConfiguration:(const dc_config *)configuration;
+- (void)resumeAtTick:(uint32_t)tick;
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
     mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress resumeSavedPlayer:(BOOL)resume error:(NSString **)error;

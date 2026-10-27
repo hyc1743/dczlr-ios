@@ -346,6 +346,15 @@ dc_status dc_xx_find_node_encoded(const dc_xx *model, const void *name_bytes, si
     return DC_OK;
 }
 
+dc_status dc_xx_morph_mesh(const dc_xx *model,const void *name,size_t length,uint32_t selector,uint32_t *mesh) {
+    if(!model||!name||!mesh||overlap(model->data,model->length,mesh,sizeof(*mesh)))return DC_ARGUMENT;
+    uint32_t target;dc_status status=dc_xx_find_node_encoded(model,name,length,&target);
+    if(status!=DC_OK)return status;
+    const dc_xx_node *node=&model->nodes[target];
+    if(selector>=node->submeshes)return DC_RANGE;
+    *mesh=node->first_submesh+selector;return DC_OK;
+}
+
 dc_status dc_xx_node_matrix(const dc_xx *model, uint32_t index, dc_matrix *out) {
     if (!model || !out) return DC_ARGUMENT;
     if (overlap(model->data, model->length, out, sizeof(*out))) return DC_ARGUMENT;

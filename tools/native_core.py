@@ -455,7 +455,10 @@ def library():
     sources.append(ROOT / "native/game/dc_touch_controls.c")
     sources.append(ROOT / "native/game/dc_pc_touch.c")
     sources.append(ROOT / "native/game/dc_scene_ui.c")
-    inputs = sources + [ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
+    sources.append(ROOT / "native/game/dc_config.c")
+    sources.append(ROOT / "native/game/dc_flow.c")
+    sources.append(ROOT / "native/game/dc_morph.c")
+    inputs = sources + [ROOT / "native/include/dc_config.h", ROOT / "native/include/dc_flow.h", ROOT / "native/include/dc_morph.h", ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
                         ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h", ROOT / "native/include/dc_story.h"]
     digest = hashlib.sha256("\0".join(command).encode())
@@ -719,6 +722,8 @@ def library():
     lib.dc_xx_find_material_encoded.restype = C.c_int
     lib.dc_xx_find_node_encoded.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.POINTER(C.c_uint32)]
     lib.dc_xx_find_node_encoded.restype = C.c_int
+    lib.dc_xx_morph_mesh.argtypes = [C.c_void_p,C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(C.c_uint32)]
+    lib.dc_xx_morph_mesh.restype = C.c_int
     lib.dc_xx_node_matrix.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(Matrix)]
     lib.dc_xx_node_matrix.restype = C.c_int
     lib.dc_xx_material_baseline.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(MaterialValue)]

@@ -18,6 +18,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)playGameplayVoiceNamed:(NSString *)name;
 - (BOOL)playMenuSelection;
 - (void)pause;
+- (void)suspendForSystemPage;
+- (BOOL)resumeAfterSystemPage;
+- (void)applyConfiguration:(NSData *)configuration;
 - (void)stopTitleMusic;
 @end
 NS_ASSUME_NONNULL_END
