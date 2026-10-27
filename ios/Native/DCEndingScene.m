@@ -18,6 +18,14 @@ static const ending_item mapItems[7]={
     {"Hscene_toilet.ema",560,256,176,72},{"Hscene_hotel.ema",560,336,176,72},
     {"Hscene_roadside.ema",560,416,176,72},{"Hscene_park.ema",560,496,176,72},
     {"Hscene_manaka'sroom.ema",560,576,176,72}};
+static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t texture,
+    float scale,float ox,float oy,float x,float y,float width,float height) {
+    if(!items||!count||*count>=64||!texture)return;
+    items[*count]=(dc_vk_sprite_item){.texture=texture,.blend_mode=3,
+        .pose=(dc_sprite_pose){.width=width*scale,.height=height*scale,.x=ox+x*scale,.y=oy+y*scale,
+        .z=.5f,.scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1}};
+    ++*count;
+}
 
 @implementation DCEndingScene {
     NSString *_directory;
@@ -103,18 +111,17 @@ static const ending_item mapItems[7]={
     if(_confirming&&ready)_action=1;
     float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
     float x=input.x*1024,y=input.y*768;[self chooseFromInput:input x:x y:y tick:tick];
-    dc_vk_sprite_item spriteItems[64]={0};__block size_t spriteCount=0;
-    void (^addSprite)(NSString *,float,float,float,float) = ^(NSString *name,float px,float py,float w,float h){
-        uintptr_t texture=[self texture:name];if(!texture||spriteCount>=64)return;
-        spriteItems[spriteCount++]=(dc_vk_sprite_item){.texture=texture,.blend_mode=3,.pose=(dc_sprite_pose){.width=w*scale,.height=h*scale,.x=ox+px*scale,.y=oy+py*scale,.z=.5f,.scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1}};
-    };
-    addSprite(@"Hscene_base.ema",0,0,1024,768);
-    if(_bank==0)for(unsigned i=0;i<6;++i)addSprite([NSString stringWithUTF8String:categoryItems[i].name],categoryItems[i].x,categoryItems[i].y,176,72);
-    if(_bank==1)for(unsigned i=0;i<3;++i)addSprite([NSString stringWithUTF8String:stageItems[i].name],stageItems[i].x,stageItems[i].y,176,72);
-    if(_bank==2)for(unsigned i=0;i<7;++i)addSprite([NSString stringWithUTF8String:mapItems[i].name],mapItems[i].x,mapItems[i].y,176,72);
-    if(_bank==3)addSprite(@"Hscene_PLAY.ema",800,624,200,48);
-    addSprite(@"hanyo_gameend.ema",48,704,56,56);addSprite(@"hanyo_title.ema",128,704,56,56);addSprite(@"hanyo_config.ema",248,704,56,56);addSprite(@"hanyo_saveload.ema",328,704,56,56);
-    addSprite(@"k_defo.ema",x-6,y-6,64,64);
+    dc_vk_sprite_item spriteItems[64]={0};size_t spriteCount=0;
+    endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_base.ema"],scale,ox,oy,0,0,1024,768);
+    if(_bank==0)for(unsigned i=0;i<6;++i)endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:categoryItems[i].name]],scale,ox,oy,categoryItems[i].x,categoryItems[i].y,176,72);
+    if(_bank==1)for(unsigned i=0;i<3;++i)endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].name]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+    if(_bank==2)for(unsigned i=0;i<7;++i)endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:mapItems[i].name]],scale,ox,oy,mapItems[i].x,mapItems[i].y,176,72);
+    if(_bank==3)endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_PLAY.ema"],scale,ox,oy,800,624,200,48);
+    endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_gameend.ema"],scale,ox,oy,48,704,56,56);
+    endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_title.ema"],scale,ox,oy,128,704,56,56);
+    endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_config.ema"],scale,ox,oy,248,704,56,56);
+    endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_saveload.ema"],scale,ox,oy,328,704,56,56);
+    endingAddSprite(spriteItems,&spriteCount,[self texture:@"k_defo.ema"],scale,ox,oy,x-6,y-6,64,64);
     return [_transition drawSprites:spriteItems count:spriteCount tick:tick width:width height:height];
 }
 - (void)detachRenderer {for(NSNumber *value in _textures.allValues)if(_renderer)dc_vk_sprite_remove_texture(_renderer,value.unsignedLongLongValue);[_textures removeAllObjects];_renderer=NULL;}
