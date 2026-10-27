@@ -189,6 +189,31 @@ class GameInteractionInput(C.Structure):
 class GameInteractionResult(C.Structure):
     _fields_=[("begin",C.c_uint32),("restore",C.c_uint32),("completed",C.c_uint32)]
 
+
+class SceneMotionState(C.Structure):
+    _fields_=[("scene_type",C.c_uint32),("stage",C.c_uint32),("progress",C.c_uint32),
+              ("clip",C.c_uint32),("phase",C.c_uint32),("pointer_mode",C.c_uint32),
+              ("outcome_a",C.c_uint32),("outcome_b",C.c_uint32),
+              ("metric",C.c_float),("average_motion",C.c_float),
+              ("sample_count",C.c_uint32),("last_tick",C.c_uint32),
+              ("release_flag",C.c_uint8),("history_committed",C.c_uint8),
+              ("transition_pending",C.c_uint8),("completed",C.c_uint8)]
+
+
+class SceneMotionInput(C.Structure):
+    _fields_=[("tick",C.c_uint32),("audio_ready",C.c_uint32),
+              ("dx",C.c_int32),("dy",C.c_int32),("wheel",C.c_int32),
+              ("left",C.c_uint32),("right",C.c_uint32),("middle",C.c_uint32),
+              ("ctrl",C.c_uint32),("hit_index",C.c_int32)]
+
+
+class SceneMotionEvent(C.Structure):
+    _fields_=[("request_clip",C.c_uint32),("request_chain_from",C.c_uint32),
+              ("request_chain_to",C.c_uint32),("transition_action",C.c_uint32),
+              ("history_commit",C.c_uint32),("completed",C.c_uint32),
+              ("metric_ready",C.c_uint32),("metric",C.c_float),
+              ("average_motion",C.c_float)]
+
 class SceneActionCommand(C.Structure):
     _fields_=[('kind',C.c_uint32),('target',C.c_uint32)]
 class SceneActionPlan(C.Structure):
@@ -455,12 +480,13 @@ def library():
     sources.append(ROOT / "native/game/dc_touch_controls.c")
     sources.append(ROOT / "native/game/dc_pc_touch.c")
     sources.append(ROOT / "native/game/dc_scene_ui.c")
+    sources.append(ROOT / "native/game/dc_scene_motion.c")
     sources.append(ROOT / "native/game/dc_config.c")
     sources.append(ROOT / "native/game/dc_flow.c")
     sources.append(ROOT / "native/game/dc_morph.c")
     inputs = sources + [ROOT / "native/include/dc_config.h", ROOT / "native/include/dc_flow.h", ROOT / "native/include/dc_morph.h", ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
-                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h", ROOT / "native/include/dc_story.h"]
+                        ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h", ROOT / "native/include/dc_story.h", ROOT / "native/include/dc_scene_motion.h"]
     digest = hashlib.sha256("\0".join(command).encode())
     inputs.append(ROOT / "native/include/dc_touch_controls.h")
     inputs.append(ROOT / "native/include/dc_pc_touch.h")
@@ -645,6 +671,12 @@ def library():
     lib.dc_camera_secondary_pointer.argtypes=[C.POINTER(CameraOrbit),C.POINTER(CameraPointerLimits),C.POINTER(CameraPointerInput),C.POINTER(CameraOrbit)]
     lib.dc_scene_action_build.argtypes = [C.c_uint32]*5+[C.POINTER(SceneActionPlan)]
     lib.dc_scene_action_build.restype = C.c_int
+    lib.dc_scene_motion_init.argtypes=[C.POINTER(SceneMotionState),C.c_uint32,C.c_uint32,C.c_uint32,C.c_uint32]
+    lib.dc_scene_motion_init.restype=C.c_int
+    lib.dc_scene_motion_context.argtypes=[C.POINTER(SceneMotionState),C.c_uint32,C.POINTER(SceneMotionEvent)]
+    lib.dc_scene_motion_context.restype=C.c_int
+    lib.dc_scene_motion_step.argtypes=[C.POINTER(SceneMotionState),C.POINTER(SceneMotionInput),C.POINTER(SceneMotionState),C.POINTER(SceneMotionEvent)]
+    lib.dc_scene_motion_step.restype=C.c_int
     lib.dc_game_player_step.argtypes=[C.POINTER(GamePlayer),C.POINTER(GameInput),C.c_float,C.POINTER(GamePlayer)]
     lib.dc_game_player_step.restype=C.c_int
     lib.dc_game_player_save.argtypes=[C.POINTER(GamePlayer),C.c_void_p,C.c_size_t]

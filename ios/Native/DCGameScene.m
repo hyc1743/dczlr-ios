@@ -6,6 +6,7 @@
 #include "dc_eyeneck.h"
 #include "dc_gameplay.h"
 #include "dc_scene_ui.h"
+#include "dc_scene_motion.h"
 #include "dc_menu.h"
 #include "dc_model.h"
 #include "dc_morph.h"
@@ -144,6 +145,8 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_scene_context _contextMenu;
     BOOL _contextOpen;
     dc_scene_character_state _characterAction;
+    dc_scene_motion_state _motionState;
+    BOOL _motionStateInitialized,_motionAudioReady;
     uint32_t _pendingEffectSlot,_characterActionCount,_characterAnimationStarts;
     BOOL _hasPendingEffect,_characterClockInitialized;
     uint32_t _characterLastTick,_exitSoundWaitMs,_exitSoundStartTick;
@@ -235,12 +238,35 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     return nil;
 }
+- (NSString *)applyMotionEvent:(dc_scene_motion_event)event tick:(uint32_t)tick {
+    if(event.request_chain_from!=DC_SCENE_MOTION_NO_REQUEST &&
+       event.request_chain_to!=DC_SCENE_MOTION_NO_REQUEST) {
+        if(dc_model_set_chain(_actor.model,event.request_chain_from,(int32_t)event.request_chain_to)!=DC_OK)
+            return @"Original scene motion chain installation failed";
+    }
+    if(event.request_clip!=DC_SCENE_MOTION_NO_REQUEST) {
+        if(dc_model_request(_actor.model,event.request_clip,tick)!=DC_OK)
+            return @"Original scene motion animation request failed";
+        ++_characterAnimationStarts;
+#if DEBUG
+        if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
+            [self requestRenderCapture:@"gameplay-character-active-native.png"];
+#endif
+    }
+    if(event.transition_action) {
+        if(!self.transitionScene||[self.transitionScene requestTransition:event.transition_action tick:tick]!=DC_OK)
+            return @"Original scene motion exit transition failed";
+        _exitSoundStartTick=tick;
+    }
+    return nil;
+}
 - (NSString *)updateCharacterWithExitSoundBusy:(BOOL)busy tick:(uint32_t)tick {
     /* Called after the preceding frame's effect request has been started.
      * Busy is the actual slot28 player, never a guessed duration. */
     uint32_t delta=_characterClockInitialized?tick-_characterLastTick:0;
     _characterClockInitialized=YES;_characterLastTick=tick;
     if(_characterAction.exit_pending&&busy)_exitSoundBusyObserved=YES;
+    if(_motionStateInitialized)_motionAudioReady=!busy;
     dc_scene_character_event event;
     if(dc_scene_character_step(&_characterAction,delta,busy,&event)!=DC_OK)return @"Character action update failed";
     if(event.request_transition)_exitSoundWaitMs=tick-_exitSoundStartTick;
@@ -312,6 +338,19 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (NSString *)applyContextSelection:(uint32_t)selection {
     if(_contextMenu.icon==1) {
+        if((_sceneType==5||_sceneType==6)&&_motionStateInitialized) {
+            dc_scene_motion_event motionEvent;
+            dc_status motionStatus=dc_scene_motion_context(&_motionState,selection,&motionEvent);
+            if(motionStatus==DC_OK) {
+                ++_characterActionCount;
+                if(_sceneType==6) {
+                    _stageOutcomeA=_motionState.outcome_a;
+                    _stageOutcomeB=_motionState.outcome_b;
+                }
+                return [self applyMotionEvent:motionEvent tick:_lastTick];
+            }
+            if(motionStatus!=DC_NOT_FOUND)return @"Original scene motion context action rejected";
+        }
         dc_scene_character_event event;
         dc_status result=dc_scene_character_select(&_characterAction,_sceneType,_stageProgress,selection,&event);
         if(result==DC_NOT_FOUND){++_pendingContextActions;return nil;}
@@ -705,6 +744,30 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     return triangles;
 }
+- (int32_t)motionHitIndexAtX:(float)x y:(float)y width:(uint32_t)width height:(uint32_t)height {
+    if(!_actor.model||!isfinite(x)||!isfinite(y)||!width||!height)return -1;
+    float scale=fminf((float)width/1024.f,(float)height/768.f);
+    float px=((x+1)*.5f*width-(width-1024*scale)*.5f)/scale;
+    float py=((1-y)*.5f*height-(height-768*scale)*.5f)/scale;
+    dc_camera_orbit orbit=[self activeCameraOrbit];dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
+    dc_viewport viewport={0,0,1024,768,0,1};
+    if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return -1;
+    dc_xx_info info;if(dc_model_get_info(_actor.model,&info)!=DC_OK)return -1;
+    float minX=1024.f,minY=768.f,maxX=0,maxY=0;BOOL found=NO;
+    for(uint32_t meshIndex=0;meshIndex<info.submeshes;++meshIndex) {
+        uint32_t visible=0;dc_xx_submesh mesh;size_t count=0;
+        if(dc_model_mesh(_actor.model,meshIndex,&mesh)!=DC_OK||
+           dc_model_mesh_visible(_actor.model,meshIndex,&visible)!=DC_OK||!visible)continue;
+        if(dc_model_project_clipped(_actor.model,meshIndex,&camera.view_projection,&viewport,0xffffffff,NULL,0,&count)!=DC_OK||!count)continue;
+        dc_sprite_vertex *vertices=calloc(count,sizeof(*vertices));if(!vertices)continue;
+        if(dc_model_project_clipped(_actor.model,meshIndex,&camera.view_projection,&viewport,0xffffffff,vertices,count,&count)==DC_OK)
+            for(size_t i=0;i<count;++i){minX=MIN(minX,vertices[i].x);minY=MIN(minY,vertices[i].y);maxX=MAX(maxX,vertices[i].x);maxY=MAX(maxY,vertices[i].y);found=YES;}
+        free(vertices);
+    }
+    if(!found||px<minX||px>maxX||py<minY||py>maxY)return -1;
+    float heightRange=fmaxf(1.f,maxY-minY);int32_t index=(int32_t)floorf((py-minY)/heightRange*7.f);
+    if(index<0)index=0;if(index>6)index=6;return index;
+}
 - (NSString *)preferredCameraNameForSelector:(uint32_t)selector {
     char resource[32];
     if(dc_camera_scene_resource(_sceneType,selector,_storyStage,resource,sizeof(resource))==DC_OK)
@@ -838,6 +901,9 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     if(_face.model && ![self buildMorphCaches:&_face error:&morphError]) { if(error)*error=morphError ?: @"Game morph cache initialization failed";return nil; }
     if(dc_model_request(_actor.model,1,0)!=DC_OK) { if(error)*error=@"Game actor animation request failed"; return nil; }
+    if((_sceneType==5||_sceneType==6) &&
+       dc_scene_motion_init(&_motionState,_sceneType,_storyStage,_stageProgress,1)==DC_OK)
+        _motionStateInitialized=YES;
     _actorHeadNode=[self placementNodeFromPLST:actorPlacement model:&_actor];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:[self characterNode:@"a_Nz_kubi2"]];
     if(_actorHeadNode==UINT32_MAX)_actorHeadNode=[self findNode:&_actor name:[self characterNode:@"a_Kp_kubi2"]];
@@ -1189,8 +1255,14 @@ static void freeMorphCaches(dc_game_model *slot) {
         BOOL press=pcInput.mouse[0]==3||pcInput.mouse[1]==3||pcInput.mouse[2]==3;
         BOOL iconRegion=mx>=880&&my>=300&&my<=768;
         if(!held&&!pcInput.wheel)_pointerCameraOwner=0;
-        if(!_pointerCameraOwner&&!_contextOpen&&(press||pcInput.wheel))
-            _pointerCameraOwner=_secondaryVisible&&inside?2:((pcInput.mouse[1]&&iconRegion)?1:3);
+        if(!_pointerCameraOwner&&!_contextOpen&&(press||pcInput.wheel)) {
+            /* Watch/night left presses belong to the original actor-motion
+             * callback. Right/wheel still own the camera pointer path. */
+            if((_sceneType==5||_sceneType==6)&&!pcInput.mouse[1]&&!pcInput.wheel)
+                _pointerCameraOwner=0;
+            else
+                _pointerCameraOwner=_secondaryVisible&&inside?2:((pcInput.mouse[1]&&iconRegion)?1:3);
+        }
         if(_pointerCameraOwner==2&&!_contextOpen&&(held||pcInput.wheel)) {
             secondaryOwnsPointer=YES;
             if(_secondaryCameraMode!=2) {
@@ -1225,6 +1297,25 @@ static void freeMorphCaches(dc_game_model *slot) {
                 if([NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
                     [self requestRenderCapture:@"gameplay-primary-pointer-native.png"];
             }
+        }
+    }
+    if((_sceneType==5||_sceneType==6)&&_motionStateInitialized&&!_contextOpen&&
+       !_characterAction.exit_pending&&!_characterAction.transition_pending) {
+        dc_scene_motion_input motionInput={0};
+        motionInput.tick=tick;motionInput.audio_ready=_motionAudioReady?1:0;
+        motionInput.dx=pcInput.dx;motionInput.dy=pcInput.dy;motionInput.wheel=pcInput.wheel;
+        motionInput.left=pcInput.mouse[0];motionInput.right=pcInput.mouse[1];motionInput.middle=pcInput.mouse[2];
+        motionInput.ctrl=((pcInput.keys[0x1d]&1)||(pcInput.keys[0x9d]&1))?1:0;
+        motionInput.hit_index=-1;
+        if(pcInput.mouse[0]==3)motionInput.hit_index=[self motionHitIndexAtX:x y:y width:width height:height];
+        dc_scene_motion_state nextMotion;dc_scene_motion_event motionEvent;
+        if(dc_scene_motion_step(&_motionState,&motionInput,&nextMotion,&motionEvent)!=DC_OK)
+            return @"Original scene motion update failed";
+        _motionState=nextMotion;
+        if(_sceneType==6){_stageOutcomeA=_motionState.outcome_a;_stageOutcomeB=_motionState.outcome_b;}
+        if(motionEvent.request_clip!=DC_SCENE_MOTION_NO_REQUEST||motionEvent.transition_action||
+           motionEvent.request_chain_from!=DC_SCENE_MOTION_NO_REQUEST) {
+            NSString *motionFailure=[self applyMotionEvent:motionEvent tick:tick];if(motionFailure)return motionFailure;
         }
     }
     if(cameraScene&&!secondaryOwnsPointer&&!primaryOwnsPointer&&!_characterAction.exit_pending&&!_characterAction.transition_pending) {
@@ -1422,6 +1513,15 @@ static void freeMorphCaches(dc_game_model *slot) {
         /* Only the initial progress-zero type-4 callback is admitted here.
          * Evolved progress and special ending routing require separate ports. */
         if(!failure&&ready&&_sceneType==4&&_stageProgress==0)_chapterEndAction=2;
+    }
+    if(!failure&&_motionStateInitialized&&_motionState.transition_pending) {
+        uint32_t ready=0;
+        if(!self.transitionScene||[self.transitionScene queryTransitionReady:&ready]!=DC_OK)
+            failure=@"Scene motion transition query failed";
+        else if(ready&&_motionAudioReady) {
+            _chapterEndAction=2;
+            _motionState.transition_pending=0;
+        }
     }
     if(!failure) {
         dc_vk_clip_rect clip=gameClip(viewport,width,height),secondaryClip=_secondaryVisible?gameClip(_secondaryViewport,width,height):(dc_vk_clip_rect){0};
