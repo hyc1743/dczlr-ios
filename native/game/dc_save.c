@@ -1,6 +1,9 @@
 #include "dc_save.h"
 #include <limits.h>
 #include <string.h>
+#include <stdio.h>
+
+_Static_assert(0x64c8u+0x6414u+0x215cu==DC_GAME_STATE_BYTES,"Original state windows must stay contiguous");
 
 static int overlap(const void *a,size_t al,const void *b,size_t bl) {
     uintptr_t aa=(uintptr_t)a,bb=(uintptr_t)b;
@@ -22,6 +25,34 @@ dc_status dc_save_get_unlocks(const void *bytes,size_t length,dc_save_unlocks *o
     uint8_t a=p[0x23]^0x32,b=p[0x21bb]^0x32,c=p[0x4353]^0x32;
     uint32_t complete=a==2 && b==2 && c==2;
     *out=(dc_save_unlocks){complete,complete || a!=0};
+    return DC_OK;
+}
+dc_status dc_save_slot_name(uint32_t slot,char *out,size_t capacity) {
+    if(!out)return DC_ARGUMENT;
+    if(slot>=80)return DC_RANGE;
+    char name[16];int length=snprintf(name,sizeof(name),"RP_%02u.sav",slot);
+    if(length<0||(size_t)length>=capacity)return DC_RANGE;
+    memcpy(out,name,(size_t)length+1);return DC_OK;
+}
+dc_status dc_save_slot_encode(const void *state,size_t state_bytes,const dc_save_slot_meta *meta,void *slot,size_t capacity) {
+    if(!state||!meta||!slot||overlap(state,state_bytes,slot,capacity)||overlap(meta,sizeof(*meta),slot,capacity))return DC_ARGUMENT;
+    if(state_bytes<DC_GAME_STATE_BYTES||capacity<DC_SAVE_SLOT_BYTES)return DC_RANGE;
+    const uint8_t *src=state;uint8_t *dst=slot;
+    memcpy(dst,src,0x64c8);dc_save_transform(dst,0x64c8);dst[0x64c8]=meta->chapter;
+    memcpy(dst+0x64c9,src+0x64c8,0x6414);dc_save_transform(dst+0x64c9,0x6414);
+    memcpy(dst+0xc8dd,src+0xc8dc,0x215c);dc_save_transform(dst+0xc8dd,0x215c);
+    uint8_t tail[]={meta->scene_type,meta->previous_type,meta->map,meta->stage,meta->selector0,meta->selector1,meta->script_frame};
+    memcpy(dst+0xea39,tail,sizeof(tail));return DC_OK;
+}
+dc_status dc_save_slot_decode(const void *slot,size_t slot_bytes,void *state,size_t capacity,dc_save_slot_meta *meta) {
+    if(!slot||!state||!meta||overlap(slot,slot_bytes,state,capacity)||overlap(slot,slot_bytes,meta,sizeof(*meta))||
+       overlap(state,capacity,meta,sizeof(*meta)))return DC_ARGUMENT;
+    if(slot_bytes<DC_SAVE_SLOT_BYTES||capacity<DC_GAME_STATE_BYTES)return DC_RANGE;
+    const uint8_t *src=slot;uint8_t *dst=state;
+    memcpy(dst,src,0x64c8);dc_save_transform(dst,0x64c8);
+    memcpy(dst+0x64c8,src+0x64c9,0x6414);dc_save_transform(dst+0x64c8,0x6414);
+    memcpy(dst+0xc8dc,src+0xc8dd,0x215c);dc_save_transform(dst+0xc8dc,0x215c);
+    *meta=(dc_save_slot_meta){src[0x64c8],src[0xea39],src[0xea3a],src[0xea3b],src[0xea3c],src[0xea3d],src[0xea3e],src[0xea3f]};
     return DC_OK;
 }
 static void write_word(uint8_t *p,size_t at,uint32_t value) {

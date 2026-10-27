@@ -62,7 +62,7 @@ dc_status dc_scene_action_build(uint32_t type,uint32_t icon,uint32_t option,uint
     dc_scene_action_plan plan={.camera_mode=mode,.secondary_camera_mode=secondary};
     if(icon==4) {
         if(option>1)return DC_RANGE;
-        plan.commands[plan.count++]=(dc_scene_action_command){option==0?DC_SCENE_ENTER_SAVE_MENU:DC_SCENE_ENTER_EDIT_MENU,0};
+        plan.commands[plan.count++]=(dc_scene_action_command){option==0?DC_SCENE_ENTER_SAVE_MENU:DC_SCENE_ENTER_CONFIG_MENU,0};
     } else {
         if(option>6)return DC_RANGE;
         if(option<3)plan.camera_mode=(mode==2&&option==2)?0:option;

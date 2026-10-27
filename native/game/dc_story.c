@@ -99,9 +99,9 @@ static dc_status story_advance_core(const dc_story_state *state,
         plan_command(&p, DC_STORY_SET_MAP_STAGE, p.next.chapter);
         plan_command(&p, DC_STORY_ENTER_SCENE, story_callback_scene[p.next.chapter]);
     } else if (menu_action == 3) {
-        /* FUN_00523380 action 3: character edit scene. */
+        /* FUN_00523380 action 3: configuration screen (type9). */
         plan_command(&p, DC_STORY_CLEAR_CALLBACKS, 0);
-        plan_command(&p, DC_STORY_ENTER_EDIT, 0);
+        plan_command(&p, DC_STORY_ENTER_CONFIG, 0);
         p.departed = 1;
     } else if (menu_action == 4) {
         /* FUN_00523380 action 4: save/load menu scene. */

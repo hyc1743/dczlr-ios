@@ -1,0 +1,89 @@
+{
+  "target_sha256": "70aebdcde6bd8c252e45db14086fb4ac8837da8dd66c267c05ec7f470f5f9b07",
+  "original_function_sha256": {
+    "0x52eab0": "87a0a040e0b976e328d0422f32265a804f657933f5ac5265cf9917aa66b87a12",
+    "0x45dc10": "b04065023bd5c3bdbf018108e599ae777e7e1a800b295b47ccecf95767d110d5"
+  },
+  "cases": 3,
+  "boundaries": "Capture the actual WriteFile byte sequence of original FUN_0052eab0.\n\nExecutes original save writer and word-XOR instructions on synthetic state.\nCRT path building, path resolution, Win32 file calls, menu refresh and cookie\nchecking are stub boundaries. No file is created/deleted, no original game\nstate or resource is loaded, and no original process is launched.\n",
+  "vectors": [
+    {
+      "seed": 0,
+      "meta": [
+        3,
+        4,
+        3,
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      "bytes": 59968,
+      "sha256": "6904969672ca5fc6b850578275002698fdfa6240f8d6528ac690d25f3ee69993",
+      "chunk_lengths": [
+        25800,
+        1,
+        25620,
+        8540,
+        1,
+        1,
+        1,
+        3,
+        1
+      ]
+    },
+    {
+      "seed": 85,
+      "meta": [
+        25,
+        3,
+        2,
+        255,
+        255,
+        128,
+        129,
+        13
+      ],
+      "bytes": 59968,
+      "sha256": "f8e8651191ba94451b0a34cb214d3b459828106406e7e9d728e85e92602099da",
+      "chunk_lengths": [
+        25800,
+        1,
+        25620,
+        8540,
+        1,
+        1,
+        1,
+        3,
+        1
+      ]
+    },
+    {
+      "seed": 165,
+      "meta": [
+        14,
+        6,
+        3,
+        6,
+        1,
+        7,
+        8,
+        42
+      ],
+      "bytes": 59968,
+      "sha256": "5affd18c585fdfeefa50c1cae71d9b3c7458b2de6f26e138ddada8a2d29118a1",
+      "chunk_lengths": [
+        25800,
+        1,
+        25620,
+        8540,
+        1,
+        1,
+        1,
+        3,
+        1
+      ]
+    }
+  ]
+}

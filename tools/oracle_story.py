@@ -207,7 +207,7 @@ def native_projection(case):
     for command in record['commands']:
         if command[0] == 1:  # DC_STORY_INSTALL_NEXT
             installed = command[1]
-        elif command[0] == 4:  # DC_STORY_ENTER_EDIT
+        elif command[0] == 4:  # DC_STORY_ENTER_CONFIG (FUN_0050de60, type9)
             installed = 0x0050de60
         elif command[0] == 5:  # DC_STORY_ENTER_SAVE_MENU
             installed = 0x0052e070

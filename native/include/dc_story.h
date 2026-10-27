@@ -13,7 +13,7 @@ extern "C" {
  * - 0x006d3a84: per-chapter map selector (26 bytes)
  * - 0x0078d908: per-chapter script descriptor table (26 x 2 bytes)
  * The chapter-end semantics follow FUN_00523380 (action 2) and the
- * transition actions 3/4/5 install FUN_0050de60 (edit), FUN_0052e070
+ * transition actions 3/4/5 install FUN_0050de60 (configuration), FUN_0052e070
  * (save/load menu) and FUN_0051e010 (fade transition). */
 
 #define DC_STORY_CHAPTERS 26u
@@ -64,7 +64,7 @@ typedef enum dc_story_command_kind {
     DC_STORY_INSTALL_NEXT = 1,   /* install the original callback table entry */
     DC_STORY_SET_MAP_STAGE = 2,  /* commit 0x13533/0x13530 from the tables */
     DC_STORY_ENTER_SCENE = 3,    /* enter the chapter's scene kind */
-    DC_STORY_ENTER_EDIT = 4,     /* FUN_0050de60 destination */
+    DC_STORY_ENTER_CONFIG = 4,   /* FUN_0050de60 destination */
     DC_STORY_ENTER_SAVE_MENU = 5,/* FUN_0052e070 destination */
     DC_STORY_ENTER_FADE = 6      /* FUN_0051e010 destination */
 } dc_story_command_kind;
@@ -90,7 +90,7 @@ DC_API dc_status dc_story_advance(const dc_story_state *state,
     const dc_story_outcomes *outcomes, dc_story_plan *out);
 
 /* Original transition actions from the chapter-end menu (FUN_00523380
- * actions 3/4/5 and the script dispatcher actions): edit scene, save/load
+ * actions 3/4/5 and the script dispatcher actions): configuration, save/load
  * menu scene and fade transition. */
 DC_API dc_status dc_story_menu_action(const dc_story_state *state,
     uint32_t action_code, dc_story_plan *out);

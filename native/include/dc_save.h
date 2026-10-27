@@ -6,6 +6,10 @@ extern "C" {
 #endif
 #define DC_SAVE_RECORD_BYTES 0x64c8u
 #define DC_GAME_STATE_BYTES 0xea38u
+#define DC_SAVE_SLOT_BYTES 0xea40u
+typedef struct dc_save_slot_meta {
+    uint8_t chapter,scene_type,previous_type,map,stage,selector0,selector1,script_frame;
+} dc_save_slot_meta;
 typedef struct dc_save_unlocks { uint32_t edit,extra; } dc_save_unlocks;
 /* Original 0x45dc10: XOR each complete little-endian word with 0x32b7cd2e.
  * The same operation encodes/decodes; trailing 1..3 bytes are unchanged.
@@ -26,6 +30,19 @@ DC_API dc_status dc_save_get_unlocks(const void *bytes,size_t length,dc_save_unl
  * it is not a complete file serializer and does not create a valid save slot.
  * Capacity failures preserve destination. */
 DC_API dc_status dc_game_state_init(void *bytes,size_t capacity);
+/* Original 0052eab0/0052ef70 file layout. The three raw state windows are
+ * contiguous at main+13538 (64c8/6414/215c bytes), but the file inserts the
+ * chapter byte after the first window and appends seven other context bytes.
+ * XOR restarts independently for each state window. Metadata bytes are raw.
+ * All unknown state bytes are preserved; there is no invented checksum.
+ * Decode ignores trailing file data as the original fixed ReadFile sequence
+ * does. Outputs must not overlap inputs or one another; errors are atomic.
+ * These are byte codecs, not a claim of complete live-state synchronization. */
+DC_API dc_status dc_save_slot_encode(const void *state,size_t state_bytes,const dc_save_slot_meta *meta,
+    void *slot,size_t capacity);
+DC_API dc_status dc_save_slot_decode(const void *slot,size_t slot_bytes,
+    void *state,size_t capacity,dc_save_slot_meta *meta);
+DC_API dc_status dc_save_slot_name(uint32_t slot,char *out,size_t capacity);
 #ifdef __cplusplus
 }
 #endif

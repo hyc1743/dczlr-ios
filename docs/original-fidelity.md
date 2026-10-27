@@ -451,5 +451,50 @@ retain separate actor visibility, inset/world matrices, pointer inputs and
 the controller before/after. The expanded UIKit route exercises all secondary
 options, V hide/show, held left dragging outside the inset, right dragging,
 both buttons with F1, wheel, simultaneous automatic views and both resets.
-Local unittest discovery passes330 tests. Apple/Linux CI execution of this
-implementation is pending; system pages and complete flow are not complete.
+Local unittest discovery passes330 tests. System pages and complete flow
+are not complete; the simulator evidence is recorded below.
+
+### Confirmed secondary-camera simulator run
+
+GitHub iOS run 40441395653 and Linux/macOS Vulkan run 40441399638 passed
+at source06881c4cfd8072255ba61def783c9a41baae23ef. The iOS route covers
+both secondary targets, automatic on/off, V hide/show, held drag outside
+the inset, right drag, both buttons with F1, wheel, simultaneous automatic
+views, reset, and the original initial character action to script4.
+Artifact12707365978 is retained under out/secondary-camera-evidence-06881c4.
+Its53530871-byte ZIP passed CRC validation and has SHA-256
+c926d440e7b15ada99e21a24726a7bff415bd02983e7fffdb17d3f2fb4387f86.
+The report and numeric GPU sidecars were reviewed locally. Visible captures
+have nonzero actor contribution in both views; every secondary capture has
+zero changed pixels outside the original inset. This establishes bounded
+camera rendering/input, not system pages, full playthrough or device use.
+
+## System configuration correction and original save codec (2026-10-27)
+
+FUN_0050de60 installs configuration type9, loads config resources and volume,
+alpha, display and camera controls. Earlier references calling this system
+destination an edit screen were incorrect. Title Edit is a separate scene.
+The portable destination constants now say CONFIG without changing their
+numeric values. The host's former outfit shortcut still requires replacement.
+
+FUN_0052eab0 writes Data\\save\\RP_%02d.sav (80 slots) as0xea40 bytes:
+state window0x64c8, raw chapter byte, state window0x6414, state window0x215c,
+then seven raw metadata bytes. Each state window resets the original word
+XOR independently; unknown state bytes must be preserved. FUN_0052ef70 reads
+the same layout. dc_save_slot_encode/decode implement this format, accept
+the original fixed-size read with trailing bytes, and reject invalid buffers
+before mutation. They do not yet synchronize live game state or write slots.
+
+tools/oracle_save_slot.py executes the original writer and XOR instructions
+on three synthetic states. Actual WriteFile chunks match the portable codec
+byte for byte, and the original restores its in-memory state after writing.
+CRT/path/Win32 I/O, menu refresh and security-cookie checks are explicit
+synthetic boundaries; no original process or filesystem write was performed.
+Fixtures are tests/fixtures/save-slot-original-vectors.json. Discovery passes
+334 local tests. UI-based save/relaunch/load remains an open acceptance item.
+
+Further static inventory found29 valid chapter callbacks (0..28), including
+three additional script branches and an interactive chapter24 selector.
+The old26-entry inventory and linear24->25 assumption do not establish the
+original flow. Runtime state must retain the raw stage bytes used by the
+outcome scheduler; the small projected dc_story_state cannot replace them.

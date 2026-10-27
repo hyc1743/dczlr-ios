@@ -251,6 +251,9 @@ class MenuState(C.Structure):
 class SaveUnlocks(C.Structure):
     _fields_ = [("edit",C.c_uint32),("extra",C.c_uint32)]
 
+class SaveSlotMeta(C.Structure):
+    _fields_=[(n,C.c_uint8) for n in ('chapter','scene_type','previous_type','map','stage','selector0','selector1','script_frame')]
+
 
 class TitleState(C.Structure):
     _fields_ = [(n,C.c_uint32) for n in ('action','waiting','hover')]
@@ -597,6 +600,9 @@ def library():
     lib.dc_game_state_init.restype = C.c_int
     lib.dc_save_transform.argtypes = [C.c_void_p,C.c_size_t]
     lib.dc_save_transform.restype = C.c_int
+    lib.dc_save_slot_encode.argtypes=[C.c_void_p,C.c_size_t,C.POINTER(SaveSlotMeta),C.c_void_p,C.c_size_t]
+    lib.dc_save_slot_decode.argtypes=[C.c_void_p,C.c_size_t,C.c_void_p,C.c_size_t,C.POINTER(SaveSlotMeta)]
+    lib.dc_save_slot_name.argtypes=[C.c_uint32,C.c_void_p,C.c_size_t]
     lib.dc_save_get_unlocks.argtypes = [C.c_void_p,C.c_size_t,C.POINTER(SaveUnlocks)]
     lib.dc_save_get_unlocks.restype = C.c_int
     lib.dc_menu_step.argtypes = [C.POINTER(MenuState),C.POINTER(MenuButton),C.c_size_t,C.c_int32,C.c_int32,C.c_float,C.c_uint8,C.POINTER(C.c_int32)]

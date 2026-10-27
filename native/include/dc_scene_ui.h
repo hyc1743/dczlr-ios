@@ -40,7 +40,7 @@ DC_API dc_status dc_scene_icon_uv(uint32_t stage,uint32_t icon,float *u0,float *
 enum dc_scene_action_kind {
     DC_SCENE_CAMERA_RETARGET_PRIMARY=1,DC_SCENE_CAMERA_RESET_PRIMARY=2,
     DC_SCENE_CAMERA_RETARGET_SECONDARY=3,DC_SCENE_CAMERA_RESET_SECONDARY=4,
-    DC_SCENE_ENTER_SAVE_MENU=5,DC_SCENE_ENTER_EDIT_MENU=6
+    DC_SCENE_ENTER_SAVE_MENU=5,DC_SCENE_ENTER_CONFIG_MENU=6
 };
 typedef struct dc_scene_action_command { uint32_t kind,target; } dc_scene_action_command;
 typedef struct dc_scene_action_plan {
@@ -51,7 +51,7 @@ typedef struct dc_scene_action_plan {
  * its context index, never its resource ID or its main icon row. Camera
  * retargeting and destination scene execution are separate host boundaries.
  * Commands 1/3 target entries 0/1; commands 2/4 use the current CAM preset.
- * System options request SAVE/EDIT; neither advances the chapter. */
+ * System options request SAVE/CONFIG; neither advances the chapter. */
 DC_API dc_status dc_scene_action_build(uint32_t scene_type,uint32_t icon,uint32_t option,
     uint32_t camera_mode,uint32_t secondary_camera_mode,dc_scene_action_plan *out);
 typedef struct dc_scene_character_state {
