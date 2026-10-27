@@ -724,6 +724,14 @@ def library():
     lib.dc_xx_find_node_encoded.restype = C.c_int
     lib.dc_xx_morph_mesh.argtypes = [C.c_void_p,C.c_void_p,C.c_size_t,C.c_uint32,C.POINTER(C.c_uint32)]
     lib.dc_xx_morph_mesh.restype = C.c_int
+    lib.dc_morph_open.argtypes = [C.c_void_p,C.c_void_p,C.c_size_t,C.c_void_p,C.c_size_t,C.POINTER(C.c_void_p)]
+    lib.dc_morph_open.restype = C.c_int
+    lib.dc_morph_close.argtypes = [C.c_void_p]
+    lib.dc_morph_close.restype = None
+    lib.dc_morph_get_info.argtypes = [C.c_void_p,C.c_void_p]
+    lib.dc_morph_get_info.restype = C.c_int
+    lib.dc_morph_apply.argtypes = [C.c_void_p,C.c_float,C.c_void_p,C.c_size_t]
+    lib.dc_morph_apply.restype = C.c_int
     lib.dc_xx_node_matrix.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(Matrix)]
     lib.dc_xx_node_matrix.restype = C.c_int
     lib.dc_xx_material_baseline.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(MaterialValue)]

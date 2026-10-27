@@ -1,11 +1,10 @@
 ﻿import ctypes as C
-import os
 from pathlib import Path
-import struct, subprocess, tempfile, unittest, json
+import struct, unittest
 ROOT=Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0,str(ROOT/'tools'))
-from native_core import compiler_command, MeshVertex
+from native_core import library, MeshVertex
 sys.path.insert(0,str(ROOT/'tests'))
 from xx_cases import fixture
 
@@ -26,23 +25,12 @@ def morph_xa():
     track=block(node)+block(idx_name)+u32(2)+key0+key1+u32(0)
     return bytes([0,0,1])+u32(1)+index+u32(2)+b''.join(vectors)+u32(1)+track+bytes([0])
 
-def build():
-    out=ROOT/'out'/'render-coverage-analysis'/'test-morph-runtime.dll'
-    out.parent.mkdir(parents=True,exist_ok=True)
-    command=compiler_command()+['-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-DDC_NATIVE_SHARED','-shared','-Inative/include',
-        'native/resource/dc_pp.c','native/resource/dc_image.c','native/resource/dc_xa.c','native/resource/dc_xx.c','native/game/dc_morph.c','-o',str(out)]
-    subprocess.run(command,cwd=ROOT,check=True,env=dict(os.environ,ZIG_GLOBAL_CACHE_DIR=str(ROOT/'.tools'/'zig-cache')))
-    return C.CDLL(str(out))
 class MorphRuntimeTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
-    cls.lib=build()
+    cls.lib=library()
     cls.lib.dc_xx_open.argtypes=[C.c_void_p,C.c_size_t,C.POINTER(C.c_void_p)];cls.lib.dc_xx_open.restype=C.c_int
     cls.lib.dc_xx_close.argtypes=[C.c_void_p]
-    cls.lib.dc_morph_open.argtypes=[C.c_void_p,C.c_void_p,C.c_size_t,C.c_void_p,C.c_size_t,C.POINTER(C.c_void_p)];cls.lib.dc_morph_open.restype=C.c_int
-    cls.lib.dc_morph_close.argtypes=[C.c_void_p]
-    cls.lib.dc_morph_apply.argtypes=[C.c_void_p,C.c_float,C.c_void_p,C.c_size_t];cls.lib.dc_morph_apply.restype=C.c_int
-    cls.lib.dc_morph_get_info.argtypes=[C.c_void_p,C.c_void_p];cls.lib.dc_morph_get_info.restype=C.c_int
     cls.xx=C.create_string_buffer(fixture());cls.xa=C.create_string_buffer(morph_xa())
  def open(self):
     xx=C.c_void_p();self.assertEqual(self.lib.dc_xx_open(self.xx,len(self.xx.raw),C.byref(xx)),0)
