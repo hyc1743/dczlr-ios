@@ -39,6 +39,7 @@ typedef struct prepared_draw {
     texture *image;
     uint32_t pipeline, filter, alpha_op;
     uint32_t auto_depth, translucent;
+    uint32_t priority;
     size_t original_order;
     double sort_depth;
 } prepared_draw;
@@ -894,6 +895,8 @@ dc_status dc_vk_geometry_render(dc_vk_sprite *r, const dc_vk_geometry_item *item
 static int auto_draw_order(const void *aa,const void *bb) {
     const prepared_draw *a=aa,*b=bb;
     if(a->translucent!=b->translucent)return a->translucent?1:-1;
+    if(a->translucent&&a->priority!=b->priority)
+        return a->priority>b->priority?-1:1;
     if(a->translucent&&a->sort_depth!=b->sort_depth)return a->sort_depth>b->sort_depth?-1:1;
     return a->original_order<b->original_order?-1:a->original_order>b->original_order?1:0;
 }
@@ -953,7 +956,7 @@ dc_status dc_vk_geometry_render_passes(dc_vk_sprite *r,const dc_vk_geometry_pass
             draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
                 .image = image, .pipeline = 3 + blend + 3*depth + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
                 .alpha_op = 4,.auto_depth=item->depth_mode>=DC_VK_DEPTH_AUTO,
-                .translucent=translucent,.original_order=i,.sort_depth=sort_depth/item->vertex_count};
+                .translucent=translucent,.priority=item->priority,.original_order=i,.sort_depth=sort_depth/item->vertex_count};
             total += item->vertex_count;
         }
         if (status == DC_OK) {

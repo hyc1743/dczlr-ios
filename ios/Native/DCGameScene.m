@@ -1111,12 +1111,12 @@ static void freeMorphCaches(dc_game_model *slot) {
             status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){free(indices);for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh clip query failed";}
             if(!vertexCount){free(indices);continue;}
             NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_mesh_clip_project(morphVertices[i],morphCounts[i],indices,mesh.index_count,&mvp,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);free(indices);if(status!=DC_OK){for(uint32_t j=0;j<slot->info.submeshes;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph mesh projection failed";}
-            [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=renderState.blend_mode,.point_filter=renderState.point_filter,.depth_mode=depth,.cull_mode=cull};*triangles+=(uint32_t)(vertexCount/3);continue;
+            [storage addObject:vertices];draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=renderState.blend_mode,.point_filter=renderState.point_filter,.depth_mode=depth,.cull_mode=cull,.priority=renderState.priority};*triangles+=(uint32_t)(vertexCount/3);continue;
         }
         status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),NULL,0,&vertexCount);if(status!=DC_OK){return @"Game mesh clip query failed";}if(!vertexCount)continue;
         NSMutableData *vertices=[NSMutableData dataWithLength:vertexCount*sizeof(dc_sprite_vertex)];status=dc_model_project_clipped(slot->model,i,&camera->view_projection,viewport,gameColor(&material),vertices.mutableBytes,vertexCount,&vertexCount);if(status!=DC_OK)return @"Game mesh projection failed";
         [storage addObject:vertices];
-        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=renderState.blend_mode,.point_filter=renderState.point_filter,.depth_mode=depth,.cull_mode=cull};
+        draws[(*count)++]=(dc_vk_geometry_item){.vertices=vertices.bytes,.vertex_count=vertexCount,.texture=slot->textures[texture],.blend_mode=renderState.blend_mode,.point_filter=renderState.point_filter,.depth_mode=depth,.cull_mode=cull,.priority=renderState.priority};
         *triangles+=(uint32_t)(vertexCount/3);
     }
     if(morphVertices){for(uint32_t i=0;i<slot->info.submeshes;++i)free(morphVertices[i]);free(morphVertices);free(morphCounts);}

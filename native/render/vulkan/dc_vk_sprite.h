@@ -34,7 +34,7 @@ typedef struct dc_vk_geometry_item {
     const dc_sprite_vertex *vertices;
     size_t vertex_count;
     uintptr_t texture;
-    uint8_t blend_mode, hidden, point_filter, depth_mode, cull_mode;
+    uint8_t blend_mode, hidden, point_filter, depth_mode, cull_mode, priority;
 } dc_vk_geometry_item;
 enum dc_vk_cull_mode {
     DC_VK_CULL_NONE=0,
