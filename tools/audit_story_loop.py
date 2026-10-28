@@ -77,6 +77,11 @@ def audit(data_dir):
                 plan = StoryPlan()
                 outcomes = StoryOutcomes(a=(C.c_int32 * 3)(), b=(C.c_int32 * 3)())
                 stage_index = story.stage if story.stage <= 2 else 0
+                # The real chapter-24 selector writes the selected stage into
+                # the story state before its action-2 exit.  The compact
+                # dispatcher API intentionally validates that field, so make
+                # the selector choice explicit in this resource audit too.
+                story.stage = stage_index
                 outcomes.a[stage_index] = 1
                 assert lib.dc_story_advance(C.byref(story), C.byref(outcomes), C.byref(plan)) == 0
                 record = plan.record()
