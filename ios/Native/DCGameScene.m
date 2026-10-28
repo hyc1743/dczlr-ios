@@ -245,6 +245,12 @@ static void freeMorphCaches(dc_game_model *slot) {
     return nil;
 }
 - (NSString *)applyMotionEvent:(dc_scene_motion_event)event tick:(uint32_t)tick {
+    if(_sceneType==5&&event.request_clip!=DC_SCENE_MOTION_NO_REQUEST) {
+        uint32_t visible=(event.request_clip==1)?1:0;
+        for(unsigned auxiliary=0;auxiliary<2;++auxiliary)
+            if(_watchAuxiliary[auxiliary].model && dc_model_hide_node(_watchAuxiliary[auxiliary].model,0,visible)!=DC_OK)
+                return @"Original watch auxiliary visibility update failed";
+    }
     if(event.request_chain_from!=DC_SCENE_MOTION_NO_REQUEST &&
        event.request_chain_to!=DC_SCENE_MOTION_NO_REQUEST) {
         if(dc_model_set_chain(_actor.model,event.request_chain_from,(int32_t)event.request_chain_to)!=DC_OK)
@@ -887,6 +893,11 @@ static void freeMorphCaches(dc_game_model *slot) {
             if(!_watchAuxiliary[auxiliary].xxData||!_watchAuxiliary[auxiliary].xaData||
                ![self openModel:&_watchAuxiliary[auxiliary] staticOnly:NO error:error])return nil;
             if(dc_model_request(_watchAuxiliary[auxiliary].model,0,0)!=DC_OK){if(error)*error=@"Watch auxiliary animation request failed";return nil;}
+             /* Original watch setup keeps the sm/sn roots render-hidden until
+              * the corresponding controller/action enables them. Drawing
+              * them at actor-root space creates the detached translucent
+              * clothing seen on the phone. */
+             if(dc_model_hide_node(_watchAuxiliary[auxiliary].model,0,1)!=DC_OK){if(error)*error=@"Watch auxiliary visibility setup failed";return nil;}
         }
     }
     if(_face.xxData && _face.xaData && ![self openModel:&_face staticOnly:YES error:error])return nil;
