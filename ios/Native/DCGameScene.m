@@ -846,7 +846,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _gameMenu=(dc_menu_state){.selected=-1,.hover=-1};
     _gameMenuInitialized=YES;
     _naturalGameplayRoute=![[[NSProcessInfo processInfo] environment][@"PORTLAB_EXERCISE_REAL_GAMEPLAY"] isEqualToString:@"1"];
-    if(_sceneType==4) {
+    if(_sceneType>=4&&_sceneType<=6) {
         _sceneUIArchive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:nil];
         if(!_sceneUIArchive){if(error)*error=@"Original scene UI archive unavailable";return nil;}
         for(NSString *icon in @[@"chara",@"fuku",@"cam",@"sys"])for(NSString *state in @[@"S",@"N"]) {
