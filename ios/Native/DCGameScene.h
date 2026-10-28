@@ -32,6 +32,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t chapterEndAction;
 @property(nonatomic,readonly) uint32_t stageOutcomeA;
 @property(nonatomic,readonly) uint32_t stageOutcomeB;
+@property(nonatomic,readonly) uint32_t flowLevel;
+@property(nonatomic,readonly) uint32_t flowFlagB;
+@property(nonatomic,readonly) uint32_t flowCount;
 @property(nonatomic,readonly) uint32_t storyStage;
 @property(nonatomic,readonly) uint32_t sceneKind;
 @property(nonatomic,readonly) uint32_t sceneType;

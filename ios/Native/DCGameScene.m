@@ -186,6 +186,12 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (uint32_t)chapterEndAction { return _chapterEndAction; }
 - (uint32_t)stageOutcomeA { return _stageOutcomeA; }
 - (uint32_t)stageOutcomeB { return _stageOutcomeB; }
+- (uint32_t)flowLevel { return _chapterEndAction==2?2:0; }
+- (uint32_t)flowFlagB { return _chapterEndAction==2?1:0; }
+- (uint32_t)flowCount {
+    if(_motionStateInitialized&&_motionState.sample_count)return _motionState.sample_count;
+    return _interactionCount;
+}
 - (uint32_t)storyStage { return _storyStage; }
 - (uint32_t)sceneKind { return _sceneKind; }
 - (uint32_t)sceneType { return _sceneType; }

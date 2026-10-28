@@ -22,6 +22,7 @@
 #include "dc_gameplay.h"
 #include "dc_pc_touch.h"
 #include "dc_story.h"
+#include "dc_flow.h"
 #include <math.h>
 #include <string.h>
 
@@ -76,6 +77,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     BOOL _titleStateInitialized;
     dc_story_state _story;
     BOOL _storyInitialized;
+    dc_flow_state _flowState;
+    BOOL _flowInitialized;
     BOOL _resumeNextScene;
     dc_menu_state _titleMenu;
     BOOL _titleMenuInitialized,_previousTitleTouch;
@@ -208,6 +211,14 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         sceneTypeOverride:_endingSceneTypeOverride resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _gameScene.transitionScene=_startupScene;
+    [self ensureFlowState];
+    if(_flowInitialized) {
+        _flowState.meta.previous_type=_flowState.meta.scene_type;
+        _flowState.meta.scene_type=(uint8_t)_gameScene.sceneType;
+        _flowState.meta.chapter=(uint8_t)_story.chapter;
+        _flowState.meta.map=(uint8_t)_story.map;_flowState.meta.stage=(uint8_t)_story.stage;
+        [self syncFlowFlagsFromStory];
+    }
     _gameScene.secondaryViewVisible=!_secondaryViewDisabledSetting;
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
@@ -269,9 +280,13 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     for(unsigned i=0;i<DC_STORY_STAGES;++i){size_t base=(size_t)i*0x2198;p[base+0]=(uint8_t)_story.stages[i].flag_a;p[base+1]=(uint8_t)_story.stages[i].flag_b;p[base+0x23]=(uint8_t)_story.stages[i].progress;}
 }
 - (NSString *)writeOriginalSaveSlot:(uint32_t)slot directory:(NSString *)directory {
+    [self ensureFlowState];
     [self syncNumericState];
-    dc_save_slot_meta meta={(uint8_t)_story.chapter,(uint8_t)(_gameScene?_gameScene.sceneType:1),
+    if(_flowInitialized)memcpy(_numericState.mutableBytes,_flowState.raw,MIN(_numericState.length,sizeof(_flowState.raw)));
+    dc_save_slot_meta meta=_flowInitialized?_flowState.meta:(dc_save_slot_meta){(uint8_t)_story.chapter,(uint8_t)(_gameScene?_gameScene.sceneType:1),
         (uint8_t)(_gameScene?_gameScene.sceneType:1),(uint8_t)_story.map,(uint8_t)_story.stage,0,0,0};
+    meta.chapter=(uint8_t)_story.chapter;meta.map=(uint8_t)_story.map;meta.stage=(uint8_t)_story.stage;
+    if(_gameScene)meta.scene_type=(uint8_t)_gameScene.sceneType;
     char name[16];if(dc_save_slot_name(slot,name,sizeof(name))!=DC_OK)return @"Original save slot number rejected";
     NSMutableData *encoded=[NSMutableData dataWithLength:DC_SAVE_SLOT_BYTES];
     if(dc_save_slot_encode(_numericState.bytes,_numericState.length,&meta,encoded.mutableBytes,encoded.length)!=DC_OK)return @"Original save state encoding failed";
@@ -292,6 +307,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     NSMutableData *state=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];dc_save_slot_meta meta={0};
     if(dc_save_slot_decode(slot.bytes,slot.length,state.mutableBytes,state.length,&meta)!=DC_OK)return @"Original load slot decode failed";
     const uint8_t *p=state.bytes;_numericState=state;
+    memset(&_flowState,0,sizeof(_flowState));memcpy(_flowState.raw,state.bytes,MIN(state.length,sizeof(_flowState.raw)));_flowState.meta=meta;_flowInitialized=YES;
     _story.chapter=meta.chapter;_story.map=meta.map;_story.stage=meta.stage;_storyInitialized=YES;
     for(unsigned i=0;i<DC_STORY_STAGES;++i){size_t base=(size_t)i*0x2198;_story.stages[i].flag_a=p[base];_story.stages[i].flag_b=p[base+1];_story.stages[i].progress=p[base+0x23];}
     [_saveScene detachRenderer];_saveScene=nil;
@@ -303,6 +319,24 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if(!_gameScene || !_gameScene.chapterEndAction)return nil;
     uint32_t action=_gameScene.chapterEndAction;
     if(action==2) {
+        [self ensureFlowState];
+        if(_flowInitialized && _gameScene.sceneType>=4 && _gameScene.sceneType<=6) {
+            dc_flow_exit_metrics metrics={
+                .level=_gameScene.flowLevel,
+                .flag_b=_gameScene.flowFlagB,
+                .count=_gameScene.flowCount,
+                .outcome_a=_gameScene.stageOutcomeA,
+                .outcome_b=_gameScene.stageOutcomeB};
+            dc_flow_result flowResult;
+            if(dc_flow_scene_exit(&_flowState,&metrics,&flowResult)==DC_OK &&
+               flowResult.destination_type!=13) {
+                [self syncStoryFromFlow];
+                if(!_numericState)_numericState=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
+                memcpy(_numericState.mutableBytes,_flowState.raw,MIN(_numericState.length,sizeof(_flowState.raw)));
+                [self saveStoryToDirectory:directory];
+                return [self enterStoryChapter:_flowState.meta.chapter directory:directory];
+            }
+        }
         dc_story_outcomes outcomes={0};
         outcomes.a[_gameScene.storyStage]=_gameScene.stageOutcomeA;
         outcomes.b[_gameScene.storyStage]=_gameScene.stageOutcomeB;
@@ -350,6 +384,44 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     _story=(dc_story_state){.chapter=0,.map=0xff,.stage=0xff};
     _story.stages[1].flag_a=1;
     _storyInitialized=YES;
+    _flowInitialized=NO;
+}
+- (void)syncFlowFlagsFromStory {
+    if(!_flowInitialized)return;
+    for(unsigned i=0;i<DC_FLOW_STAGES;++i) {
+        size_t base=(size_t)i*DC_FLOW_STAGE_BYTES;
+        _flowState.raw[base+0]=(uint8_t)_story.stages[i].flag_a;
+        _flowState.raw[base+1]=(uint8_t)_story.stages[i].flag_b;
+        _flowState.raw[base+0x23]=(uint8_t)_story.stages[i].progress;
+    }
+}
+- (void)syncStoryFromFlow {
+    if(!_flowInitialized)return;
+    _story.chapter=_flowState.meta.chapter;_story.map=_flowState.meta.map;_story.stage=_flowState.meta.stage;
+    for(unsigned i=0;i<DC_FLOW_STAGES;++i) {
+        size_t base=(size_t)i*DC_FLOW_STAGE_BYTES;
+        _story.stages[i].flag_a=_flowState.raw[base+0]!=0;
+        _story.stages[i].flag_b=_flowState.raw[base+1]!=0;
+        _story.stages[i].progress=_flowState.raw[base+0x23];
+    }
+    _story.unlocked=(_flowState.meta.chapter>=24)?1:0;_storyInitialized=YES;
+}
+- (void)ensureFlowState {
+    if(_flowInitialized)return;
+    dc_save_slot_meta meta={(uint8_t)_story.chapter,3,3,(uint8_t)_story.map,(uint8_t)_story.stage,255,255,254};
+    if(dc_flow_state_init(&_flowState,&meta)==DC_OK) {
+        _flowInitialized=YES;[self syncFlowFlagsFromStory];
+    }
+}
+- (void)updateFlowMetaForChapter:(uint32_t)chapter profile:(const dc_story_chapter *)profile {
+    [self ensureFlowState];if(!_flowInitialized||!profile)return;
+    _flowState.meta.previous_type=_flowState.meta.scene_type;
+    _flowState.meta.chapter=(uint8_t)chapter;
+    _flowState.meta.scene_type=(uint8_t)profile->scene_type;
+    _flowState.meta.map=(uint8_t)(profile->map>=0?profile->map:_story.map);
+    _flowState.meta.stage=(uint8_t)(profile->stage>=0?profile->stage:_story.stage);
+    _flowState.meta.selector0=255;_flowState.meta.selector1=255;_flowState.meta.script_frame=254;
+    [self syncFlowFlagsFromStory];
 }
 - (void)loadStoryFromDirectory:(NSString *)directory {
     NSString *path=[directory stringByAppendingPathComponent:@"save/player.state"];
@@ -385,6 +457,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if(profile.map>=0)_story.map=(uint32_t)profile.map;
     if(profile.stage>=0)_story.stage=(uint32_t)profile.stage;
     _storyInitialized=YES;
+    [self updateFlowMetaForChapter:chapter profile:&profile];
     [self saveStoryToDirectory:directory];
     /* Consume the completed script before installing its destination. Keeping
      * it here would re-enter this chapter on every subsequent draw. */
