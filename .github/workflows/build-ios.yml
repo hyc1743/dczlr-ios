@@ -271,7 +271,9 @@ jobs:
         run: |
           rm -rf build/ipa && mkdir -p build/ipa/Payload
           cp -R build/device/Build/Products/Release-iphoneos/PortLab.app build/ipa/Payload/
-          (cd build/ipa && zip -qry "../DCZL-R-unsigned.ipa" Payload)
+          python3 ../tools/package_ipa.py \
+            --app build/ipa/Payload/PortLab.app \
+            --output build/DCZL-R-unsigned.ipa
       - name: Write build status report
         working-directory: ios
         run: |
