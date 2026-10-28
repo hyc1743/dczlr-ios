@@ -60,6 +60,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: offline-shader-native-smoke-report
           path: out/offline-tools/native-smoke/conversion-report.json
           if-no-files-found: ignore
@@ -119,6 +120,7 @@ jobs:
           PY
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: offline-shader-tools-windows-x64
           path: out/offline-tools/windows/
 
@@ -139,5 +141,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: offline-shader-tools-windows-verification
           path: out/offline-tools/windows-smoke/conversion-report.json

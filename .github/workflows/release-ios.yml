@@ -103,6 +103,7 @@ jobs:
       - name: Retain release build artifacts
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: DCZL-R-device-release
           path: |
             ios/build/DCZL-R-unsigned.ipa

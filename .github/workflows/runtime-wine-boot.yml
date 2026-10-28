@@ -25,6 +25,7 @@ jobs:
           file out/win32-probe/portlab-win32-smoke.exe
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: self-authored-win32-probe
           path: out/win32-probe/portlab-win32-smoke.exe
   wine-boot:
@@ -92,6 +93,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: wine-boot-evidence
           path: |
             out/wine-boot/wine-console.log

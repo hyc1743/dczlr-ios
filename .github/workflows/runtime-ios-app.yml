@@ -22,6 +22,7 @@ jobs:
             probes/win32_smoke.c -o out/win32-probe/portlab-win32-smoke.exe -lgdi32 -luser32 -lwinmm
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: self-authored-ios-runtime-check
           path: out/win32-probe/portlab-win32-smoke.exe
   interpreter-app:
@@ -99,6 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-interpreter-app
           path: |
             out/interpreter-app/*.ipa

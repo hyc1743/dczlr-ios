@@ -163,6 +163,7 @@ jobs:
       - name: Upload simulator app and manifest
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-simulator-and-resources
           path: |
             ios/build/ci/Build/Products/Debug-iphonesimulator/PortLab.app
@@ -183,6 +184,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-simulator-pc-input
           path: out/ios-pc-input/
       - name: Verify virtual mouse on the first real scene
@@ -198,6 +200,7 @@ jobs:
         if: always() && inputs.mouse_input_only
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-real-scene-mouse-input
           path: out/ios-mouse-input/
       - name: Exercise the original story loop on simulator
@@ -223,24 +226,28 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-scene-render-probe
           path: out/ios-render-probe/
       - name: Upload simulator Vulkan execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-simulator-vulkan-scene
           path: out/ios-sprite/
       - name: Upload generated startup execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-simulator-startup
           path: out/ios-startup/
       - name: Upload real story evidence
         if: always() && (inputs.resource_repo != '' || inputs.resource_bundle_url != '' || inputs.resource_bundle_urls != '')
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: PortLab-simulator-real-story
           path: out/ios-real-story/
           if-no-files-found: ignore
@@ -298,6 +305,7 @@ jobs:
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: DCZL-R-unsigned-ipa
           path: |
             ios/build/DCZL-R-unsigned.ipa

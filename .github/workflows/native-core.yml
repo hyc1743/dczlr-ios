@@ -133,5 +133,6 @@ jobs:
           "$RUNNER_TEMP/portlab-resource-import-test" "$fixture"
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: reconstructed-native-iphoneos-core
           path: out/native-iphoneos/*

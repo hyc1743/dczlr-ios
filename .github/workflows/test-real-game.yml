@@ -110,6 +110,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: real-game-playability-evidence
           path: |
             out/real-game-controls/

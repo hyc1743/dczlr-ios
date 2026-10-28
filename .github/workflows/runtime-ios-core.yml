@@ -80,6 +80,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: ios-interpreter-core
           path: |
             out/interpreter-ios/
