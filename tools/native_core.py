@@ -623,6 +623,8 @@ def library():
     lib.dc_model_project_clipped.argtypes = lib.dc_model_project.argtypes+[C.POINTER(C.c_size_t)]
     lib.dc_model_project_clipped.restype=C.c_int
     lib.dc_model_project.restype = C.c_int
+    lib.dc_model_load_source_vertices.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t]
+    lib.dc_model_load_source_vertices.restype=C.c_int
     lib.dc_script_find.argtypes = [C.c_void_p,C.c_size_t,C.c_size_t,C.c_uint32,C.POINTER(ScriptRecord)]
     lib.dc_script_find.restype = C.c_int
     lib.dc_game_state_init.argtypes = [C.c_void_p,C.c_size_t]

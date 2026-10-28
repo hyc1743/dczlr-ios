@@ -392,6 +392,14 @@ dc_status dc_model_load_vertices(const dc_model *m,uint32_t mesh,dc_mesh_vertex 
     if (capacity<data->info.vertex_count) return DC_RANGE;
     memcpy(out,data->deformed ? data->deformed : (data->event_vertices ? data->event_vertices : data->vertices),bytes);return DC_OK;
 }
+dc_status dc_model_load_source_vertices(const dc_model *m,uint32_t mesh,dc_mesh_vertex *out,size_t capacity) {
+    if (!m) return DC_ARGUMENT;
+    if (mesh>=m->info.submeshes) return DC_RANGE;
+    const mesh_data *data=&m->meshes[mesh];size_t bytes=data->info.vertex_count*sizeof(*out);
+    if (!output_allowed(m,out,bytes)) return DC_ARGUMENT;
+    if (capacity<data->info.vertex_count) return DC_RANGE;
+    memcpy(out,data->vertices,bytes);return DC_OK;
+}
 dc_status dc_model_project(const dc_model *m,uint32_t mesh,const dc_matrix *vp,const dc_viewport *viewport,
         uint32_t diffuse,dc_sprite_vertex *out,size_t capacity) {
     if (!m || !vp) return DC_ARGUMENT;

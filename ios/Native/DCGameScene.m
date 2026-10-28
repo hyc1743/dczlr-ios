@@ -1169,7 +1169,7 @@ static void freeMorphCaches(dc_game_model *slot) {
             dc_xx_submesh meshView;if(dc_model_mesh(slot->model,mesh,&meshView)!=DC_OK) { free(morphVertices);free(morphCounts);return @"Game morph mesh metadata failed"; }
             morphCounts[mesh]=meshView.vertex_count;
             morphVertices[mesh]=calloc(meshView.vertex_count?meshView.vertex_count:1,sizeof(*morphVertices[mesh]));
-            if(!morphVertices[mesh] || dc_model_load_vertices(slot->model,mesh,morphVertices[mesh],meshView.vertex_count)!=DC_OK) {
+            if(!morphVertices[mesh] || dc_model_load_source_vertices(slot->model,mesh,morphVertices[mesh],meshView.vertex_count)!=DC_OK) {
                 for(uint32_t j=0;j<=mesh;++j)free(morphVertices[j]);free(morphVertices);free(morphCounts);return @"Game morph vertex load failed";
             }
         }

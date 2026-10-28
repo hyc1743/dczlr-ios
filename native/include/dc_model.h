@@ -51,6 +51,10 @@ DC_API dc_status dc_model_mesh(const dc_model *model,uint32_t index,dc_xx_submes
  * Failed ticks preserve both palettes and deformed mesh buffers. */
 DC_API dc_status dc_model_vertex_space(const dc_model *model,uint32_t mesh,uint32_t *out);
 DC_API dc_status dc_model_load_vertices(const dc_model *model,uint32_t mesh,dc_mesh_vertex *out,size_t capacity);
+/* Original source-space vertex buffer before event UV updates, morphs or CPU
+ * skinning.  Morph consumers use this buffer and then feed the result through
+ * the model's existing skin palette exactly once. */
+DC_API dc_status dc_model_load_source_vertices(const dc_model *model,uint32_t mesh,dc_mesh_vertex *out,size_t capacity);
 /* Render-hidden byte +0x1f0 controls this mesh. An ancestor's transform-skip
  * +0x1f8 suppresses traversal. Material alpha/effects are separate admission.
  * Projection itself remains a low-level operation without culling. */

@@ -49,8 +49,11 @@ dc_status dc_pc_touch_begin(dc_pc_touch *s,dc_pc_latch *in,uint64_t id,float x,f
     }
     if(free<0)return DC_RANGE;
     s->contacts[free]=(dc_pc_touch_contact){id,control,x,y};
-    /* Activate a persistent pointer even if the first event is a button. */
-    dc_pc_input_pointer(in,27,s->cursor_x,s->cursor_y);
+    /* Only the open-surface contact owns the persistent pointer. Keyboard
+     * keys and mouse buttons remain independent DirectInput sources; a key
+     * press must not silently move or acquire the virtual cursor. */
+    if(control==DC_PC_TOUCH_POINTER)
+        dc_pc_input_pointer(in,27,s->cursor_x,s->cursor_y);
     if(control<DC_PC_TOUCH_COUNT) {
         uint32_t code=s->targets[control].code;
         if(code<256)dc_pc_input_key(in,(uint32_t)free,code,1);

@@ -73,6 +73,11 @@ class PCTouchTests(unittest.TestCase):
         self.assertEqual((f.keys[0x4d],f.mouse[0],f.mouse[1]),(3,3,3))
         self.call('end',2);f=self.poll();self.assertEqual((f.mouse[0],f.mouse[1],f.keys[0x4d]),(2,1,1))
         self.call('reset');f=self.poll();self.assertEqual((f.mouse[1],f.keys[0x4d],f.pointer_active),(2,2,0))
+
+    def test_keyboard_and_mouse_buttons_do_not_acquire_pointer(self):
+        self.begin(1,22);self.begin(2,26);f=self.poll()
+        self.assertFalse(f.pointer_active)
+        self.assertEqual((f.keys[0x4d],f.mouse[0]),(3,3))
     def test_duplicate_fingers_do_not_release_another_finger_or_physical_key(self):
         self.begin(1,9);self.begin(2,9)
         self.lib.dc_pc_input_key(C.byref(self.input),30,0xcf,1);self.poll()
