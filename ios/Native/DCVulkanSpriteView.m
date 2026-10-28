@@ -27,6 +27,7 @@
 #include <string.h>
 
 static const char dcRenderQueueKey;
+static const uint32_t dcFlowPersistHeaderBytes = 13u;
 
 static void dc_write_word_le(uint8_t *out, uint32_t bits) {
     for (uint32_t i = 0; i < 4; ++i) out[i] = (uint8_t)(bits >> (8 * i));
@@ -406,6 +407,22 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     }
     _story.unlocked=(_flowState.meta.chapter>=24)?1:0;_storyInitialized=YES;
 }
+- (void)saveFlowStateToDirectory:(NSString *)directory {
+    if(!_flowInitialized)return;
+    NSMutableData *record=[NSMutableData dataWithLength:dcFlowPersistHeaderBytes+DC_GAME_STATE_BYTES];
+    memcpy(record.mutableBytes,"PLFL",4);((uint8_t *)record.mutableBytes)[4]=1;
+    memcpy((uint8_t *)record.mutableBytes+5,&_flowState.meta,sizeof(_flowState.meta));
+    memcpy((uint8_t *)record.mutableBytes+dcFlowPersistHeaderBytes,_flowState.raw,DC_GAME_STATE_BYTES);
+    NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
+    [record writeToFile:[saveDirectory stringByAppendingPathComponent:@"flow.state"] options:NSDataWritingAtomic error:nil];
+}
+- (void)loadFlowStateFromDirectory:(NSString *)directory {
+    NSData *record=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"save/flow.state"]];
+    if(record.length<dcFlowPersistHeaderBytes+DC_GAME_STATE_BYTES||memcmp(record.bytes,"PLFL",4)!=0||((const uint8_t *)record.bytes)[4]!=1)return;
+    memcpy(&_flowState.meta,(const uint8_t *)record.bytes+5,sizeof(_flowState.meta));
+    memcpy(_flowState.raw,(const uint8_t *)record.bytes+dcFlowPersistHeaderBytes,DC_GAME_STATE_BYTES);_flowInitialized=YES;
+}
 - (void)ensureFlowState {
     if(_flowInitialized)return;
     dc_save_slot_meta meta={(uint8_t)_story.chapter,3,3,(uint8_t)_story.map,(uint8_t)_story.stage,255,255,254};
@@ -429,9 +446,13 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if(data.length>=DC_GAME_PLAYER_SAVE_BYTES+DC_STORY_SAVE_BYTES) {
         dc_story_state loaded;
         if(dc_story_load((const uint8_t *)data.bytes+DC_GAME_PLAYER_SAVE_BYTES,data.length-DC_GAME_PLAYER_SAVE_BYTES,&loaded)==DC_OK) {
-            _story=loaded;_storyInitialized=YES;return;
+            _story=loaded;_storyInitialized=YES;[self loadFlowStateFromDirectory:directory];
+            if(_flowInitialized)[self syncStoryFromFlow];
+            return;
         }
     }
+    [self loadFlowStateFromDirectory:directory];
+    if(_flowInitialized){[self syncStoryFromFlow];return;}
     /* Legacy position-only saves resume the first gameplay chapter. */
     [self resetStory];
     _story.chapter=3;_story.map=0;_story.stage=2;_storyInitialized=YES;
@@ -449,6 +470,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
     [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
     [combined writeToFile:path options:NSDataWritingAtomic error:nil];
+    [self saveFlowStateToDirectory:directory];
 }
 - (NSString *)enterStoryChapter:(uint32_t)chapter directory:(NSString *)directory {
     dc_story_chapter profile;
