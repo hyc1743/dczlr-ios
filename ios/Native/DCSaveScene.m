@@ -4,6 +4,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <ImageIO/ImageIO.h>
 #include "dc_save.h"
+#include "dc_gameplay.h"
 #include "dc_story.h"
 #include <math.h>
 #include <string.h>
