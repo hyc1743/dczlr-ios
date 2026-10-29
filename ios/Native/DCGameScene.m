@@ -927,12 +927,17 @@ static void freeMorphCaches(dc_game_model *slot) {
     // PLST attaches sourceBind * inverse(targetBind) to targetAnimatedWorld.
     // All face meshes descend from the source node, so compensate its model
     // world with the full actor target bind inverse before applying animation.
-    dc_model *bindModel=NULL;dc_matrix identity=gameIdentity(),targetBind;
+    dc_model *bindModel=NULL;dc_matrix identity=gameIdentity(),targetBind,sourceBind,targetInverse;
     dc_status bindStatus=dc_model_open_static(_actor.xxData.bytes,_actor.xxData.length,&bindModel);
     if(bindStatus==DC_OK)bindStatus=dc_model_tick(bindModel,0,0,&identity);
     if(bindStatus==DC_OK)bindStatus=dc_model_global(bindModel,_actorHeadNode,&targetBind);
-    if(bindStatus==DC_OK)bindStatus=dc_matrix_inverse_affine(&targetBind,&_faceBindInverse);
+    if(bindStatus==DC_OK)bindStatus=dc_matrix_inverse_affine(&targetBind,&targetInverse);
     dc_model_close(bindModel);
+    uint32_t faceSourceNode=[self findNode:&_face name:[self characterNode:@"a_Nz_kao"]];
+    if(bindStatus==DC_OK && faceSourceNode==UINT32_MAX)bindStatus=DC_NOT_FOUND;
+    if(bindStatus==DC_OK)bindStatus=dc_model_tick(_face.model,0,0,&identity);
+    if(bindStatus==DC_OK)bindStatus=dc_model_global(_face.model,faceSourceNode,&sourceBind);
+    if(bindStatus==DC_OK)bindStatus=dc_matrix_multiply(&sourceBind,&targetInverse,&_faceBindInverse);
     if(bindStatus!=DC_OK){if(error)*error=@"Face bind-pose attachment failed";return nil;}
     [self applyInitialVisibility];
     dc_eyeneck_info eyesInfo,neckInfo;dc_eyeneck_span eyesRight,eyesLeft,neckHead;
