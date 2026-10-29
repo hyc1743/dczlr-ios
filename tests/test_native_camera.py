@@ -61,6 +61,14 @@ class NativeCameraTests(unittest.TestCase):
         self.assertEqual(bytes(inverse),before)
         self.assertEqual(self.lib.dc_matrix_inverse_affine(None,C.byref(inverse)),1)
 
+    def test_face_source_bind_is_removed_before_target_animation(self):
+        source=matrix(.3,.9,(0,6.2,-.2));animated=matrix(-.2,1.1,(22,3.7,-.5))
+        inverse=Matrix();attached=Matrix()
+        self.assertEqual(self.lib.dc_matrix_inverse_affine(C.byref(source),C.byref(inverse)),0)
+        self.assertEqual(self.lib.dc_matrix_multiply(C.byref(inverse),C.byref(animated),C.byref(attached)),0)
+        restored=Matrix();self.assertEqual(self.lib.dc_matrix_multiply(C.byref(source),C.byref(attached),C.byref(restored)),0)
+        for a,b in zip(restored.values,animated.values):self.assertAlmostEqual(a,b,places=5)
+
     def test_original_orbit_and_projection_reference(self):
         source=list(cases())
         fixture=json.loads((ROOT/'tests/fixtures/camera-original-vectors.json').read_text())

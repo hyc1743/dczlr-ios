@@ -11,11 +11,11 @@ sprites and startup geometry keep their existing default. The same Vulkan pixel
 gate checks both windings and restoration to two-sided rendering.
 
 The PLST attachment maps the face source anchor to an animated body neck anchor.
-The original binding preserves the source bind transform and compensates the
-target bind transform. For this face hierarchy, the equivalent model world is
-`inverse(bodyNeckBindGlobal) * bodyNeckAnimatedGlobal`. Passing the animated neck
-directly as the face model world added the bind offset again. The shared affine
-inverse and a synthetic attachment regression guard this behavior.
+The face model already contains its source anchor transform, so the model world
+is `inverse(faceSourceBindGlobal) * bodyNeckAnimatedGlobal`. Passing a
+source/target bind product adds the face source translation a second time and
+visibly detaches the head. The shared affine inverse and a synthetic
+attachment regression guard this behavior.
 
 Normal chapter initialization also hides alternate outfits and facial effect
 meshes. Runtime node visibility reproduces those verified initialization flags;
