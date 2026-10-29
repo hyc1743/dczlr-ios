@@ -70,6 +70,13 @@ DC_API dc_status dc_model_project(const dc_model *model,uint32_t mesh,const dc_m
  * Hidden/effect/sort admission remains the caller's responsibility. */
 DC_API dc_status dc_model_project_clipped(const dc_model *model,uint32_t mesh,const dc_matrix *view_projection,
     const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity,size_t *written);
+/* Project caller-supplied source-space vertices using the model's current
+ * node transform or indexed skin palette exactly once. This is used by the
+ * gameplay morph path: morphs modify source vertices, then the normal model
+ * skinning path must still run before projection. */
+DC_API dc_status dc_model_project_vertices_clipped(const dc_model *model,uint32_t mesh,
+    const dc_mesh_vertex *vertices,size_t vertex_count,const dc_matrix *view_projection,
+    const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity,size_t *written);
 #ifdef __cplusplus
 }
 #endif

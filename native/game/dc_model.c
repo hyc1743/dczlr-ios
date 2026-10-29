@@ -436,3 +436,35 @@ dc_status dc_model_project_clipped(const dc_model *m,uint32_t mesh,const dc_matr
     return dc_mesh_clip_project(vertices,data->info.vertex_count,
         data->indices,data->info.index_count,&mvp,viewport,diffuse,out,capacity,written);
 }
+
+dc_status dc_model_project_vertices_clipped(const dc_model *m,uint32_t mesh,
+        const dc_mesh_vertex *vertices,size_t vertex_count,const dc_matrix *vp,
+        const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity,size_t *written) {
+    if (!m || !vertices || !vp || !viewport || !written) return DC_ARGUMENT;
+    if (mesh>=m->info.submeshes || vertex_count!=m->meshes[mesh].info.vertex_count) return DC_RANGE;
+    const mesh_data *data=&m->meshes[mesh];
+    if (out && !output_allowed(m,out,capacity*sizeof(*out))) return DC_ARGUMENT;
+    if (overlap(vertices,vertex_count*sizeof(*vertices),out,capacity*sizeof(*out)) ||
+        overlap(vertices,vertex_count*sizeof(*vertices),written,sizeof(*written))) return DC_ARGUMENT;
+    dc_mesh_vertex *projected= (dc_mesh_vertex *)vertices;
+    dc_mesh_vertex *owned=NULL;
+    dc_matrix mvp;
+    dc_status status;
+    if (data->deformed) {
+        if (!data->weights || !m->skins[data->info.node].palette) return DC_FORMAT;
+        owned=calloc(vertex_count,sizeof(*owned));
+        if (!owned) return DC_MEMORY;
+        status=dc_skin_apply(m->skins[data->info.node].palette,vertices,data->weights,vertex_count,
+            DC_SKIN_TRANSFORM_NORMAL,owned,vertex_count);
+        if (status!=DC_OK) { free(owned); return status; }
+        projected=owned;
+        mvp=*vp;
+    } else {
+        status=dc_matrix_multiply(&m->globals[data->info.node],vp,&mvp);
+        if (status!=DC_OK) return status;
+    }
+    status=dc_mesh_clip_project(projected,vertex_count,data->indices,data->info.index_count,
+        &mvp,viewport,diffuse,out,capacity,written);
+    free(owned);
+    return status;
+}

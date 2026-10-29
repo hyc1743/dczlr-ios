@@ -622,6 +622,9 @@ def library():
     lib.dc_model_project.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t]
     lib.dc_model_project_clipped.argtypes = lib.dc_model_project.argtypes+[C.POINTER(C.c_size_t)]
     lib.dc_model_project_clipped.restype=C.c_int
+    lib.dc_model_project_vertices_clipped.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t,
+        C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t,C.POINTER(C.c_size_t)]
+    lib.dc_model_project_vertices_clipped.restype=C.c_int
     lib.dc_model_project.restype = C.c_int
     lib.dc_model_load_source_vertices.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t]
     lib.dc_model_load_source_vertices.restype=C.c_int

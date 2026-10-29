@@ -92,6 +92,21 @@ class NativeModelTests(unittest.TestCase):
         for a,b in zip(*results):
             for name in ('x','y','z','rhw','u','v'):self.assertAlmostEqual(getattr(a,name),getattr(b,name),delta=2e-5)
 
+    def test_custom_source_projection_reapplies_current_skin_palette_once(self):
+        model,xx,xa=self.open(skinned=True)
+        world=matrix(.3,1.2,(.1,-.2,.25));view=Viewport(0,0,100,100,0,1);vp=matrix(translation=(0,0,.5))
+        self.assertEqual(self.lib.dc_model_tick(model,100,100,C.byref(world)),0)
+        source=(MeshVertex*4)();self.assertEqual(self.lib.dc_model_load_source_vertices(model,0,source,4),0)
+        current=(MeshVertex*4)();self.assertEqual(self.lib.dc_model_load_vertices(model,0,current,4),0)
+        count=C.c_size_t(0);args=(model,0,source,4,C.byref(vp),C.byref(view),0xffffffff)
+        self.assertEqual(self.lib.dc_model_project_vertices_clipped(*args,None,0,C.byref(count)),0)
+        custom=(SpriteVertex*count.value)();self.assertEqual(self.lib.dc_model_project_vertices_clipped(*args,custom,len(custom),C.byref(count)),0)
+        ordinary_count=C.c_size_t(0);self.assertEqual(self.lib.dc_model_project_clipped(model,0,C.byref(vp),C.byref(view),0xffffffff,None,0,C.byref(ordinary_count)),0)
+        ordinary=(SpriteVertex*ordinary_count.value)();self.assertEqual(self.lib.dc_model_project_clipped(model,0,C.byref(vp),C.byref(view),0xffffffff,ordinary,len(ordinary),C.byref(ordinary_count)),0)
+        self.assertEqual(count.value,ordinary_count.value)
+        for a,b in zip(custom,ordinary):
+            for name in ('x','y','z','rhw','u','v'):self.assertAlmostEqual(getattr(a,name),getattr(b,name),delta=2e-5)
+
     def test_skinned_and_rigid_node_transform_match_without_double_world(self):
         rigid,xx1,xa1=self.open();skinned,xx2,xa2=self.open(skinned=True)
         world=matrix(.3,1.2,(.1,-.2,.25));view=Viewport(0,0,100,100,0,1);vp=matrix(translation=(0,0,.5))
