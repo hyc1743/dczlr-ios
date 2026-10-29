@@ -4,6 +4,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <ImageIO/ImageIO.h>
 #include "dc_save.h"
+#include "dc_story.h"
 #include <math.h>
 #include <string.h>
 
@@ -117,6 +118,28 @@ static uint32_t saveDword(const uint8_t *p) {
     BOOL _entered,_ready,_saveRequested,_saveDisabled;
     NSDictionary *_lastRenderCapture;
 }
+- (NSData *)compatibilitySlotFromExistingState {
+    NSString *saveDirectory=[_directory stringByAppendingPathComponent:@"save"];
+    NSData *flow=[NSData dataWithContentsOfFile:[saveDirectory stringByAppendingPathComponent:@"flow.state"]];
+    NSMutableData *raw=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
+    dc_save_slot_meta meta={0};BOOL haveRaw=NO;
+    if(flow.length>=13+DC_GAME_STATE_BYTES&&memcmp(flow.bytes,"PLFL",4)==0&&((const uint8_t *)flow.bytes)[4]==1) {
+        memcpy(&meta,(const uint8_t *)flow.bytes+5,sizeof(meta));
+        memcpy(raw.mutableBytes,(const uint8_t *)flow.bytes+13,DC_GAME_STATE_BYTES);haveRaw=YES;
+    }
+    if(!haveRaw) {
+        NSData *player=[NSData dataWithContentsOfFile:[saveDirectory stringByAppendingPathComponent:@"player.state"]];
+        if(player.length<DC_GAME_PLAYER_SAVE_BYTES+DC_STORY_SAVE_BYTES)return nil;
+        dc_story_state story;
+        if(dc_story_load((const uint8_t *)player.bytes+DC_GAME_PLAYER_SAVE_BYTES,player.length-DC_GAME_PLAYER_SAVE_BYTES,&story)!=DC_OK)return nil;
+        if(dc_game_state_init(raw.mutableBytes,raw.length)!=DC_OK)return nil;
+        for(unsigned i=0;i<DC_STORY_STAGES;++i){size_t base=(size_t)i*0x2198;uint8_t *p=raw.mutableBytes;p[base]=story.stages[i].flag_a;p[base+1]=story.stages[i].flag_b;p[base+0x23]=(uint8_t)story.stages[i].progress;}
+        meta=(dc_save_slot_meta){(uint8_t)story.chapter,3,3,(uint8_t)story.map,(uint8_t)story.stage,255,255,254};
+    }
+    NSMutableData *slot=[NSMutableData dataWithLength:DC_SAVE_SLOT_BYTES];
+    if(dc_save_slot_encode(raw.bytes,raw.length,&meta,slot.mutableBytes,slot.length)!=DC_OK)return nil;
+    return slot;
+}
 - (uint32_t)action {return _action;}
 - (uint32_t)selectedSlot {return _page*10+_row;}
 - (BOOL)saveRequested {return _saveRequested;}
@@ -215,6 +238,16 @@ static uint32_t saveDword(const uint8_t *p) {
             }
         }
         [slots addObject:entry];
+    }
+    BOOL anyValid=NO;for(NSDictionary *entry in slots)if([entry[@"data"] length]){anyValid=YES;break;}
+    if(!anyValid) {
+        NSData *compatibility=[self compatibilitySlotFromExistingState];
+        if(compatibility) {
+            NSMutableData *decoded=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];dc_save_slot_meta meta={0};
+            if(dc_save_slot_decode(compatibility.bytes,compatibility.length,decoded.mutableBytes,decoded.length,&meta)==DC_OK) {
+                NSMutableDictionary *entry=[slots[0] mutableCopy];entry[@"data"]=compatibility;entry[@"prefix"]=[NSData dataWithBytes:decoded.bytes length:DC_SAVE_RECORD_BYTES];entry[@"chapter"]=@(meta.chapter);entry[@"complete"]=@NO;slots[0]=entry;
+            }
+        }
     }
     _slots=slots;
 }
