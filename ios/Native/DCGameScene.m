@@ -231,23 +231,6 @@ static void freeMorphCaches(dc_game_model *slot) {
         [self queueCharacterVoice:stem];
     }
 }
-- (NSString *)updateWatchAuxiliaryForClip:(uint32_t)clip dragging:(BOOL)dragging part:(int32_t)part tick:(uint32_t)tick {
-    if(_sceneType!=5)return nil;
-    BOOL showHands=(clip>1u && clip<230u);
-    uint32_t handClip=dragging?19u:18u;
-    for(unsigned auxiliary=0;auxiliary<2;++auxiliary) {
-        if(!_watchAuxiliary[auxiliary].model)continue;
-        BOOL visible=showHands && (auxiliary==0 || part==1 || part==3 || part==5);
-        if(dc_model_hide_node(_watchAuxiliary[auxiliary].model,0,visible?0:1)!=DC_OK)
-            return @"Original watch auxiliary visibility update failed";
-        if(visible) {
-            dc_animation_state handAnim={0};
-            if(dc_model_get_animation(_watchAuxiliary[auxiliary].model,&handAnim)==DC_OK && handAnim.current!=handClip)
-                dc_model_request(_watchAuxiliary[auxiliary].model,handClip,tick);
-        }
-    }
-    return nil;
-}
 - (BOOL)actorSkinAdvanced { return _actorSkinAdvanced; }
 - (BOOL)controllerMovementAdvanced { return _controllerMovementAdvanced; }
 - (BOOL)controllerCameraAdvanced { return _controllerCameraAdvanced; }
@@ -296,8 +279,10 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (NSString *)applyMotionEvent:(dc_scene_motion_event)event tick:(uint32_t)tick {
     if(_sceneType==5&&event.request_clip!=DC_SCENE_MOTION_NO_REQUEST) {
-        NSString *auxError=[self updateWatchAuxiliaryForClip:event.request_clip dragging:_watchDragging part:_watchPart tick:tick];
-        if(auxError)return auxError;
+        uint32_t hidden=(event.request_clip<0xf5u)?1:0;
+        for(unsigned auxiliary=0;auxiliary<2;++auxiliary)if(_watchAuxiliary[auxiliary].model)
+            if(dc_model_hide_node(_watchAuxiliary[auxiliary].model,0,hidden)!=DC_OK)
+                return @"Original watch auxiliary visibility update failed";
     }
     if(event.request_chain_from!=DC_SCENE_MOTION_NO_REQUEST &&
        event.request_chain_to!=DC_SCENE_MOTION_NO_REQUEST) {
@@ -417,10 +402,14 @@ static void freeMorphCaches(dc_game_model *slot) {
         return nil;
     }
     if(_contextMenu.icon==1) {
+        BOOL touchExercise=[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"];
         if(_sceneType==4&&_stageProgress>0&&_contextMenu.count>2) {
             if(_characterAction.exit_pending||_characterAction.transition_pending)return nil;
             ++_characterActionCount;
             if(selection==0) {
+                _scene4HitPart=2;_scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
+                dc_model_set_chain(_actor.model,6,7);
+                dc_model_set_chain(_actor.model,7,1);
                 dc_model_set_loop(_actor.model,5,-1);
                 if(dc_model_request(_actor.model,2,_lastTick)!=DC_OK)return @"Original character animation request failed";
                 ++_characterAnimationStarts;
@@ -428,6 +417,9 @@ static void freeMorphCaches(dc_game_model *slot) {
                 [self queueCyclicReactionVoiceForScene:4 climax:NO];
                 return nil;
             } else if(selection==1) {
+                _scene4HitPart=5;_scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
+                dc_model_set_chain(_actor.model,6,7);
+                dc_model_set_chain(_actor.model,7,1);
                 dc_model_set_loop(_actor.model,5,-1);
                 if(dc_model_request(_actor.model,5,_lastTick)!=DC_OK)return @"Original character animation request failed";
                 ++_characterAnimationStarts;
@@ -435,6 +427,7 @@ static void freeMorphCaches(dc_game_model *slot) {
                 [self queueCyclicReactionVoiceForScene:4 climax:NO];
                 return nil;
             } else if(selection==2) {
+                _scene4HitPart=-1;_scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
                 dc_model_set_chain(_actor.model,6,7);
                 dc_model_set_chain(_actor.model,7,1);
                 if(dc_model_request(_actor.model,6,_lastTick)!=DC_OK)return @"Original character animation request failed";
@@ -445,17 +438,33 @@ static void freeMorphCaches(dc_game_model *slot) {
                 _player.interaction_count=_interactionCount;_playerSaveDirty=YES;
                 return nil;
             } else if(selection==3) {
+                _scene4HitPart=-1;_scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
                 if(dc_model_request(_actor.model,1,_lastTick)!=DC_OK)return @"Original character animation request failed";
                 ++_characterAnimationStarts;
                 return nil;
             } else if(selection==4) {
+                _scene4HitPart=-1;_scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
                 _characterAction.exit_pending=1;
                 _exitSoundStartTick=_lastTick;
                 _pendingEffectSlot=28;_hasPendingEffect=YES;
                 return nil;
             }
         }
-        if(_sceneType==5&&selection==3) {
+        if(_sceneType==4&&_stageProgress==0&&!touchExercise&&selection==0) {
+            if(_characterAction.exit_pending||_characterAction.transition_pending)return nil;
+            ++_characterActionCount;
+            _scene4HitPart=2;_scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
+            dc_model_set_chain(_actor.model,6,7);
+            dc_model_set_chain(_actor.model,7,1);
+            dc_model_set_loop(_actor.model,5,-1);
+            if(dc_model_request(_actor.model,2,_lastTick)!=DC_OK)return @"Original character animation request failed";
+            ++_characterAnimationStarts;
+            _pendingEffectSlot=(_interactionCount==0)?22u:3u;_hasPendingEffect=YES;
+            if(_interactionCount==0&&!_pendingVoiceName)[self queueCharacterVoice:@"st001_01.wav"];
+            else [self queueCyclicReactionVoiceForScene:4 climax:NO];
+            return nil;
+        }
+        if((_sceneType==5&&selection==3)||(_sceneType==6&&selection==2)) {
             if(_characterAction.exit_pending||_characterAction.transition_pending)return nil;
             ++_characterActionCount;
             _characterAction.exit_pending=1;
@@ -468,11 +477,11 @@ static void freeMorphCaches(dc_game_model *slot) {
                 dc_animation_state animation={0};
                 if(dc_model_get_animation(_actor.model,&animation)==DC_OK&&animation.current<=0xffu)
                     _motionState.clip=animation.current;
-                if(_motionState.clip==0x1a&&selection<2) {
+                if((_motionState.clip>=10&&_motionState.clip<=26)&&selection<2) {
                     ++_characterActionCount;
                     uint32_t targetClip=(selection==0)?27u:30u;
                     _motionState.clip=targetClip;_motionState.phase=2;_motionState.pointer_mode=0;
-                    _nightExcitement=0.f;_nightDragging=NO;
+                    _nightExcitement=0.f;_nightDragging=NO;_actorPlaybackSpeed=1.0f;
                     _pendingEffectSlot=15;_hasPendingEffect=YES;
                     [self queueCyclicReactionVoiceForScene:6 climax:YES];
                     ++_interactionCount;_interactionCompleted=YES;
@@ -480,10 +489,11 @@ static void freeMorphCaches(dc_game_model *slot) {
                     dc_scene_motion_event ev={.request_clip=targetClip,.request_chain_from=DC_SCENE_MOTION_NO_REQUEST,.request_chain_to=DC_SCENE_MOTION_NO_REQUEST};
                     return [self applyMotionEvent:ev tick:_lastTick];
                 }
-                if(_motionState.clip==0x27&&selection<2) {
+                if((_motionState.clip>=27&&_motionState.clip<=54)&&selection<2) {
                     ++_characterActionCount;
                     uint32_t targetClip=(selection==0)?40u:49u;
                     _motionState.clip=targetClip;_motionState.phase=3;_motionState.pointer_mode=0;
+                    _actorPlaybackSpeed=1.0f;
                     _pendingEffectSlot=7;_hasPendingEffect=YES;
                     [self queueCyclicReactionVoiceForScene:6 climax:NO];
                     dc_scene_motion_event ev={.request_clip=targetClip,.request_chain_from=DC_SCENE_MOTION_NO_REQUEST,.request_chain_to=DC_SCENE_MOTION_NO_REQUEST};
@@ -952,17 +962,21 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_camera_orbit orbit=[self activeCameraOrbit];dc_camera_lens lens={.3f,.5f,10000,1024,768};dc_camera_matrices camera;
     dc_viewport viewport={0,0,1024,768,0,1};
     if(dc_camera_build(&orbit,&lens,&camera)!=DC_OK)return -1;
-    dc_xx_info info;if(dc_model_get_info(_actor.model,&info)!=DC_OK)return -1;
+    dc_model *models[2]={_actor.model,_face.model};
     float minX=1024.f,minY=768.f,maxX=0,maxY=0;BOOL found=NO;
-    for(uint32_t meshIndex=0;meshIndex<info.submeshes;++meshIndex) {
-        uint32_t visible=0;dc_xx_submesh mesh;size_t count=0;
-        if(dc_model_mesh(_actor.model,meshIndex,&mesh)!=DC_OK||
-           dc_model_mesh_visible(_actor.model,meshIndex,&visible)!=DC_OK||!visible)continue;
-        if(dc_model_project_clipped(_actor.model,meshIndex,&camera.view_projection,&viewport,0xffffffff,NULL,0,&count)!=DC_OK||!count)continue;
-        dc_sprite_vertex *vertices=calloc(count,sizeof(*vertices));if(!vertices)continue;
-        if(dc_model_project_clipped(_actor.model,meshIndex,&camera.view_projection,&viewport,0xffffffff,vertices,count,&count)==DC_OK)
-            for(size_t i=0;i<count;++i){minX=MIN(minX,vertices[i].x);minY=MIN(minY,vertices[i].y);maxX=MAX(maxX,vertices[i].x);maxY=MAX(maxY,vertices[i].y);found=YES;}
-        free(vertices);
+    for(unsigned m=0;m<2;++m) {
+        if(!models[m])continue;
+        dc_xx_info info;if(dc_model_get_info(models[m],&info)!=DC_OK)continue;
+        for(uint32_t meshIndex=0;meshIndex<info.submeshes;++meshIndex) {
+            uint32_t visible=0;dc_xx_submesh mesh;size_t count=0;
+            if(dc_model_mesh(models[m],meshIndex,&mesh)!=DC_OK||
+               dc_model_mesh_visible(models[m],meshIndex,&visible)!=DC_OK||!visible)continue;
+            if(dc_model_project_clipped(models[m],meshIndex,&camera.view_projection,&viewport,0xffffffff,NULL,0,&count)!=DC_OK||!count)continue;
+            dc_sprite_vertex *vertices=calloc(count,sizeof(*vertices));if(!vertices)continue;
+            if(dc_model_project_clipped(models[m],meshIndex,&camera.view_projection,&viewport,0xffffffff,vertices,count,&count)==DC_OK)
+                for(size_t i=0;i<count;++i){minX=MIN(minX,vertices[i].x);minY=MIN(minY,vertices[i].y);maxX=MAX(maxX,vertices[i].x);maxY=MAX(maxY,vertices[i].y);found=YES;}
+            free(vertices);
+        }
     }
     if(!found||px<minX||px>maxX||py<minY||py>maxY)return -1;
     float heightRange=fmaxf(1.f,maxY-minY);int32_t index=(int32_t)floorf((py-minY)/heightRange*7.f);
@@ -1671,7 +1685,10 @@ static void freeMorphCaches(dc_game_model *slot) {
         BOOL inside=mx>=0&&mx<=352&&my>=504&&my<=768;
         BOOL press=pcInput.mouse[0]==3||pcInput.mouse[1]==3||pcInput.mouse[2]==3;
         BOOL iconRegion=mx>=880&&my>=300&&my<=768;
-        int32_t bodyHit=(!_contextOpen&&!iconRegion&&!(_secondaryVisible&&inside)&&!pcCtrl&&(pcInput.mouse[0]==3))?[self motionHitIndexAtX:x y:y width:width height:height]:-1;
+        dc_animation_state scene4Anim={0};
+        if(_sceneType==4&&_actor.model)dc_model_get_animation(_actor.model,&scene4Anim);
+        BOOL scene4ActivePose=(_sceneType==4&&(_scene4HitPart>=0||(scene4Anim.current>=2&&scene4Anim.current<=5)));
+        int32_t bodyHit=(!_contextOpen&&!iconRegion&&!(_secondaryVisible&&inside)&&!pcCtrl&&((pcInput.mouse[0]&1)||pcInput.mouse[0]==3||scene4ActivePose))?[self motionHitIndexAtX:x y:y width:width height:height]:-1;
         if(!held&&!pcInput.wheel)_pointerCameraOwner=0;
         if(!_pointerCameraOwner&&!_contextOpen&&(press||pcInput.wheel)) {
             /* Watch/night left presses belong to the original actor-motion
@@ -1682,7 +1699,7 @@ static void freeMorphCaches(dc_game_model *slot) {
             else if(iconRegion&&(pcInput.mouse[0]||pcInput.mouse[1]))
                 _pointerCameraOwner=1;
             else if(((_sceneType==5||_sceneType==6)&&!pcCtrl&&!pcInput.mouse[1]&&!pcInput.wheel)||
-                    (_sceneType==4&&!touchExercise&&!pcCtrl&&(bodyHit>=0||_scene4Dragging)&&!pcInput.mouse[1]&&!pcInput.wheel))
+                    (_sceneType==4&&!touchExercise&&!pcCtrl&&(bodyHit>=0||_scene4Dragging||scene4ActivePose)&&!pcInput.mouse[1]&&!pcInput.wheel))
                 _pointerCameraOwner=0;
             else
                 _pointerCameraOwner=3;
@@ -1723,52 +1740,55 @@ static void freeMorphCaches(dc_game_model *slot) {
             }
         }
         if(_sceneType==4&&!touchExercise&&!_contextOpen&&!_characterAction.exit_pending&&!_characterAction.transition_pending&&_pointerCameraOwner==0) {
+            float dragAmount=(!iconRegion&&!(_secondaryVisible&&inside)&&!pcCtrl&&!pcInput.mouse[1])?hypotf((float)pcInput.dx,(float)pcInput.dy):0.f;
             if(pcInput.mouse[0]==3&&bodyHit>=0) {
                 _scene4Dragging=YES;_scene4HitPart=bodyHit;
                 dc_model_set_chain(_actor.model,6,7);
                 dc_model_set_chain(_actor.model,7,1);
                 dc_model_set_loop(_actor.model,5,-1);
-                uint32_t entryClip=(bodyHit<=2)?2u:((bodyHit==3)?4u:3u);
-                if(dc_model_request(_actor.model,entryClip,tick)!=DC_OK)return @"Original character animation request failed";
-                ++_characterAnimationStarts;++_characterActionCount;
+                if(scene4Anim.current==1||scene4Anim.current>=6) {
+                    uint32_t entryClip=(bodyHit<=2)?2u:((bodyHit==3)?4u:3u);
+                    if(dc_model_request(_actor.model,entryClip,tick)!=DC_OK)return @"Original character animation request failed";
+                    ++_characterAnimationStarts;
+                }
+                ++_characterActionCount;
                 _pendingEffectSlot=(_stageProgress==0&&_interactionCount==0)?22u:3u;_hasPendingEffect=YES;
                 if(_stageProgress==0&&_interactionCount==0&&!_pendingVoiceName)[self queueCharacterVoice:@"st001_01.wav"];
                 else [self queueCyclicReactionVoiceForScene:4 climax:NO];
-            } else if(_scene4Dragging&&(pcInput.mouse[0]&1)) {
-                float dragAmount=hypotf((float)pcInput.dx,(float)pcInput.dy);
-                if(dragAmount>0.f) {
-                    _actorPlaybackSpeed=fminf(2.4f,1.0f+dragAmount*0.045f);
-                    _scene4Excitement=fminf(100.f,_scene4Excitement+dragAmount*0.45f);
-                    _scene4FeedbackStep+=dragAmount;
-                    dc_animation_state anim={0};
-                    if(dc_model_get_animation(_actor.model,&anim)==DC_OK&&(anim.current==1||anim.current==7)) {
-                        dc_model_set_loop(_actor.model,5,-1);
-                        dc_model_request(_actor.model,5,tick);
-                    }
-                    if(_scene4FeedbackStep>=42.f) {
-                        _scene4FeedbackStep=0.f;
-                        _pendingEffectSlot=4u+(_voiceSequenceIndex%3u);_hasPendingEffect=YES;
-                        [self queueCyclicReactionVoiceForScene:4 climax:NO];
-                    }
-                    if(_scene4Excitement>=25.f&&_stageProgress<1)_stageProgress=1;
-                    if(_scene4Excitement>=60.f&&_stageProgress<2)_stageProgress=2;
-                    if(_scene4Excitement>=99.f) {
-                        _scene4Excitement=0.f;_scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
-                        dc_model_set_chain(_actor.model,6,7);
-                        dc_model_set_chain(_actor.model,7,1);
-                        if(dc_model_request(_actor.model,6,tick)!=DC_OK)return @"Original character animation request failed";
-                        ++_characterAnimationStarts;
-                        _pendingEffectSlot=15u;_hasPendingEffect=YES;
-                        [self queueCyclicReactionVoiceForScene:4 climax:YES];
-                        ++_interactionCount;_interactionCompleted=YES;
-                        _player.interaction_count=_interactionCount;_playerSaveDirty=YES;
-                    }
+            }
+            BOOL canStroke=((pcInput.mouse[0]&1)&&(_scene4Dragging||bodyHit>=0||scene4ActivePose))||(scene4ActivePose&&bodyHit>=0&&dragAmount>0.f);
+            if(canStroke&&dragAmount>0.f) {
+                _scene4Dragging=YES;
+                if(_scene4HitPart<0)_scene4HitPart=(bodyHit>=0)?bodyHit:2;
+                _actorPlaybackSpeed=fminf(2.4f,1.0f+dragAmount*0.045f);
+                _scene4Excitement=fminf(100.f,_scene4Excitement+dragAmount*0.45f);
+                _scene4FeedbackStep+=dragAmount;
+                dc_animation_state anim={0};
+                if(dc_model_get_animation(_actor.model,&anim)==DC_OK&&(anim.current==1||anim.current==7)) {
+                    dc_model_set_loop(_actor.model,5,-1);
+                    dc_model_request(_actor.model,5,tick);
                 }
-            } else if(_scene4Dragging&&!(pcInput.mouse[0]&1)) {
-                _scene4Dragging=NO;_actorPlaybackSpeed=1.0f;
-                dc_model_set_chain(_actor.model,6,7);
-                dc_model_set_chain(_actor.model,7,1);
-                dc_model_set_loop(_actor.model,5,1);
+                if(_scene4FeedbackStep>=36.f) {
+                    _scene4FeedbackStep=0.f;
+                    _pendingEffectSlot=4u+(_voiceSequenceIndex%3u);_hasPendingEffect=YES;
+                    [self queueCyclicReactionVoiceForScene:4 climax:NO];
+                }
+                if(_scene4Excitement>=25.f&&_stageProgress<1)_stageProgress=1;
+                if(_scene4Excitement>=60.f&&_stageProgress<2)_stageProgress=2;
+                if(_scene4Excitement>=99.f) {
+                    _scene4Excitement=0.f;_scene4Dragging=NO;_scene4HitPart=-1;_actorPlaybackSpeed=1.0f;
+                    dc_model_set_chain(_actor.model,6,7);
+                    dc_model_set_chain(_actor.model,7,1);
+                    if(dc_model_request(_actor.model,6,tick)!=DC_OK)return @"Original character animation request failed";
+                    ++_characterAnimationStarts;
+                    _pendingEffectSlot=15u;_hasPendingEffect=YES;
+                    [self queueCyclicReactionVoiceForScene:4 climax:YES];
+                    ++_interactionCount;_interactionCompleted=YES;
+                    _player.interaction_count=_interactionCount;_playerSaveDirty=YES;
+                }
+            } else if(dragAmount==0.f) {
+                if(!(pcInput.mouse[0]&1))_scene4Dragging=NO;
+                _actorPlaybackSpeed=(scene4Anim.current==5)?0.35f:1.0f;
             }
         }
     }
@@ -1780,73 +1800,63 @@ static void freeMorphCaches(dc_game_model *slot) {
         static const uint32_t kWatchClimaxClips[7]={160,165,170,175,180,185,189};
         static const uint32_t kWatchClimaxEndClips[7]={164,169,174,179,184,188,192};
         dc_animation_state anim={0};
-        if(dc_model_get_animation(_actor.model,&anim)==DC_OK) {
+        if(dc_model_get_animation(_actor.model,&anim)==DC_OK)
             _motionState.clip=anim.current;
-            NSString *auxError=[self updateWatchAuxiliaryForClip:anim.current dragging:_watchDragging part:_watchPart tick:tick];
-            if(auxError)return auxError;
-        }
-        if(pcInput.mouse[0]==3&&_pointerCameraOwner==0) {
-            int32_t hit=[self motionHitIndexAtX:x y:y width:width height:height];
-            if(hit>=0&&hit<7&&(_watchPart!=hit||_motionState.clip==1||_motionState.clip>=230)) {
+        int32_t hit=(_pointerCameraOwner==0&&!pcCtrl&&!pcInput.mouse[1])?[self motionHitIndexAtX:x y:y width:width height:height]:-1;
+        if((pcInput.mouse[0]==3||((pcInput.mouse[0]&1)&&_watchPart<0))&&_pointerCameraOwner==0) {
+            if(hit>=0&&hit<7&&(_watchPart<0||_motionState.clip==1||_motionState.clip>=230||(abs(hit-_watchPart)>=2&&!_watchDragging))) {
                 _watchPart=hit;_motionState.phase=2;_watchDragging=NO;
                 uint32_t entryClip=(uint32_t)hit+2u;
                 _motionState.clip=entryClip;
                 if(dc_model_request(_actor.model,entryClip,tick)!=DC_OK)return @"Original watch animation request failed";
                 ++_characterAnimationStarts;
-                NSString *auxError=[self updateWatchAuxiliaryForClip:entryClip dragging:NO part:_watchPart tick:tick];
-                if(auxError)return auxError;
                 _pendingEffectSlot=3u;_hasPendingEffect=YES;
                 [self queueCyclicReactionVoiceForScene:5 climax:NO];
             }
         }
-        if(_watchPart>=0&&_watchPart<7&&(pcInput.mouse[0]&1)&&_pointerCameraOwner==0) {
-            float dragAmount=hypotf((float)pcInput.dx,(float)pcInput.dy);
-            if(dragAmount>0.f) {
-                _actorPlaybackSpeed=fminf(2.4f,1.0f+dragAmount*0.045f);
-                _watchTouchGauge=fminf(100.f,_watchTouchGauge+dragAmount*0.45f);
-                _watchFeedbackStep+=dragAmount;
-                _motionState.metric=fminf(10000.f,_motionState.metric+dragAmount);
-                _motionState.average_motion=.8f*_motionState.average_motion+.2f*dragAmount;
-                if(_motionState.sample_count<UINT32_MAX)++_motionState.sample_count;
-                if(!_watchDragging) {
-                    _watchDragging=YES;
-                    uint32_t dragClip=kWatchDragEntryClips[_watchPart];
-                    _motionState.clip=dragClip;
-                    if(dc_model_request(_actor.model,dragClip,tick)!=DC_OK)return @"Original watch drag animation request failed";
-                    ++_characterAnimationStarts;
-                    NSString *auxError=[self updateWatchAuxiliaryForClip:dragClip dragging:YES part:_watchPart tick:tick];
-                    if(auxError)return auxError;
-                }
-                if(_watchFeedbackStep>=40.f) {
-                    _watchFeedbackStep=0.f;
-                    _pendingEffectSlot=4u+(_voiceSequenceIndex%3u);_hasPendingEffect=YES;
-                    [self queueCyclicReactionVoiceForScene:5 climax:NO];
-                }
-                if(_watchTouchGauge>=99.f) {
-                    _watchTouchGauge=0.f;_watchDragging=NO;_actorPlaybackSpeed=1.0f;
-                    uint32_t climaxClip=kWatchClimaxClips[_watchPart];
-                    uint32_t climaxEnd=kWatchClimaxEndClips[_watchPart];
-                    dc_model_set_chain(_actor.model,climaxEnd,(int32_t)kWatchHoldClips[_watchPart]);
-                    _motionState.clip=climaxClip;
-                    if(dc_model_request(_actor.model,climaxClip,tick)!=DC_OK)return @"Original watch climax animation request failed";
-                    ++_characterAnimationStarts;
-                    NSString *auxError=[self updateWatchAuxiliaryForClip:245u dragging:NO part:_watchPart tick:tick];
-                    if(auxError)return auxError;
-                    _pendingEffectSlot=15u;_hasPendingEffect=YES;
-                    [self queueCyclicReactionVoiceForScene:5 climax:YES];
-                    ++_interactionCount;_interactionCompleted=YES;
-                    _player.interaction_count=_interactionCount;_playerSaveDirty=YES;
-                    if(_stageProgress<2)++_stageProgress;
-                }
+        float dragAmount=(_pointerCameraOwner==0&&!pcCtrl&&!pcInput.mouse[1])?hypotf((float)pcInput.dx,(float)pcInput.dy):0.f;
+        BOOL watchCanDrag=_watchPart>=0&&_watchPart<7&&_pointerCameraOwner==0&&((pcInput.mouse[0]&1)||(hit>=0&&dragAmount>0.f));
+        if(watchCanDrag&&dragAmount>0.f) {
+            _actorPlaybackSpeed=fminf(2.4f,1.0f+dragAmount*0.045f);
+            _watchTouchGauge=fminf(100.f,_watchTouchGauge+dragAmount*0.45f);
+            _watchFeedbackStep+=dragAmount;
+            _motionState.metric=fminf(10000.f,_motionState.metric+dragAmount);
+            _motionState.average_motion=.8f*_motionState.average_motion+.2f*dragAmount;
+            if(_motionState.sample_count<UINT32_MAX)++_motionState.sample_count;
+            if(!_watchDragging) {
+                _watchDragging=YES;
+                uint32_t dragClip=kWatchDragEntryClips[_watchPart];
+                _motionState.clip=dragClip;
+                if(dc_model_request(_actor.model,dragClip,tick)!=DC_OK)return @"Original watch drag animation request failed";
+                ++_characterAnimationStarts;
             }
-        } else if(_watchDragging&&!(pcInput.mouse[0]&1)) {
+            if(_watchFeedbackStep>=36.f) {
+                _watchFeedbackStep=0.f;
+                _pendingEffectSlot=4u+(_voiceSequenceIndex%3u);_hasPendingEffect=YES;
+                [self queueCyclicReactionVoiceForScene:5 climax:NO];
+            }
+            if(_watchTouchGauge>=35.f&&_stageProgress<1)_stageProgress=1;
+            if(_watchTouchGauge>=70.f&&_stageProgress<2)_stageProgress=2;
+            if(_watchTouchGauge>=99.f) {
+                _watchTouchGauge=0.f;_watchDragging=NO;_actorPlaybackSpeed=1.0f;
+                uint32_t climaxClip=kWatchClimaxClips[_watchPart];
+                uint32_t climaxEnd=kWatchClimaxEndClips[_watchPart];
+                dc_model_set_chain(_actor.model,climaxEnd,(int32_t)kWatchHoldClips[_watchPart]);
+                _motionState.clip=climaxClip;
+                if(dc_model_request(_actor.model,climaxClip,tick)!=DC_OK)return @"Original watch climax animation request failed";
+                ++_characterAnimationStarts;
+                _pendingEffectSlot=15u;_hasPendingEffect=YES;
+                [self queueCyclicReactionVoiceForScene:5 climax:YES];
+                ++_interactionCount;_interactionCompleted=YES;
+                _player.interaction_count=_interactionCount;_playerSaveDirty=YES;
+                if(_stageProgress<2)++_stageProgress;
+            }
+        } else if(_watchDragging&&!(pcInput.mouse[0]&1)&&dragAmount==0.f) {
             _watchDragging=NO;_actorPlaybackSpeed=1.0f;
             if(_watchPart>=0&&_watchPart<7) {
                 uint32_t relClip=kWatchReleaseClips[_watchPart];
                 _motionState.clip=relClip;
                 dc_model_request(_actor.model,relClip,tick);
-                NSString *auxError=[self updateWatchAuxiliaryForClip:relClip dragging:NO part:_watchPart tick:tick];
-                if(auxError)return auxError;
             }
         }
     } else if(_sceneType==6&&_motionStateInitialized&&!_contextOpen&&
@@ -1855,7 +1865,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(dc_model_get_animation(_actor.model,&animation)==DC_OK&&animation.current<=0xffu)
             _motionState.clip=animation.current;
         uint32_t clip=_motionState.clip;
-        if(clip==1&&pcInput.mouse[0]==3&&_pointerCameraOwner==0&&[self motionHitIndexAtX:x y:y width:width height:height]>=0) {
+        int32_t hit=(_pointerCameraOwner==0&&!pcCtrl&&!pcInput.mouse[1])?[self motionHitIndexAtX:x y:y width:width height:height]:-1;
+        if(clip==1&&pcInput.mouse[0]==3&&_pointerCameraOwner==0&&hit>=0) {
             dc_scene_motion_event motionEvent;
             if(dc_scene_motion_context(&_motionState,0,&motionEvent)==DC_OK) {
                 ++_characterActionCount;
@@ -1869,8 +1880,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         BOOL inPos1=(clip>=10&&clip<=23);
         BOOL inPos2=(clip>=39&&clip<=53);
         if((inPos1||inPos2)&&_pointerCameraOwner==0) {
-            float dragAmount=(pcInput.mouse[0]&1)?hypotf((float)pcInput.dx,(float)pcInput.dy):0.f;
-            if((pcInput.mouse[0]&1)&&dragAmount>0.f) {
+            float dragAmount=(!pcCtrl&&!pcInput.mouse[1])?hypotf((float)pcInput.dx,(float)pcInput.dy):0.f;
+            if(((pcInput.mouse[0]&1)||hit>=0)&&dragAmount>0.f) {
                 _nightDragging=YES;
                 _actorPlaybackSpeed=fminf(2.4f,1.0f+dragAmount*0.045f);
                 _nightExcitement=fminf(100.f,_nightExcitement+fminf(dragAmount,6.f)*0.65f);
@@ -1902,7 +1913,7 @@ static void freeMorphCaches(dc_game_model *slot) {
                         _player.interaction_count=_interactionCount;_playerSaveDirty=YES;
                     }
                 }
-            } else if(_nightDragging&&!(pcInput.mouse[0]&1)) {
+            } else if(_nightDragging&&!(pcInput.mouse[0]&1)&&dragAmount==0.f) {
                 _nightDragging=NO;_actorPlaybackSpeed=1.0f;
                 uint32_t stopClip=inPos2?44u:15u;
                 _motionState.clip=stopClip;
@@ -1943,7 +1954,7 @@ static void freeMorphCaches(dc_game_model *slot) {
                 }
                 dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
                 uint32_t contextSceneType=(_mainIconHover>=3&&_sceneType>=4&&_sceneType<=6)?4:_sceneType;
-                dc_scene_context_input input={.scene_type=contextSceneType,.icon=(uint32_t)_mainIconHover,.stage_progress=_mainIconHover==1?0:_stageProgress,
+                dc_scene_context_input input={.scene_type=contextSceneType,.icon=(uint32_t)_mainIconHover,.stage_progress=_mainIconHover==1?0:MIN(_stageProgress,2u),
                     .animation=animation.current,.camera_mode=_primaryCameraMode,.secondary_camera_mode=_secondaryCameraMode,.x=px,.y=py};
                 dc_status status=dc_scene_context_build(&input,&_contextMenu);
                 if(status!=DC_OK&&status!=DC_NOT_FOUND)return @"Scene context profile failed";
@@ -1980,7 +1991,8 @@ static void freeMorphCaches(dc_game_model *slot) {
                     _contextOpen=YES;++_contextOpens;
                     /* Original update dispatches the newly opened menu in
                      * the same frame, including simultaneous mouse buttons. */
-                    NSString *error=[self stepContextAtX:px y:py left:left right:pcInput.mouse[1]];if(error)return error;
+                    uint32_t openLeft=(pcInput.mouse[1]==3)?left:0u;
+                    NSString *error=[self stepContextAtX:px y:py left:openLeft right:pcInput.mouse[1]];if(error)return error;
 #if DEBUG
                     if(_contextOpen&&_contextOpens==1&&[NSProcessInfo.processInfo.environment[@"PORTLAB_EXERCISE_TOUCH_CONTROLS"] isEqualToString:@"1"])
                         [self requestRenderCapture:@"gameplay-context-native.png"];
