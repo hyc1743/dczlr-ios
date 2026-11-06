@@ -142,6 +142,16 @@ class NativeModelTests(unittest.TestCase):
         visible=C.c_uint32(123);self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,0)
         self.assertEqual(self.lib.dc_model_mesh_visible(model,1,C.byref(visible)),4);self.assertEqual(visible.value,0)
 
+    def test_serialized_render_hidden_node_byte_108_hides_mesh_until_revealed(self):
+        xx=diagnostic_fixture();data=bytearray(xx)
+        with XXModel(xx) as source:offset=source.at('node',1).matrix_offset+108
+        data[offset]=1;source_bytes=bytes(data);model=C.c_void_p()
+        self.assertEqual(self.lib.dc_model_open_static(source_bytes,len(source_bytes),C.byref(model)),0)
+        self.addCleanup(self.lib.dc_model_close,model);world=matrix();self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)
+        visible=C.c_uint32(123);self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,0)
+        self.assertEqual(self.lib.dc_model_hide_node(model,1,0),0)
+        self.assertEqual(self.lib.dc_model_mesh_visible(model,0,C.byref(visible)),0);self.assertEqual(visible.value,1)
+
     def test_outfit_parent_visibility_is_inherited_and_reversible(self):
         model,xx,xa=self.open();world=matrix();visible=C.c_uint32()
         self.assertEqual(self.lib.dc_model_tick(model,0,0,C.byref(world)),0)

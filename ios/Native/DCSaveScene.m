@@ -308,8 +308,8 @@ static uint32_t saveDword(const uint8_t *p) {
     dc_vk_sprite_item items[512]={0};size_t count=0;
     float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
 #define SAVE_APPEND(i,px,py) [self append:(i) x:(px) y:(py) scale:scale offsetX:ox offsetY:oy items:items count:&count]
-    /* Save_select follows the selected page (DAT_0084d07a), not the row. */
-    SAVE_APPEND(1,0,0);SAVE_APPEND(2,376,64+56*_page);
+    /* Save_select follows the selected row (DAT_0084d07a, 0x84b0d8+0x1fa2), while DAT_0084d07b is the page. */
+    SAVE_APPEND(1,0,0);SAVE_APPEND(2,376,64+56*_row);
     save_sprite pageSprite=saveSprites[5+_page];SAVE_APPEND(5+_page,pageSprite.x,pageSprite.y);
     if(_hoverButton>=0){save_sprite s=saveSprites[3+_hoverButton];SAVE_APPEND(3+(unsigned)_hoverButton,s.x,s.y);}
     if(_saveDisabled)SAVE_APPEND(72,512,632);

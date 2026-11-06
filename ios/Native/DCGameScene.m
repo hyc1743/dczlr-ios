@@ -103,8 +103,9 @@ static void freeMorphCaches(dc_game_model *slot) {
     dc_matrix _cameraBase,_actorWorld;
     float _cameraOriginX,_cameraOriginZ,_actorOriginX,_actorOriginY,_actorOriginZ;
     float _cameraDistance,_cameraHeight,_cameraPitch,_cameraYaw;
-    float _padCameraYaw,_padCameraPitch,_padCameraZoom;
+    float _padCameraYaw,_padCameraPitch,_padCameraZoom,_padCameraHeight;
     float _padCameraPanX,_padCameraPanZ;
+    BOOL _mapLayerVisible[3];
     uint32_t _cameraPreset;
     NSData *_cameraPresetData;
     dc_camera_orbit _secondaryCamera;
@@ -128,6 +129,9 @@ static void freeMorphCaches(dc_game_model *slot) {
     NSMutableDictionary<NSNumber *, NSValue *> *_cameraFallbacks;
     uint32_t _actorHeadNode;
     dc_matrix _faceBindInverse;
+    int8_t _eyeBlinkState[2];
+    uint32_t _eyeBlinkDuration[2],_eyeBlinkEndTick[2];
+    int32_t _eyeBlinkWaitTicks[2],_eyeBlinkHoldTicks[2];
     float _actorRootFloorOffset;
     BOOL _captureGameplayFrame,_capturedGameplayFrame;
     BOOL _framePresented,_resumedPlayer;
@@ -308,7 +312,21 @@ static void freeMorphCaches(dc_game_model *slot) {
         dc_model_shift_clock(_watchAuxiliary[auxiliary].model,elapsed);
     _lastTick=_characterLastTick=tick;_characterClockInitialized=YES;
     _exitSoundStartTick+=elapsed;_interactionStartTick+=elapsed;_interactionState.start_tick+=elapsed;
+    _eyeBlinkEndTick[0]+=elapsed;_eyeBlinkEndTick[1]+=elapsed;
     _pointerCameraOwner=0;_inputInitialized=NO;_previousGameMenuTouch=NO;
+}
+- (NSString *)applyMapLayerVisibility {
+    if(!_map.model)return nil;
+    for(unsigned i=0;i<3;++i){
+        uint32_t node=[self findNode:&_map name:[NSString stringWithFormat:@"m_Nn_level%u",i+1]];
+        if(node!=UINT32_MAX&&dc_model_hide_node(_map.model,node,!_mapLayerVisible[i])!=DC_OK)return @"Configured map visibility failed";
+    }
+    uint32_t fourth=[self findNode:&_map name:@"m_Nn_level4"];
+    if(fourth!=UINT32_MAX){
+        BOOL visible=((_mapSelector==0&&_sceneType==4)||(_mapSelector==1&&_sceneType==5))?_mapLayerVisible[2]:NO;
+        dc_model_hide_node(_map.model,fourth,!visible);
+    }
+    return nil;
 }
 - (NSString *)applyConfiguration:(const dc_config *)configuration {
     if(!configuration)return @"Missing scene configuration";
@@ -317,22 +335,16 @@ static void freeMorphCaches(dc_game_model *slot) {
     _secondaryVisible=_sceneType==4&&secondary!=0;_secondaryLimits.wheel_step=wheel;
     for(unsigned i=0;i<3;++i){
         uint32_t visible;dc_config_switch_value(configuration,i,&visible);
-        uint32_t node=[self findNode:&_map name:[NSString stringWithFormat:@"m_Nn_level%u",i+1]];
-        if(node!=UINT32_MAX&&dc_model_hide_node(_map.model,node,!visible)!=DC_OK)return @"Configured map visibility failed";
+        _mapLayerVisible[i]=visible!=0;
         float channel;dc_config_slider_value(configuration,7+i,&channel);_backgroundColor[i]=(uint8_t)channel;
     }
     _backgroundColor[3]=255;
-    uint32_t fourth=[self findNode:&_map name:@"m_Nn_level4"];
-    if(fourth!=UINT32_MAX){
-        uint32_t visible=0;
-        if((_mapSelector==0&&_sceneType==4)||(_mapSelector==1&&_sceneType==5))dc_config_switch_value(configuration,2,&visible);
-        dc_model_hide_node(_map.model,fourth,!visible);
-    }
-    return nil;
+    return [self applyMapLayerVisibility];
 }
 - (dc_camera_orbit)activeCameraOrbit {
+    float height=fmaxf(_secondaryLimits.low,fminf(_secondaryLimits.high,_cameraHeight+_padCameraHeight));
     dc_camera_orbit orbit={.base=_cameraBase,.stored_distance=_cameraDistance*expf(_padCameraZoom),
-        .height=_cameraHeight,.pitch=_cameraPitch+_padCameraPitch,.yaw=_cameraYaw+_padCameraYaw};
+        .height=height,.pitch=_cameraPitch+_padCameraPitch,.yaw=_cameraYaw+_padCameraYaw};
     orbit.base.values[12]=_cameraOriginX+_actor.world.values[12]-_actorOriginX+_padCameraPanX;
     orbit.base.values[13]=_cameraBase.values[13]+_actor.world.values[13]-_actorOriginY;
     orbit.base.values[14]=_cameraOriginZ+_actor.world.values[14]-_actorOriginZ+_padCameraPanZ;
@@ -345,7 +357,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     _cameraBase.values[14]-=_actor.world.values[14]-_actorOriginZ;
     _cameraOriginX=_cameraBase.values[12];_cameraOriginZ=_cameraBase.values[14];
     _cameraDistance=orbit.stored_distance;_cameraHeight=orbit.height;_cameraPitch=orbit.pitch;_cameraYaw=orbit.yaw;
-    _padCameraYaw=_padCameraPitch=_padCameraZoom=_padCameraPanX=_padCameraPanZ=0;
+    _padCameraYaw=_padCameraPitch=_padCameraZoom=_padCameraHeight=_padCameraPanX=_padCameraPanZ=0;
     _cameraAutoSelected=YES;
 }
 - (NSString *)applyContextSelection:(uint32_t)selection {
@@ -481,10 +493,11 @@ static void freeMorphCaches(dc_game_model *slot) {
      * variant 2 removes the bra, variant 3 removes the panties; any other
      * variant restores the default visibility. */
     [self applyInitialVisibility];
-    NSArray<NSString *> *top=@[@"a_On_wanpi_U",@"a_On_wanpiEHC"];
-    NSArray<NSString *> *skirt=@[@"a_On_skart_mae",@"a_On_skart_usiro",@"a_On_skartHA"];
-    NSArray<NSString *> *bra=@[@"a_On_buraH"];
-    NSArray<NSString *> *panty=@[@"a_On_pantuH"];
+    NSArray<NSString *> *top=@[@"a_On_wanpi",@"a_On_wanpi_U",@"a_On_wanpiEHC",@"a_On_ribon",@"a_On_belt",
+        @"b_Nn_sera_OBJ",@"c_On_uwagi"];
+    NSArray<NSString *> *skirt=@[@"a_On_skart",@"a_On_skart_mae",@"a_On_skart_usiro",@"a_On_skartHA"];
+    NSArray<NSString *> *bra=@[@"a_On_bura",@"a_On_buraH"];
+    NSArray<NSString *> *panty=@[@"a_On_pantu",@"a_On_pantuH"];
     if(variant>=1&&variant<=3) {
         for(NSString *name in top){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
     }
@@ -569,7 +582,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         ? @[@"b_On_kutu_L",@"b_On_kutu_R"]
         : @[@"a_On_sune_L",@"a_On_sune_R"];
     NSArray<NSString *> *faceNames=@[@"a_On_nekomimi",@"a_On_kuchsiru_F",@"a_On_kuchsiru_ita",
-        @"a_On_kuchsiru_o",@"a_On_namida",@"c_Nn_megane_ani"];
+        @"a_On_kuchsiru_o",@"a_On_namida",@"b_On_long",@"c_Nn_megane_ani"];
     for(NSString *name in actorNames){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
     if(_sceneType!=6)for(NSString *name in dayOnlyHidden){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
     for(NSString *name in legHidden){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
@@ -882,6 +895,7 @@ static void freeMorphCaches(dc_game_model *slot) {
      * wheel step4. Camera limits come from 00512cc0/00479490. */
     _secondaryVisible=_sceneType==4;
     _secondaryLimits=(dc_camera_pointer_limits){100,5,20,-30,4};
+    _mapLayerVisible[0]=_mapLayerVisible[1]=_mapLayerVisible[2]=YES;
     _backgroundColor[3]=255;
     _stageProgress=progress;_mainIconHover=-1;_lastContextSelection=-1;
     _sceneUITextures=[NSMutableDictionary dictionary];
@@ -1228,7 +1242,85 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(error)*error=@"Game morph runtime profile mismatch";
         freeMorphCaches(slot);return NO;
     }
+    dc_morph_controls controls={0};
+    if(dc_morph_get_controls(slot->morph,&controls)==DC_OK) {
+        controls.eyes.blend=1.0f;
+        controls.mouth.blend=1.0f;
+        controls.left_phase=controls.eye_max;
+        controls.right_phase=controls.eye_max;
+        dc_morph_set_controls(slot->morph,&controls);
+    }
+    if(slot==&_face) {
+        _eyeBlinkState[0]=_eyeBlinkState[1]=0;
+        _eyeBlinkWaitTicks[0]=_eyeBlinkWaitTicks[1]=15;
+        _eyeBlinkHoldTicks[0]=_eyeBlinkHoldTicks[1]=1;
+        _eyeBlinkDuration[0]=_eyeBlinkDuration[1]=0;
+        _eyeBlinkEndTick[0]=_eyeBlinkEndTick[1]=0;
+    }
     return YES;
+}
+
+- (void)updateFaceEyeBlinkAtTick:(uint32_t)tick {
+    if(!_face.morph)return;
+    dc_morph_controls controls={0};
+    if(dc_morph_get_controls(_face.morph,&controls)!=DC_OK)return;
+    if(_captureGameplayFrame||_requestedRenderCapture) {
+        controls.left_phase=controls.eye_max;
+        controls.right_phase=controls.eye_max;
+        dc_morph_set_controls(_face.morph,&controls);
+        return;
+    }
+    for(unsigned i=0;i<2;++i) {
+        uint32_t remaining=_eyeBlinkEndTick[i]>=tick?_eyeBlinkEndTick[i]-tick:0;
+        float phase=controls.eye_max;
+        float span=controls.eye_max-controls.eye_min;
+        if(_eyeBlinkState[i]==1) {
+            float ratio=_eyeBlinkDuration[i]?(float)remaining/(float)_eyeBlinkDuration[i]:0.f;
+            phase=controls.eye_min+ratio*span;
+            if(phase<controls.eye_min)phase=controls.eye_min;
+            else if(phase>controls.eye_max)phase=controls.eye_max;
+        } else if(_eyeBlinkState[i]<0) {
+            float ratio=_eyeBlinkDuration[i]?(float)remaining/(float)_eyeBlinkDuration[i]:0.f;
+            phase=controls.eye_min+(1.f-ratio)*span;
+            if(phase<controls.eye_min)phase=controls.eye_min;
+            else if(phase>controls.eye_max)phase=controls.eye_max;
+        }
+        if(i==0&&(controls.scheduler_mode==0||controls.scheduler_mode==2))controls.left_phase=phase;
+        else if(i==1&&(controls.scheduler_mode==0||controls.scheduler_mode==1))controls.right_phase=phase;
+    }
+    if(controls.link_eyes==1)controls.right_phase=controls.left_phase;
+    dc_morph_set_controls(_face.morph,&controls);
+    for(unsigned i=0;i<2;++i) {
+        if((controls.scheduler_mode==1&&i==0)||(controls.scheduler_mode==2&&i==1)||controls.scheduler_mode==3)continue;
+        if(_eyeBlinkEndTick[i]>=tick)continue;
+        if(_eyeBlinkState[i]==0) {
+            _eyeBlinkDuration[i]=150u+arc4random_uniform(50u);
+            _eyeBlinkEndTick[i]=tick+_eyeBlinkDuration[i];
+            if(--_eyeBlinkWaitTicks[i]<=0) {
+                _eyeBlinkWaitTicks[i]=(int32_t)arc4random_uniform(30u);
+                _eyeBlinkHoldTicks[i]=1+(int32_t)arc4random_uniform(3u);
+                _eyeBlinkState[i]=1;
+            }
+        } else if(_eyeBlinkState[i]==1) {
+            if(--_eyeBlinkHoldTicks[i]<=0) {
+                _eyeBlinkDuration[i]=150u+arc4random_uniform(50u);
+                _eyeBlinkEndTick[i]=tick+_eyeBlinkDuration[i];
+                _eyeBlinkHoldTicks[i]=1+(int32_t)arc4random_uniform(3u);
+                _eyeBlinkState[i]=-1;
+            }
+        } else {
+            _eyeBlinkDuration[i]=150u+arc4random_uniform(50u);
+            _eyeBlinkEndTick[i]=tick+_eyeBlinkDuration[i];
+            _eyeBlinkState[i]=0;
+        }
+    }
+    if(controls.link_eyes==1) {
+        _eyeBlinkDuration[1]=_eyeBlinkDuration[0];
+        _eyeBlinkEndTick[1]=_eyeBlinkEndTick[0];
+        _eyeBlinkWaitTicks[1]=_eyeBlinkWaitTicks[0];
+        _eyeBlinkHoldTicks[1]=_eyeBlinkHoldTicks[0];
+        _eyeBlinkState[1]=_eyeBlinkState[0];
+    }
 }
 
 - (BOOL)applyMorphsToModel:(dc_game_model *)slot frame:(float)frame
@@ -1239,7 +1331,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     for(uint32_t i=0;i<slot->info.submeshes;++i) {
         meshBuffers[i]=(dc_morph_mesh_buffer){.vertices=buffers[i],.count=counts[i]};
     }
-    dc_status status=dc_morph_apply(slot->morph,frame,meshBuffers,slot->info.submeshes);
+    dc_status status=dc_morph_tick(slot->morph,frame,_lastTick,meshBuffers,slot->info.submeshes);
     free(meshBuffers);
     if(status!=DC_OK) {
         if(error)*error=[NSString stringWithFormat:@"Game morph runtime apply failed: %d",status];
@@ -1342,7 +1434,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         }
     }
     if(gameplayScene && controller.pressed&DC_PAD_X){_playerSaveDirty=YES;_manualSaveCompleted=[self savePlayerState];}
-    if(controller.pressed&DC_PAD_Y){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
+    if(controller.pressed&DC_PAD_Y){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;_padCameraHeight=0;}
     /* Context-menu dismissal never advances the chapter. */
     if(gameplayScene && (controller.pressed&DC_PAD_B)&&_storyPhase==1) {
         _storyPhase=0;_interactionCompleted=NO;_interactionState.completed=0;
@@ -1352,7 +1444,15 @@ static void freeMorphCaches(dc_game_model *slot) {
      * tap-to-skip behavior for watch/night/ending chapters. */
     BOOL secondaryOwnsPointer=NO;
     BOOL primaryOwnsPointer=NO;
+    BOOL pcCtrl=((pcInput.keys[0x1d]&1)||(pcInput.keys[0x9d]&1))!=0;
     if(cameraScene) {
+        for(unsigned i=0;i<3;++i) {
+            if(pcInput.keys[2+i]==3) {
+                _mapLayerVisible[i]=!_mapLayerVisible[i];
+                NSString *mapError=[self applyMapLayerVisibility];
+                if(mapError)return mapError;
+            }
+        }
         if(pcInput.keys[0x2f]==3) {
             _secondaryVisible=!_secondaryVisible;++_secondaryVisibilityChanges;
 #if DEBUG
@@ -1370,8 +1470,9 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(!held&&!pcInput.wheel)_pointerCameraOwner=0;
         if(!_pointerCameraOwner&&!_contextOpen&&(press||pcInput.wheel)) {
             /* Watch/night left presses belong to the original actor-motion
-             * callback. Right/wheel still own the camera pointer path. */
-            if((_sceneType==5||_sceneType==6)&&!pcInput.mouse[1]&&!pcInput.wheel)
+             * callback unless Ctrl is held (00492854). Right/wheel still own
+             * the camera pointer path. */
+            if((_sceneType==5||_sceneType==6)&&!pcCtrl&&!pcInput.mouse[1]&&!pcInput.wheel)
                 _pointerCameraOwner=0;
             else
                 _pointerCameraOwner=_secondaryVisible&&inside?2:((pcInput.mouse[1]&&iconRegion)?1:3);
@@ -1531,22 +1632,26 @@ static void freeMorphCaches(dc_game_model *slot) {
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;_tickInitialized=YES;_lastTick=tick;
     NSString *cameraSelectionError=[self autoSelectCameraAtTick:tick];if(cameraSelectionError)return cameraSelectionError;
     if(_primaryCameraMode!=2) {
-    if(controller.pressed&DC_PAD_R3){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;}
+    if(controller.pressed&DC_PAD_R3){_padCameraYaw=0;_padCameraPitch=0;_padCameraZoom=0;_padCameraHeight=0;}
     float cameraX=controller.rx/32767.f,cameraY=controller.ry/32767.f;
     if(pcNum4)cameraX-=1.f;if(pcNum6)cameraX+=1.f;
-    if(pcNum8||pcPageUp)cameraY-=1.f;if(pcNum2||pcPageDown)cameraY+=1.f;
-    if(padDelta>0 && (cameraX!=0 || cameraY!=0))_controllerCameraAdvanced=YES;
+    if(pcNum8)cameraY-=1.f;if(pcNum2)cameraY+=1.f;
+    float heightDelta=(pcPageUp?1.f:0.f)-(pcPageDown?1.f:0.f);
+    if(padDelta>0 && (cameraX!=0 || cameraY!=0 || heightDelta!=0))_controllerCameraAdvanced=YES;
     if(controller.buttons&DC_PAD_L)cameraX-=1;
     if(controller.buttons&DC_PAD_R)cameraX+=1;
     _padCameraYaw=remainderf(_padCameraYaw+cameraX*padDelta*1.5f,6.2831853f);
     _padCameraPitch=fmaxf(-.7f,fminf(.7f,_padCameraPitch+cameraY*padDelta));
+    _padCameraHeight=fmaxf(_secondaryLimits.low-_cameraHeight,fminf(_secondaryLimits.high-_cameraHeight,_padCameraHeight+heightDelta*padDelta*5.0f));
     float zoom=((controller.buttons&DC_PAD_ZR)?1.f:0.f)-((controller.buttons&DC_PAD_ZL)?1.f:0.f);
     if(pcHome)zoom+=1.f;if(pcEnd)zoom-=1.f;
     if(!secondaryOwnsPointer){if(pcInput.wheel>0)zoom+=1.f;else if(pcInput.wheel<0)zoom-=1.f;}
     _padCameraZoom=fmaxf(-.7f,fminf(1.f,_padCameraZoom+zoom*padDelta));
     float panX=(pcArrowRight?1.f:0.f)-(pcArrowLeft?1.f:0.f);
     float panZ=(pcArrowDown?1.f:0.f)-(pcArrowUp?1.f:0.f);
-    _padCameraPanX+=panX*padDelta*2.0f;_padCameraPanZ+=panZ*padDelta*2.0f;
+    float yaw=_cameraYaw+_padCameraYaw,cy=cosf(yaw),sy=sinf(yaw);
+    _padCameraPanX=fmaxf(-50.f,fminf(50.f,_padCameraPanX+(panX*cy+panZ*sy)*padDelta*2.0f));
+    _padCameraPanZ=fmaxf(-50.f,fminf(50.f,_padCameraPanZ+(-panX*sy+panZ*cy)*padDelta*2.0f));
     }
     /* Advance each model exactly once before selecting the rendered camera.
      * The original automatic view uses this frame's animated nodes. */
@@ -1554,6 +1659,7 @@ static void freeMorphCaches(dc_game_model *slot) {
        dc_model_tick(_actor.model,delta,tick,&_actor.world)!=DC_OK)return @"Game model tick failed";
     if(_face.model) {
         if(![self updateFaceAttachment])return @"Game face anchor lookup failed";
+        [self updateFaceEyeBlinkAtTick:tick];
         if(dc_model_tick(_face.model,0,tick,&_face.world)!=DC_OK)return @"Game face tick failed";
     }
     for(unsigned auxiliary=0;auxiliary<2;++auxiliary)if(_watchAuxiliary[auxiliary].model) {

@@ -111,6 +111,7 @@ static dc_status model_open(const void *xx,size_t xx_length,const void *xa,size_
         TRY(dc_xx_node_matrix(m->xx,i,&m->nodes[i].local));
         m->nodes[i].billboard=source[node.matrix_offset+64];
         m->nodes[i].hidden=source[node.matrix_offset+116];
+        m->render_hidden[i]=source[node.matrix_offset+108]!=0;
         m->globals[i]=identity();
     }
     m->nodes[0].local=identity();
