@@ -94,15 +94,28 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     if (!name.length) return NO;
     AVAudioPlayer *player=_gameplayVoices[name];
     if (!player) {
-        NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_11.pp" directory:_directory error:&error];
+        unichar prefix=[name characterAtIndex:0];
+        NSString *primary=(prefix=='b'||prefix=='B')?@"RPP_12.pp":((prefix=='c'||prefix=='C')?@"RPP_13.pp":@"RPP_11.pp");
+        NSArray<NSString *> *archives=@[primary,@"RPP_11.pp",@"RPP_12.pp",@"RPP_13.pp"];
+        NSData *data=nil;
+        for (NSString *archive in archives) {
+            NSString *error=nil;
+            data=[self sound:name inArchive:archive directory:_directory error:&error];
+            if (data) break;
+        }
         if (!data) return NO;
         NSError *reason=nil;player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
         if (!player || ![player prepareToPlay]) return NO;
+        player.meteringEnabled=YES;
         if (!_gameplayVoices) _gameplayVoices=[NSMutableDictionary dictionary];
         _gameplayVoices[name]=player;
     }
+    for (AVAudioPlayer *other in _gameplayVoices.allValues) if (other!=player && other.isPlaying) [other stop];
     player.delegate=self;
-    _voiceChainNext=[name caseInsensitiveCompare:@"ast001_01.wav"]==NSOrderedSame ? @"ast002_01.wav" : nil;
+    if (name.length>=3 && [[name substringFromIndex:1] caseInsensitiveCompare:@"st001_01.wav"]==NSOrderedSame)
+        _voiceChainNext=[NSString stringWithFormat:@"%cst002_01.wav",[name characterAtIndex:0]];
+    else
+        _voiceChainNext=nil;
     NSError *reason=nil;AVAudioSession *session=AVAudioSession.sharedInstance;
     if(![session setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:&reason] ||
        ![session setActive:YES error:&reason]) return NO;
@@ -137,6 +150,17 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
 - (BOOL)gameplayVoiceBusy {
     for (AVAudioPlayer *player in _gameplayVoices.allValues) if (player.isPlaying) return YES;
     return NO;
+}
+- (float)gameplayVoiceMouthPhase {
+    for (AVAudioPlayer *player in _gameplayVoices.allValues) {
+        if (!player.isPlaying) continue;
+        [player updateMeters];
+        float power=[player averagePowerForChannel:0];
+        float wave=0.5f+0.5f*sinf((float)player.currentTime*18.0f);
+        float level=(power>-60.0f)?fmaxf(0.0f,fminf(1.0f,(power+45.0f)/38.0f)):(0.35f+0.55f*wave);
+        return fmaxf(0.0f,fminf(9.0f,(0.65f*level+0.35f*wave)*9.0f));
+    }
+    return 0.0f;
 }
 - (void)stopTitleMusic { [_music stop]; }
 - (void)cancelGameplayVoice {

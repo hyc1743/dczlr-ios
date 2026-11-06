@@ -1097,6 +1097,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             if(_suppressGameplayTouch){gameTouch=NO;_suppressGameplayTouch=NO;}
             dc_pc_frame gamePC=pcInput;
             if(suppressInput) gamePC=(dc_pc_frame){0};
+            _gameScene.voiceMouthPhase=_gameAudio?[_gameAudio gameplayVoiceMouthPhase]:0.0f;
             NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController pcInput:gamePC width:_width height:_height];
             if(gameFailure)return gameFailure;
             if(_gameScene.interactiveScene)_secondaryViewDisabledSetting=!_gameScene.secondaryViewVisible;
