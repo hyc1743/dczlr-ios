@@ -97,7 +97,12 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
         if(x>=248&&x<=304){_action=3;return;}
         if(x>=328&&x<=384){_action=5;return;}
     }
-    if(input.mouse[1]==3){if(_bank>0)--_bank;return;}
+    if(input.mouse[1]==3){
+        if(_bank==3){_stageMask=0;_bank=_category==5?2:1;}
+        else if(_bank==1){_stageMask=0;_bank=2;}
+        else if(_bank==2)_bank=0;
+        return;
+    }
     if(input.mouse[0]!=3)return;
     if(_bank==0){for(unsigned i=0;i<6;++i)if([self hit:x y:y item:categoryItems[i]]){_category=i;_bank=2;return;}}
     else if(_bank==2){for(unsigned i=0;i<7;++i)if([self hit:x y:y item:mapItems[i]]){_mapIndex=i;_bank=_category==5?3:1;return;}}
@@ -114,9 +119,27 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     dc_vk_sprite_item spriteItems[64]={0};size_t spriteCount=0;
     endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_base.ema"],scale,ox,oy,0,0,1024,768);
     if(_bank==0)for(unsigned i=0;i<6;++i)endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:categoryItems[i].name]],scale,ox,oy,categoryItems[i].x,categoryItems[i].y,176,72);
-    if(_bank==1)for(unsigned i=0;i<3;++i)endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].name]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+    else if(_category<6){
+        endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:categoryItems[_category].name]],scale,ox,oy,categoryItems[_category].x,categoryItems[_category].y,176,72);
+        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select01.ema"],scale,ox,oy,categoryItems[_category].x,categoryItems[_category].y,176,72);
+    }
     if(_bank==2)for(unsigned i=0;i<7;++i)endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:mapItems[i].name]],scale,ox,oy,mapItems[i].x,mapItems[i].y,176,72);
-    if(_bank==3)endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_PLAY.ema"],scale,ox,oy,800,624,200,48);
+    else if((_bank==1||_bank==3)&&_mapIndex<7){
+        endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:mapItems[_mapIndex].name]],scale,ox,oy,mapItems[_mapIndex].x,mapItems[_mapIndex].y,176,72);
+        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select01.ema"],scale,ox,oy,mapItems[_mapIndex].x,mapItems[_mapIndex].y,176,72);
+    }
+    if(_bank==1){
+        for(unsigned i=0;i<3;++i){
+            endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].name]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+            if(_stageMask&(1u<<i))endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select02.ema"],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+        }
+    } else if(_bank==3){
+        for(unsigned i=0;i<3;++i)if(_stageMask&(1u<<i)){
+            endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].name]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+            endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select02.ema"],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+        }
+        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_PLAY.ema"],scale,ox,oy,800,624,200,48);
+    }
     endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_gameend.ema"],scale,ox,oy,48,704,56,56);
     endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_title.ema"],scale,ox,oy,128,704,56,56);
     endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_config.ema"],scale,ox,oy,248,704,56,56);

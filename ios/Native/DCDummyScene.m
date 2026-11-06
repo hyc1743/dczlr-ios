@@ -54,7 +54,10 @@
     if(!_renderer||!_transition||!_texture)return @"Dummy screen renderer is unavailable";
     uint32_t ready=0;
     if([_transition queryTransitionReady:&ready]!=DC_OK)return @"Dummy screen transition query failed";
-    if(!_entered)_entered=YES;
+    if(!_entered) {
+        _entered=YES;
+        if([_transition requestTransition:1 tick:tick]!=DC_OK)return @"Dummy screen entry transition failed";
+    }
     if(!_action&&!_returning&&(input.keys[1]==3||input.mouse[1]==2)){
         _returning=YES;
         if([_transition requestTransition:4 tick:tick]!=DC_OK)return @"Dummy screen return transition failed";

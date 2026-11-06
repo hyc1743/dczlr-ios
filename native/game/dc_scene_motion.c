@@ -142,7 +142,9 @@ static dc_status step_type6(dc_scene_motion_state *s,
             s->average_motion=.8f*s->average_motion+.2f*amount;
             if(s->sample_count<UINT32_MAX)++s->sample_count;
             e->metric=s->metric;e->average_motion=s->average_motion;
-            if(s->clip==0x15&&s->metric>=39.f) {
+            if(s->clip==0x0d&&s->metric>=20.f) {
+                request_clip(s,e,0x15);
+            } else if(s->clip==0x15&&s->metric>=39.f) {
                 request_clip(s,e,0x19);s->phase=3;e->metric_ready=1;
             }
         }

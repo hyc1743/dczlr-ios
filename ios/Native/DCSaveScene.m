@@ -153,7 +153,7 @@ static uint32_t saveDword(const uint8_t *p) {
 - (NSString *)presentationContext {
     return [NSString stringWithFormat:@"system=save ready=%d page=%u row=%u slot=%u saveDisabled=%d saveRequested=%d pending=%u action=%u",_ready,_page,_row,self.selectedSlot,_saveDisabled,_saveRequested,_pendingAction,_action];
 }
-- (void)consumeSaveRequest {_saveRequested=NO;}
+- (void)consumeSaveRequest {_saveRequested=NO;[self refreshSlots];}
 - (void)requestRenderCapture:(NSString *)name {_captureName=[name copy];}
 - (AVAudioPlayer *)audio:(NSString *)name archive:(NSString *)file error:(NSString **)error {
     NSError *reason=nil;

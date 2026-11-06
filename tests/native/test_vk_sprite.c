@@ -322,6 +322,11 @@ int dc_vk_sprite_pixel_gate(void *metal_layer, uint32_t validation) {
     OK(dc_vk_sprite_remove_texture(r,green_texture));
     OK(dc_vk_sprite_upload(r,1,1,green_pixel,sizeof(green_pixel),&green_texture));
     for(unsigned i=0;i<6;++i){far_quad[i].diffuse=near_quad[i].diffuse=0xffffffff;far_quad[i].z=.1f;near_quad[i].z=.8f;}
+    dc_vk_geometry_item trans_queue[2]={
+        {.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO_TRANSLUCENT,.priority=22},
+        {.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO_TRANSLUCENT,.priority=21}};
+    OK(dc_vk_geometry_render(r,trans_queue,2,clear,rgba,sizeof(rgba)));
+    CHECK(pixel(rgba,4,4,255,0,0,255,0));
     dc_vk_geometry_item primary={.vertices=far_quad,.vertex_count=6,.texture=red_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
     dc_vk_geometry_item secondary={.vertices=near_quad,.vertex_count=6,.texture=green_texture,.blend_mode=3,.depth_mode=DC_VK_DEPTH_AUTO};
     dc_vk_geometry_item overlay=primary;overlay.depth_mode=DC_VK_DEPTH_DISABLED;

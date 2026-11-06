@@ -940,19 +940,20 @@ dc_status dc_vk_geometry_render_passes(dc_vk_sprite *r,const dc_vk_geometry_pass
             if (item->blend_mode > 3 || item->point_filter > 1 || item->depth_mode>DC_VK_DEPTH_AUTO_TRANSLUCENT || item->cull_mode>DC_VK_FRONT_POSITIVE_AREA) { status = DC_FORMAT; break; }
             texture *image = find_texture(r, item->texture);
             if (!image) { status = DC_ARGUMENT; break; }
-            uint32_t translucent=!image->opaque||item->blend_mode==1||item->blend_mode==2||item->depth_mode==DC_VK_DEPTH_AUTO_TRANSLUCENT;
+            uint32_t non_opaque=!image->opaque||item->blend_mode==1||item->blend_mode==2;
             double sort_depth=0;
             for (size_t j = 0; j < item->vertex_count; ++j) {
                 const dc_sprite_vertex *v = &item->vertices[j];
                 if (!isfinite(v->x) || !isfinite(v->y) || !isfinite(v->z) ||
                     !isfinite(v->rhw) || v->rhw <= 0 || !isfinite(v->u) || !isfinite(v->v)) { status = DC_FORMAT; break; }
-                translucent|=(v->diffuse>>24)!=255;
+                non_opaque|=(v->diffuse>>24)!=255;
                 sort_depth+=(double)v->z;
             }
             if (status != DC_OK) break;
+            uint32_t translucent=non_opaque||item->depth_mode==DC_VK_DEPTH_AUTO_TRANSLUCENT;
             uint32_t blend = item->blend_mode == 1 ? 1 : item->blend_mode == 2 ? 2 : 0;
             uint32_t depth=item->depth_mode;
-            if(depth>=DC_VK_DEPTH_AUTO)depth=translucent?DC_VK_DEPTH_READ_ONLY:DC_VK_DEPTH_WRITE;
+            if(depth>=DC_VK_DEPTH_AUTO)depth=non_opaque?DC_VK_DEPTH_READ_ONLY:DC_VK_DEPTH_WRITE;
             draws[visible++] = (prepared_draw){.source = item->vertices, .count = item->vertex_count,
                 .image = image, .pipeline = 3 + blend + 3*depth + 12*item->cull_mode, .filter = item->point_filter ? 0 : 1,
                 .alpha_op = 4,.auto_depth=item->depth_mode>=DC_VK_DEPTH_AUTO,

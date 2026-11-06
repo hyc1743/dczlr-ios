@@ -212,6 +212,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         sceneTypeOverride:_endingSceneTypeOverride resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
     _gameScene.transitionScene=_startupScene;
+    if(_startupScene&&[_startupScene requestTransition:1 tick:0]!=DC_OK)return @"Story scene transition reset failed";
     [self ensureFlowState];
     if(_flowInitialized) {
         _flowState.meta.previous_type=_flowState.meta.scene_type;
@@ -220,6 +221,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         _flowState.meta.map=(uint8_t)_story.map;_flowState.meta.stage=(uint8_t)_story.stage;
         [self syncFlowFlagsFromStory];
     }
+    if(!_configuration)[self loadConfigurationFromDirectory:directory];
+    if(_configuration)[_gameScene applyConfiguration:(const dc_config *)_configuration.bytes];
     _gameScene.secondaryViewVisible=!_secondaryViewDisabledSetting;
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
@@ -234,23 +237,29 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     else {
         dc_config_default(&state);_configuration=[NSData dataWithBytes:&state length:sizeof(state)];
     }
+    uint32_t secondary=1;
+    if(dc_config_switch_value(&state,4,&secondary)==DC_OK)_secondaryViewDisabledSetting=(secondary==0);
     return nil;
 }
 - (NSString *)enterConfigSceneFromDirectory:(NSString *)directory {
     if(!_configuration)[self loadConfigurationFromDirectory:directory];
+    uint32_t ownerType=_gameScene?_gameScene.sceneType:(_introScene?3:(_endingScene?2:(_systemOwnerType?_systemOwnerType:1)));
+    uint32_t ownerChapter=_introScene?_introScene.chapter:(_endingScene?24:(_systemOwnerType?_systemOwnerChapter:_story.chapter));
     NSString *error=nil;
     _configScene=[[DCConfigScene alloc] initWithDirectory:directory renderer:_renderer configuration:_configuration transition:_startupScene error:&error];
     if(!_configScene)return error?:@"Configuration page initialization failed";
-    _systemOwnerType=_gameScene?_gameScene.sceneType:1;_systemOwnerChapter=_story.chapter;
+    _systemOwnerType=ownerType;_systemOwnerChapter=ownerChapter;
     [_gameAudio suspendForSystemPage];
     return nil;
 }
 - (NSString *)enterSaveSceneFromDirectory:(NSString *)directory {
+    uint32_t ownerType=_gameScene?_gameScene.sceneType:(_introScene?3:(_endingScene?2:(_systemOwnerType?_systemOwnerType:1)));
+    uint32_t ownerChapter=_introScene?_introScene.chapter:(_endingScene?24:(_systemOwnerType?_systemOwnerChapter:_story.chapter));
     NSString *error=nil;
     _saveScene=[[DCSaveScene alloc] initWithDirectory:directory renderer:_renderer transition:_startupScene
-        ownerSceneType:_gameScene?_gameScene.sceneType:1 chapter:_story.chapter error:&error];
+        ownerSceneType:ownerType chapter:ownerChapter error:&error];
     if(!_saveScene)return error?:@"Save page initialization failed";
-    _systemOwnerType=_gameScene?_gameScene.sceneType:1;_systemOwnerChapter=_story.chapter;
+    _systemOwnerType=ownerType;_systemOwnerChapter=ownerChapter;
     [_gameAudio suspendForSystemPage];
     return nil;
 }
@@ -286,8 +295,10 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if(_flowInitialized)memcpy(_numericState.mutableBytes,_flowState.raw,MIN(_numericState.length,sizeof(_flowState.raw)));
     dc_save_slot_meta meta=_flowInitialized?_flowState.meta:(dc_save_slot_meta){(uint8_t)_story.chapter,(uint8_t)(_gameScene?_gameScene.sceneType:1),
         (uint8_t)(_gameScene?_gameScene.sceneType:1),(uint8_t)_story.map,(uint8_t)_story.stage,0,0,0};
-    meta.chapter=(uint8_t)_story.chapter;meta.map=(uint8_t)_story.map;meta.stage=(uint8_t)_story.stage;
-    if(_gameScene)meta.scene_type=(uint8_t)_gameScene.sceneType;
+    meta.chapter=(uint8_t)(_introScene?_introScene.chapter:_story.chapter);meta.map=(uint8_t)_story.map;meta.stage=(uint8_t)_story.stage;
+    if(_gameScene){meta.scene_type=(uint8_t)_gameScene.sceneType;meta.script_frame=254;}
+    else if(_introScene){meta.scene_type=3;meta.script_frame=(uint8_t)MIN(_introScene.frame,253u);}
+    else if(_systemOwnerType==2){meta.chapter=24;meta.scene_type=2;meta.script_frame=254;}
     char name[16];if(dc_save_slot_name(slot,name,sizeof(name))!=DC_OK)return @"Original save slot number rejected";
     NSMutableData *encoded=[NSMutableData dataWithLength:DC_SAVE_SLOT_BYTES];
     if(dc_save_slot_encode(_numericState.bytes,_numericState.length,&meta,encoded.mutableBytes,encoded.length)!=DC_OK)return @"Original save state encoding failed";
@@ -296,9 +307,18 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if(![encoded writeToFile:[saveDirectory stringByAppendingPathComponent:[NSString stringWithUTF8String:name]] options:NSDataWritingAtomic error:nil])return @"Original save slot write failed";
     return nil;
 }
-- (NSString *)resumeSystemOwnerAtTick:(uint32_t)tick {
+- (NSString *)resumeSystemOwnerAtTick:(uint32_t)tick directory:(NSString *)directory {
+    uint32_t ownerType=_systemOwnerType;
+    _systemOwnerType=0;
+    if(_startupScene&&[_startupScene requestTransition:1 tick:tick]!=DC_OK)return @"System owner transition reset failed";
     if(_gameScene){[_gameScene resumeAtTick:tick];}
-    if(_introScene){[_introScene resumeFromAuxiliaryAtTick:tick];}
+    else if(_introScene){[_introScene resumeFromAuxiliaryAtTick:tick];}
+    else if(ownerType==2&&directory.length){
+        NSString *endingError=[self enterStoryChapter:24 directory:directory];
+        if(endingError)return endingError;
+    } else if(ownerType==1){
+        _titleStateInitialized=NO;_titleMenuInitialized=NO;
+    }
     if(![_gameAudio resumeAfterSystemPage])return @"System audio resume failed";
     [_configScene detachRenderer];_configScene=nil;[_saveScene detachRenderer];_saveScene=nil;
     _previousGameplayTouch=NO;_previousTitleTouch=NO;return nil;
@@ -311,10 +331,19 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     memset(&_flowState,0,sizeof(_flowState));memcpy(_flowState.raw,state.bytes,MIN(state.length,sizeof(_flowState.raw)));_flowState.meta=meta;_flowInitialized=YES;
     _story.chapter=meta.chapter;_story.map=meta.map;_story.stage=meta.stage;_storyInitialized=YES;
     for(unsigned i=0;i<DC_STORY_STAGES;++i){size_t base=(size_t)i*0x2198;_story.stages[i].flag_a=p[base];_story.stages[i].flag_b=p[base+1];_story.stages[i].progress=p[base+0x23];}
+    _systemOwnerType=0;
     [_saveScene detachRenderer];_saveScene=nil;
     if(![_gameAudio resumeAfterSystemPage])return @"System audio resume failed";
     _resumeNextScene=YES;NSString *error=[self enterStoryChapter:_story.chapter directory:directory];
-    if(error)return error;[_gameScene resumeAtTick:tick];return nil;
+    if(error)return error;
+    if(_introScene&&meta.scene_type==3&&meta.script_frame<254){
+        NSString *introError=nil;
+        DCIntroScene *resumed=[[DCIntroScene alloc] initWithDirectory:directory startChapter:_story.chapter
+            numericState:_numericState savedFrame:meta.script_frame error:&introError];
+        if(resumed){[_introScene detachRenderer];_introScene=resumed;[_introScene resumeAtTick:tick];}
+    }
+    if(_gameScene)[_gameScene resumeAtTick:tick];
+    return nil;
 }
 - (NSString *)handleGameplayTransitionFromDirectory:(NSString *)directory {
     if(!_gameScene || !_gameScene.chapterEndAction)return nil;
@@ -495,6 +524,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         NSString *introError=nil;
         _introScene=[[DCIntroScene alloc] initWithDirectory:directory startChapter:chapter error:&introError];
         if(!_introScene)return introError ?: @"Mid-story script entry failed";
+        if(_startupScene&&[_startupScene requestTransition:1 tick:0]!=DC_OK)return @"Mid-story script transition reset failed";
     } else if(profile.scene==DC_STORY_SCENE_ENDING) {
         NSString *endingError=nil;
         _endingScene=[[DCEndingScene alloc] initWithDirectory:directory renderer:_renderer transition:_startupScene
@@ -630,7 +660,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if (!width || !height) return @"CAMetalLayer has empty drawable size";
     if (_renderer && (_width != width || _height != height)) [self destroyRenderer];
     if (!_renderer) {
-        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 128, .initial_filter = 2,
+        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 256, .initial_filter = 2,
             .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
             .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv),
             .metal_layer = (__bridge void *)layer};
@@ -716,9 +746,9 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             _titleStateInitialized=NO;_titleMenuInitialized=NO;_previousTitleTouch=NO;
         } else if(_endingScene.action==3||_endingScene.action==5){
             uint32_t action=_endingScene.action;
-            [_endingScene detachRenderer];_endingScene=nil;
             NSString *pageError=action==3?[self enterConfigSceneFromDirectory:directory]:
                 [self enterSaveSceneFromDirectory:directory];
+            [_endingScene detachRenderer];_endingScene=nil;
             if(pageError)return pageError;
         } else if(_endingScene.action==4){
             return @"Game session ended";
@@ -747,11 +777,14 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             if(action==1) {
                 NSData *settings=_configScene.configuration;[self loadConfigurationFromDirectory:directory];
                 _configuration=settings;[settings writeToFile:[directory stringByAppendingPathComponent:@"gcd.cfg"] options:NSDataWritingAtomic error:nil];
+                uint32_t secondary=1;
+                if(settings.length>=sizeof(dc_config)&&dc_config_switch_value((const dc_config *)settings.bytes,4,&secondary)==DC_OK)
+                    _secondaryViewDisabledSetting=(secondary==0);
                 if(_gameScene)[_gameScene applyConfiguration:(const dc_config *)settings.bytes];
                 [_gameAudio applyConfiguration:settings];
-                return [self resumeSystemOwnerAtTick:sceneTick];
+                return [self resumeSystemOwnerAtTick:sceneTick directory:directory];
             }
-            if(action==2){[_configScene detachRenderer];_configScene=nil;[_gameScene detachRenderer];_gameScene=nil;_titleStateInitialized=NO;_titleMenuInitialized=NO;return nil;}
+            if(action==2){[_configScene detachRenderer];_configScene=nil;[_gameScene detachRenderer];_gameScene=nil;[_introScene detachRenderer];_introScene=nil;[_endingScene detachRenderer];_endingScene=nil;_systemOwnerType=0;_titleStateInitialized=NO;_titleMenuInitialized=NO;return nil;}
             if(action==3){[_configScene detachRenderer];_configScene=nil;return [self enterSaveSceneFromDirectory:directory];}
             if(action==4)return @"Game session ended";
             if(action==5)return [self enterDummySceneFromDirectory:directory owner:1];
@@ -768,8 +801,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         }
         uint32_t action=_saveScene.action;
         if(action) {
-            if(action==1)return [self resumeSystemOwnerAtTick:sceneTick];
-            if(action==2){[_saveScene detachRenderer];_saveScene=nil;[_gameScene detachRenderer];_gameScene=nil;_titleStateInitialized=NO;_titleMenuInitialized=NO;return nil;}
+            if(action==1)return [self resumeSystemOwnerAtTick:sceneTick directory:directory];
+            if(action==2){[_saveScene detachRenderer];_saveScene=nil;[_gameScene detachRenderer];_gameScene=nil;[_introScene detachRenderer];_introScene=nil;[_endingScene detachRenderer];_endingScene=nil;_systemOwnerType=0;_titleStateInitialized=NO;_titleMenuInitialized=NO;return nil;}
             if(action==3){[_saveScene detachRenderer];_saveScene=nil;return [self enterConfigSceneFromDirectory:directory];}
             if(action==4)return @"Game session ended";
             if(action==5)return [self loadSelectedOriginalSlot:_saveScene.selectedSlotData directory:directory tick:sceneTick];
@@ -833,6 +866,9 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             }
         }
         if(_introScene) {
+        if(pcInput.keys[0x3b]==3)[_introScene requestAuxiliary:2 transition:_startupScene tick:sceneTick];
+        else if(pcInput.keys[0x3c]==3)[_introScene requestAuxiliary:7 transition:_startupScene tick:sceneTick];
+        else if(pcInput.keys[1]==3)[_introScene requestAuxiliary:5 transition:_startupScene tick:sceneTick];
         NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
             touching:(touching || (controller.pressed&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS))) width:_width height:_height];
         if(failure)return failure;

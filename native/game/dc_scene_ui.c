@@ -105,8 +105,8 @@ dc_status dc_scene_context_build(const dc_scene_context_input *in,dc_scene_conte
         menu.count=4;int32_t ids[]={1,2,3,7};
         for(unsigned i=0;i<menu.count;++i)menu.items[i]=(dc_scene_context_item){ids[i],i,0,0};
     } else if(in->scene_type==6&&in->icon==1) {
-        menu.count=2;
-        int32_t ids[]={1,2,0,0,0,0};
+        menu.count=3;
+        int32_t ids[]={1,2,3,0,0,0};
         for(unsigned i=0;i<menu.count;++i)menu.items[i]=(dc_scene_context_item){ids[i],i,0,0};
     } else if(in->icon==1) {
         if(in->stage_progress)return DC_NOT_FOUND;

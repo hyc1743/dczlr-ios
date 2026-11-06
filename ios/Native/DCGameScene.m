@@ -162,7 +162,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     char _characterPrefix;
     uint32_t _acceptedMenuEvents,_lastAcceptedMenuRow;
     uint32_t _stageOutcomeA,_stageOutcomeB,_chapterEndAction;
-    uint32_t _pendingSystemAction;
+    uint32_t _pendingSystemAction,_outfitVariant;
     uint8_t _backgroundColor[4];
     BOOL _editMode;
     BOOL _gameFinished;
@@ -246,9 +246,9 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 - (NSString *)applyMotionEvent:(dc_scene_motion_event)event tick:(uint32_t)tick {
     if(_sceneType==5&&event.request_clip!=DC_SCENE_MOTION_NO_REQUEST) {
-        uint32_t visible=(event.request_clip==1)?1:0;
+        uint32_t hidden=(event.request_clip<0xf5u)?1:0;
         for(unsigned auxiliary=0;auxiliary<2;++auxiliary)
-            if(_watchAuxiliary[auxiliary].model && dc_model_hide_node(_watchAuxiliary[auxiliary].model,0,visible)!=DC_OK)
+            if(_watchAuxiliary[auxiliary].model && dc_model_hide_node(_watchAuxiliary[auxiliary].model,0,hidden)!=DC_OK)
                 return @"Original watch auxiliary visibility update failed";
     }
     if(event.request_chain_from!=DC_SCENE_MOTION_NO_REQUEST &&
@@ -351,6 +351,11 @@ static void freeMorphCaches(dc_game_model *slot) {
 - (NSString *)applyContextSelection:(uint32_t)selection {
     if(_contextMenu.icon==1) {
         if((_sceneType==5||_sceneType==6)&&_motionStateInitialized) {
+            if(_sceneType==6) {
+                dc_animation_state animation={0};
+                if(dc_model_get_animation(_actor.model,&animation)==DC_OK&&animation.current<=0xffu)
+                    _motionState.clip=animation.current;
+            }
             dc_scene_motion_event motionEvent;
             dc_status motionStatus=dc_scene_motion_context(&_motionState,selection,&motionEvent);
             if(motionStatus==DC_OK) {
@@ -361,18 +366,19 @@ static void freeMorphCaches(dc_game_model *slot) {
                 }
                 return [self applyMotionEvent:motionEvent tick:_lastTick];
             }
-            if(motionStatus!=DC_NOT_FOUND)return @"Original scene motion context action rejected";
+            if(motionStatus!=DC_NOT_FOUND&&!(_sceneType==6&&selection==2))return @"Original scene motion context action rejected";
         }
         dc_scene_character_event event;
-        dc_status result=dc_scene_character_select(&_characterAction,_sceneType,_stageProgress,selection,&event);
+        dc_status result=dc_scene_character_select(&_characterAction,_sceneType,0,selection,&event);
         if(result==DC_NOT_FOUND){++_pendingContextActions;return nil;}
         if(result!=DC_OK)return @"Original character menu action rejected";
-        if(selection==1)_exitSoundStartTick=_lastTick;
+        if(selection==1||(_sceneType==6&&selection==2))_exitSoundStartTick=_lastTick;
         ++_characterActionCount;
         return [self applyCharacterEvent:event tick:_lastTick];
     }
     dc_scene_action_plan plan;
-    dc_status status=dc_scene_action_build(_sceneType,_contextMenu.icon,selection,_primaryCameraMode,_secondaryCameraMode,&plan);
+    uint32_t actionSceneType=(_contextMenu.icon>=3&&_sceneType>=4&&_sceneType<=6)?4:_sceneType;
+    dc_status status=dc_scene_action_build(actionSceneType,_contextMenu.icon,selection,_primaryCameraMode,_secondaryCameraMode,&plan);
     if(status==DC_NOT_FOUND){++_pendingContextActions;return nil;}
     if(status!=DC_OK)return @"Scene context action rejected";
     if(_contextMenu.icon==3&&selection<2) {
@@ -474,15 +480,21 @@ static void freeMorphCaches(dc_game_model *slot) {
      * outfit meshes. Variant 1 shows the skirt set instead of the dress,
      * variant 2 removes the bra, variant 3 removes the panties; any other
      * variant restores the default visibility. */
-    NSArray<NSString *> *dress=@[@"a_On_wanpiEHC",@"a_On_wanpiEHM",@"a_On_wanpiHHM",
-        @"a_On_wanpiEHU",@"a_On_wanpiHHU",@"a_On_wanpiHHC"];
-    NSArray<NSString *> *skirt=@[@"a_On_skartHF",@"a_On_skartHB",@"a_On_skartHA"];
+    [self applyInitialVisibility];
+    NSArray<NSString *> *top=@[@"a_On_wanpi_U",@"a_On_wanpiEHC"];
+    NSArray<NSString *> *skirt=@[@"a_On_skart_mae",@"a_On_skart_usiro",@"a_On_skartHA"];
     NSArray<NSString *> *bra=@[@"a_On_buraH"];
-    NSArray<NSString *> *panty=@[@"a_On_pantuH",@"a_On_pantuH3",@"a_On_pantuH2"];
-    for(NSString *name in dress){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?1:0);}
-    for(NSString *name in skirt){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==1?0:1);}
-    for(NSString *name in bra){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==2?1:0);}
-    for(NSString *name in panty){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,variant==3?1:0);}
+    NSArray<NSString *> *panty=@[@"a_On_pantuH"];
+    if(variant>=1&&variant<=3) {
+        for(NSString *name in top){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+    }
+    if(variant==2||variant==3) {
+        for(NSString *name in skirt){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+        for(NSString *name in bra){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+    }
+    if(variant==3) {
+        for(NSString *name in panty){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+    }
     _storyPhase=0;_interactionCompleted=NO;_chapterEndAction=0;
 }
 - (void)setEditMode:(BOOL)editMode {
@@ -522,15 +534,45 @@ static void freeMorphCaches(dc_game_model *slot) {
 }
 
 - (void)applyInitialVisibility {
-    // Original 0x5181f0 hides alternate outfits and facial effect meshes.
+    // Original 0x5181f0 / 0x4b8340 hides alternate outfits and facial effect meshes.
     NSArray<NSString *> *actorNames=@[@"a_On_wanpiHEC",@"a_On_wanpiEHM",@"a_On_wanpiHHM",
-        @"a_On_wanpiEHU",@"a_On_wanpiHHU",@"a_On_wanpiEHC",@"a_On_wanpiHHC",
-        @"a_On_skartHF",@"a_On_skartHB",@"a_On_skartHA",@"a_On_buraH",
-        @"a_On_pantuH",@"a_On_pantuH3",@"a_On_pantuH2",@"a_On_sune_L",@"a_On_sune_R",
-        @"a_On_neko_vive",@"a_On_tori_vive"];
+        @"a_On_wanpiEHU",@"a_On_wanpiHHU",@"a_On_wanpiHHC",
+        @"a_On_wanpiHHC_U",@"a_On_wanpiHEC_U",
+        @"a_On_wanpiEHM_U",@"a_On_wanpiHHM_U",@"a_On_wanpiEHU_U",@"a_On_wanpiHHU_U",
+        @"a_On_skartHF",@"a_On_skartHB",@"a_On_buraH",@"a_On_buraH_U",
+        @"a_On_skartHF_U",@"a_On_skartHB_U",
+        @"a_On_pantuH",@"a_On_pantuH1",@"a_On_pantuH2",@"a_On_pantuH2_U",@"a_On_pantuH3",@"a_On_pantuH3_U",@"a_On_pantuH4",@"a_On_pantuH4_U",
+        @"a_On_neko_vive",@"a_On_tori_vive",
+        @"a_On_mata_siru",@"a_On_kokan_siru",
+        @"a_On_tejou_L",@"a_On_tejou_R",
+        @"b_On_seraH_O",@"b_On_seraH_U",@"b_On_eriH_O",@"b_On_eriH_U",@"b_On_shatuH",@"b_On_shatuH_U",@"b_On_nekuH_R",
+        @"b_On_skartHF",@"b_On_skartHF_U",@"b_On_skartHB",@"b_On_skartHB_U",
+        @"b_On_buraH",@"b_On_buraH_U",
+        @"b_On_pantuH1",@"b_On_pantuH2",@"b_On_pantuH2_U",@"b_On_pantuH3",@"b_On_pantuH3_U",@"b_On_pantuH4",@"b_On_pantuH4_U",
+        @"b_On_neko_vive",@"b_On_tori_vive",
+        @"b_On_mata_siru",@"b_On_kokan_siru",
+        @"b_On_houtyou",@"b_On_himoUL",@"b_On_himoUR",@"b_On_himoAL",@"b_On_himoAR",@"s_On_chi_moto",
+        @"c_On_buraH",@"c_On_buraH_U",@"c_On_pantuH1",@"c_On_pantuH2",@"c_On_pantuH2_U",@"c_On_pantuH3",@"c_On_pantuH3_U",@"c_On_pantuH4",@"c_On_pantuH4_U",
+        @"c_On_uwagiH",@"c_On_uwagiH_U",
+        @"c_On_skartHB",@"c_On_skartHB_U",@"c_On_skartHF",@"c_On_skartHF_U",
+        @"c_On_neko_vive",@"c_On_tori_vive",
+        @"c_On_mata_siru",@"c_On_kokan_siru",
+        @"c_On_tejou_L",@"c_On_tejou_R",
+        @"c_Nn_megane_ani",
+        @"b_On_tare_small",@"b_On_tare_big",@"b_On_tare2_small",@"b_On_tare2_big",
+        @"b_On_tare_small2",@"b_On_tare_big2",@"b_On_tare2_small2",@"b_On_tare2_big2",
+        @"s_Kn_asokoX",@"s_On_omozaX1",@"s_On_omozaX2",@"s_On_omozaX3",@"s_On_omozaX4",@"s_On_omozaX5",@"s_On_omozaX6",
+        @"z_Nn_siru",@"s_On_siru_1",@"s_On_siru_2",@"s_On_siru_3",@"s_On_siru_4",@"s_On_siru_5",@"s_On_siru_6"];
+    NSArray<NSString *> *dayOnlyHidden=@[@"a_On_wanpiEHC",@"a_On_wanpiEHC_U",
+        @"a_On_skartHA",@"a_On_skartHA_U",@"b_On_skartHA",@"b_On_skartHA_U",@"c_On_skartHA",@"c_On_skartHA_U"];
+    NSArray<NSString *> *legHidden=(_sceneType==6 && _storyStage==0)
+        ? @[@"b_On_kutu_L",@"b_On_kutu_R"]
+        : @[@"a_On_sune_L",@"a_On_sune_R"];
     NSArray<NSString *> *faceNames=@[@"a_On_nekomimi",@"a_On_kuchsiru_F",@"a_On_kuchsiru_ita",
-        @"a_On_kuchsiru_o",@"a_On_namida"];
+        @"a_On_kuchsiru_o",@"a_On_namida",@"c_Nn_megane_ani"];
     for(NSString *name in actorNames){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+    if(_sceneType!=6)for(NSString *name in dayOnlyHidden){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
+    for(NSString *name in legHidden){uint32_t node=[self findNode:&_actor name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_actor.model,node,1);}
     for(NSString *name in faceNames){uint32_t node=[self findNode:&_face name:[self characterNode:name]];if(node!=UINT32_MAX)dc_model_hide_node(_face.model,node,1);}
 }
 
@@ -640,7 +682,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(status==DC_OK)status=dc_model_get_info(slot->model,&slot->info);
     if(status==DC_OK && slot->xaData)
         status=dc_xa_probe(slot->xaData.bytes,slot->xaData.length,&slot->xaInfo);
-    if(status!=DC_OK || slot->info.textures>64) { if(error)*error=@"Game model profile rejected"; return NO; }
+    if(status!=DC_OK || slot->info.textures>256) { if(error)*error=@"Game model profile rejected"; return NO; }
     slot->textureCount=slot->info.textures;slot->textures=calloc(slot->textureCount,sizeof(uintptr_t));
     if(slot->textureCount && !slot->textures) { if(error)*error=@"Game texture handle allocation failed"; return NO; }
     for(uint32_t i=0;i<slot->textureCount;++i) {
@@ -891,8 +933,9 @@ static void freeMorphCaches(dc_game_model *slot) {
             _watchAuxiliary[auxiliary].xxData=[self entry:xxName archive:actorArchive error:error];
             _watchAuxiliary[auxiliary].xaData=[self entry:xaName archive:actorArchive error:error];
             if(!_watchAuxiliary[auxiliary].xxData||!_watchAuxiliary[auxiliary].xaData||
-               ![self openModel:&_watchAuxiliary[auxiliary] staticOnly:NO error:error])return nil;
-            if(dc_model_request(_watchAuxiliary[auxiliary].model,0,0)!=DC_OK){if(error)*error=@"Watch auxiliary animation request failed";return nil;}
+               ![self openModel:&_watchAuxiliary[auxiliary] staticOnly:NO error:error]||
+               (_watchAuxiliary[auxiliary].xaInfo.morph_tracks&&![self buildMorphCaches:&_watchAuxiliary[auxiliary] error:error]))return nil;
+            if(dc_model_request(_watchAuxiliary[auxiliary].model,1,0)!=DC_OK){if(error)*error=@"Watch auxiliary animation request failed";return nil;}
              /* Original watch setup keeps the sm/sn roots render-hidden until
               * the corresponding controller/action enables them. Drawing
               * them at actor-root space creates the detached translucent
@@ -982,6 +1025,38 @@ static void freeMorphCaches(dc_game_model *slot) {
         NSString *name=[camArchive asciiNameAtIndex:i];
         if([name caseInsensitiveCompare:preferred]==NSOrderedSame) {camData=[camArchive readEntryAtIndex:i limit:4096 error:nil];break;}
     }
+    if(!camData && camArchive) {
+        dc_game_map_presentation profile;
+        if(dc_game_map_presentation_profile(_mapSelector,&profile)==DC_OK && profile.camera) {
+            NSString *fallbackName=[NSString stringWithUTF8String:profile.camera];
+            for(uint32_t i=0;i<camArchive.entryCount;++i) {
+                if([[camArchive asciiNameAtIndex:i] caseInsensitiveCompare:fallbackName]==NSOrderedSame) {
+                    camData=[camArchive readEntryAtIndex:i limit:4096 error:nil];
+                    if(camData){_cameraSource=fallbackName;break;}
+                }
+            }
+        }
+        if(!camData) {
+            static const char *prefixes[]={"home_","trai_","toil_","toil_","hote_","roji_","park_","park_","mana_"};
+            const char *prefix=_mapSelector<9?prefixes[_mapSelector]:"home_";
+            for(uint32_t i=0;i<camArchive.entryCount;++i) {
+                NSString *name=[camArchive asciiNameAtIndex:i];
+                if([name hasPrefix:[NSString stringWithUTF8String:prefix]]&&[name hasSuffix:@".cam"]) {
+                    camData=[camArchive readEntryAtIndex:i limit:4096 error:nil];
+                    if(camData){_cameraSource=name;break;}
+                }
+            }
+        }
+        if(!camData && camArchive.entryCount>0) {
+            for(uint32_t i=0;i<camArchive.entryCount;++i) {
+                NSString *name=[camArchive asciiNameAtIndex:i];
+                if([name hasSuffix:@".cam"]) {
+                    camData=[camArchive readEntryAtIndex:i limit:4096 error:nil];
+                    if(camData){_cameraSource=name;break;}
+                }
+            }
+        }
+    }
     dc_camera_orbit orbit;
     if(!camData || dc_camera_read_preset(camData.bytes,camData.length,0,&orbit)!=DC_OK) {
         if(error)*error=[NSString stringWithFormat:@"Map %u camera %@ is unavailable",_mapSelector,preferred];
@@ -1060,7 +1135,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     float scale=viewport.width/1024.f;
     NSArray<NSString *> *icons=@[@"chara",@"fuku",@"cam",@"sys"];
     for(unsigned row=1;row<=4;++row) {
-        if(row==2&&!_stageProgress)continue;
+        if(row==2&&!_stageProgress&&!_editMode)continue;
         float u0,u1;if(dc_scene_icon_uv(_storyStage,row,&u0,&u1)!=DC_OK)return @"Scene icon atlas selection failed";
         dc_sprite_pose p={.width=96*scale,.height=96*scale,.x=viewport.x+920*scale,.y=viewport.y+(328+112*(row-1))*scale,
             .scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u0=u0,.u1=u1,.v1=1};
@@ -1077,7 +1152,8 @@ static void freeMorphCaches(dc_game_model *slot) {
             .scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1};
         for(unsigned state=0;state<2;++state) {
             if(state&&_contextMenu.hover!=(int32_t)i)continue;
-            char resource[32];if(dc_scene_context_resource(_sceneType,_contextMenu.icon,item.resource_id,state,resource,sizeof(resource))!=DC_OK)return @"Scene context resource profile failed";
+            uint32_t resourceSceneType=(_contextMenu.icon>=3&&_sceneType>=4&&_sceneType<=6)?4:_sceneType;
+            char resource[32];if(dc_scene_context_resource(resourceSceneType,_contextMenu.icon,item.resource_id,state,resource,sizeof(resource))!=DC_OK)return @"Scene context resource profile failed";
             NSString *error=[self appendSceneUISprite:[NSString stringWithUTF8String:resource] pose:p draws:draws count:count storage:storage];if(error)return error;++_sceneUIDraws;
         }
     }
@@ -1338,6 +1414,11 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     if((_sceneType==5||_sceneType==6)&&_motionStateInitialized&&!_contextOpen&&
        !_characterAction.exit_pending&&!_characterAction.transition_pending) {
+        if(_sceneType==6) {
+            dc_animation_state animation={0};
+            if(dc_model_get_animation(_actor.model,&animation)==DC_OK&&animation.current<=0xffu)
+                _motionState.clip=animation.current;
+        }
         dc_scene_motion_input motionInput={0};
         motionInput.tick=tick;motionInput.audio_ready=_motionAudioReady?1:0;
         motionInput.dx=pcInput.dx;motionInput.dy=pcInput.dy;motionInput.wheel=pcInput.wheel;
@@ -1364,7 +1445,7 @@ static void freeMorphCaches(dc_game_model *slot) {
             NSString *error=[self stepContextAtX:px y:py left:left right:pcInput.mouse[1]];if(error)return error;
         } else {
             dc_menu_button buttons[DC_GAME_MENU_COUNT];dc_game_menu_profile(buttons,DC_GAME_MENU_COUNT);
-            buttons[2].disabled=_stageProgress?0:1;
+            buttons[2].disabled=(_stageProgress||_editMode)?0:1;
             int32_t result=-1;
             if(dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(px),(int32_t)lrintf(py),1,0,&result)!=DC_OK)return @"Scene icon hover failed";
             if(left!=0&&dc_menu_step(&_gameMenu,buttons,DC_GAME_MENU_COUNT,(int32_t)lrintf(px),(int32_t)lrintf(py),1,left,&result)!=DC_OK)
@@ -1374,10 +1455,19 @@ static void freeMorphCaches(dc_game_model *slot) {
                 ++_acceptedMenuEvents;_lastAcceptedMenuRow=(uint32_t)_mainIconHover;
                 if(_sceneType==4&&_mapSelector==0&&_mainIconHover==1&&!_pendingVoiceName)
                     _pendingVoiceName=@"ast001_01.wav";
+                if(_mainIconHover==2&&(_stageProgress||_editMode)){
+                    _outfitVariant=(_outfitVariant+1)&3u;
+                    [self applyOutfitVariant:_outfitVariant];
+                }
             }
             if(pcInput.mouse[1]==3&&_mainIconHover>=1&&_mainIconHover<=4) {
+                if(_mainIconHover==2&&(_stageProgress||_editMode)){
+                    _outfitVariant=(_outfitVariant+1)&3u;
+                    [self applyOutfitVariant:_outfitVariant];
+                }
                 dc_animation_state animation={0};dc_model_get_animation(_actor.model,&animation);
-                dc_scene_context_input input={.scene_type=_sceneType,.icon=(uint32_t)_mainIconHover,.stage_progress=_stageProgress,
+                uint32_t contextSceneType=(_mainIconHover>=3&&_sceneType>=4&&_sceneType<=6)?4:_sceneType;
+                dc_scene_context_input input={.scene_type=contextSceneType,.icon=(uint32_t)_mainIconHover,.stage_progress=_mainIconHover==1?0:_stageProgress,
                     .animation=animation.current,.camera_mode=_primaryCameraMode,.secondary_camera_mode=_secondaryCameraMode,.x=px,.y=py};
                 dc_status status=dc_scene_context_build(&input,&_contextMenu);
                 if(status!=DC_OK&&status!=DC_NOT_FOUND)return @"Scene context profile failed";
@@ -1478,12 +1568,6 @@ static void freeMorphCaches(dc_game_model *slot) {
         if(dc_model_tick(_autoCamera.model,delta,tick,&_autoCamera.world)!=DC_OK)return @"Original camera animation tick failed";
     }
     dc_camera_orbit orbit=[self activeCameraOrbit];dc_matrix automaticWorld=gameIdentity();
-    if(_sceneType==6&&_primaryCameraMode==0) {
-        uint32_t nightCameraNode=[self findNode:&_actor name:[self characterNode:@"s_Nn_kamera_S"]];
-        dc_matrix nightCameraWorld;
-        if(nightCameraNode!=UINT32_MAX&&dc_model_global(_actor.model,nightCameraNode,&nightCameraWorld)==DC_OK)
-            orbit=(dc_camera_orbit){.base=nightCameraWorld};
-    }
     if(_primaryCameraMode==2||_secondaryCameraMode==2) {
         if([self cameraBinding:DC_CAMERA_ANIMATION_EYE matrix:&_autoCameraEye]!=DC_OK||
            [self cameraBinding:DC_CAMERA_ANIMATION_TARGET matrix:&_autoCameraTarget]!=DC_OK)return @"Original automatic camera binding failed";
@@ -1543,20 +1627,22 @@ static void freeMorphCaches(dc_game_model *slot) {
     }
     size_t sceneDrawCount=count;
     if(!failure)failure=[self appendSceneUI:draws count:&count storage:storage viewport:viewport];
-    if(!failure&&_characterAction.transition_pending) {
+    if(!failure&&(_characterAction.transition_pending||(_motionStateInitialized&&_motionState.transition_pending)||_pendingSystemAction!=0)) {
         failure=[self.transitionScene appendTransitionAtTick:tick viewport:viewport draws:draws capacity:capacity count:&count storage:storage];
+    }
+    if(!failure&&_characterAction.transition_pending) {
         uint32_t ready=0;
         if(!failure&&[self.transitionScene queryTransitionReady:&ready]!=DC_OK)failure=@"Character exit transition query failed";
         /* Only the initial progress-zero type-4 callback is admitted here.
          * Evolved progress and special ending routing require separate ports. */
-        if(!failure&&ready&&_sceneType==4&&_stageProgress==0)_chapterEndAction=2;
+        if(!failure&&ready){_chapterEndAction=_editMode?6:2;_characterAction.transition_pending=0;}
     }
     if(!failure&&_motionStateInitialized&&_motionState.transition_pending) {
         uint32_t ready=0;
         if(!self.transitionScene||[self.transitionScene queryTransitionReady:&ready]!=DC_OK)
             failure=@"Scene motion transition query failed";
         else if(ready&&_motionAudioReady) {
-            _chapterEndAction=2;
+            _chapterEndAction=_editMode?6:2;
             _motionState.transition_pending=0;
         }
     }

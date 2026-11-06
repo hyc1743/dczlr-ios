@@ -292,7 +292,10 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         }
         case DC_INTRO_CLEAR_FINISH: memset(_finishFlags,0,sizeof(_finishFlags));break;
         case DC_INTRO_STOP_AUDIO:
-            if(command.value==2)[_music stop];else if(command.value==0)[_voice stop];else [_sound stop];break;
+            if(command.value==2){_pausedMusic=_music.isPlaying;[_music pause];}
+            else if(command.value==0){_pausedVoice=_voice.isPlaying;[_voice pause];}
+            else [_sound stop];
+            break;
         case DC_INTRO_QUIT: return @"Game session ended";
         case DC_INTRO_BACKUP: break;
         case DC_INTRO_ENTER_AUX:
