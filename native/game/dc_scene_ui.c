@@ -163,7 +163,8 @@ dc_status dc_scene_context_resource(uint32_t type,uint32_t icon,int32_t id,uint3
     if(!out)return DC_ARGUMENT;
     if(type<4||type>6)return DC_NOT_FOUND;
     if(icon<1||icon>4||id<0||id>999||state>1)return DC_RANGE;
-    char buffer[32];int n=snprintf(buffer,sizeof(buffer),"M_%c%03d%c.ema","kacs"[icon-1],id,"SN"[state]);
+    char prefix=icon==1?"kth"[type-4]:"acs"[icon-2];
+    char buffer[32];int n=snprintf(buffer,sizeof(buffer),"M_%c%03d%c.ema",prefix,id,"SN"[state]);
     if(n<0||(size_t)n>=capacity)return DC_RANGE;
     memcpy(out,buffer,(size_t)n+1);return DC_OK;
 }

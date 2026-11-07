@@ -93,11 +93,18 @@ class SceneUITests(unittest.TestCase):
         if not (ROOT/'Data/RPP_02.pp').exists():self.skipTest('private original resource gate')
         with PPArchive(ROOT/'Data/RPP_02.pp') as pp:
             names={pp.entry(i).name_bytes.decode('ascii') for i in range(pp.count)}
-        for icon,ids in ((1,[1,2]),(3,[1,2,4,8,5,7,9,44,47]),(4,[1,2])):
+        for scene_type,icon,ids in (
+            (4,1,[1,2,3,4,5,6,7,8]),
+            (5,1,[1,2,3,4,5,6,7]),
+            (6,1,[1,2,3,9,10,11,12,13]),
+            (4,2,[1,2,3,4]),
+            (4,3,[1,2,4,8,5,7,9,44,47]),
+            (4,4,[1,2]),
+        ):
             for id in ids:
                 for state in range(2):
                     name=C.create_string_buffer(32)
-                    self.assertEqual(self.lib.dc_scene_context_resource(4,icon,id,state,name,32),0)
+                    self.assertEqual(self.lib.dc_scene_context_resource(scene_type,icon,id,state,name,32),0)
                     self.assertIn(name.value.decode(),names)
         for icon in ('chara','fuku','cam','sys'):
             for state in 'SN':self.assertIn(f'P_{icon}_{state}.ema',names)

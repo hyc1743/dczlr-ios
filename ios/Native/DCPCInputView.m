@@ -157,6 +157,7 @@ void dc_pc_touch_input_reset(dc_pc_touch *state) {
         _hint.hidden=YES; [self addSubview:_hint];
         _cursorLayer=[CAShapeLayer layer]; _cursorLayer.fillColor=UIColor.whiteColor.CGColor;
         _cursorLayer.strokeColor=UIColor.blackColor.CGColor; _cursorLayer.lineWidth=1.5;
+        _cursorLayer.hidden=YES;
         [self.layer addSublayer:_cursorLayer];
         [self updatePointerLabel];
         [self addGestureRecognizer:[[UIHoverGestureRecognizer alloc] initWithTarget:self action:@selector(pointerHover:)]];
@@ -252,7 +253,7 @@ void dc_pc_touch_input_reset(dc_pc_touch *state) {
     [path moveToPoint:p]; [path addLineToPoint:CGPointMake(p.x+2,p.y+19)];
     [path addLineToPoint:CGPointMake(p.x+7,p.y+14)]; [path addLineToPoint:CGPointMake(p.x+15,p.y+13)]; [path closePath];
     [CATransaction begin]; [CATransaction setDisableActions:YES]; _cursorLayer.path=path.CGPath;
-    _cursorLayer.hidden=_hardwareHover; [CATransaction commit];
+    _cursorLayer.hidden=YES; [CATransaction commit];
 }
 - (void)pointerHover:(UIHoverGestureRecognizer *)hover {
     _hardwareHover=hover.state==UIGestureRecognizerStateBegan || hover.state==UIGestureRecognizerStateChanged;

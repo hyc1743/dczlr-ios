@@ -25,9 +25,9 @@ dc_status dc_pc_touch_layout(dc_pc_touch *s,float w,float h,float l,float t,floa
     const float px[]={.5f,1.5f,2.5f,1.5f,.5f,2.5f,1.5f,1.5f,.5f,2.5f,1.5f,
         1.5f,.5f,2.5f,1.5f,-.5f,-.5f,-.5f,-.5f,-.5f,-1.5f,-2.5f,-.5f,-1.5f,-2.1f,-2.1f,-2.1f,-2.1f};
     const float py[]={.065f,.065f,.065f,.20f,.27f,.27f,.34f,.46f,.53f,.53f,.60f,
-        .71f,.78f,.78f,.85f,.08f,.18f,.28f,.38f,.49f,.68f,.76f,.76f,.84f,.15f,.235f,.32f,.405f};
+        .71f,.78f,.78f,.85f,.08f,.18f,.28f,.38f,.49f,.68f,.76f,.76f,.84f,.13f,.23f,.33f,.43f};
     for(unsigned i=0;i<DC_PC_TOUCH_COUNT;++i)next.targets[i]=(dc_pc_touch_target){
-        (px[i]<0?w-r:l)+px[i]*d,t+py[i]*ah,i>=24?d*.72f:d,codes[i]};
+        (px[i]<0?w-r:l)+px[i]*d,t+py[i]*ah,d,codes[i]};
     *s=next;return DC_OK;
 }
 uint32_t dc_pc_touch_hit(const dc_pc_touch *s,float x,float y) {

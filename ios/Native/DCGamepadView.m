@@ -103,6 +103,7 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
         }
         _cursorLayer=[CAShapeLayer layer];_cursorLayer.fillColor=UIColor.whiteColor.CGColor;
         _cursorLayer.strokeColor=UIColor.blackColor.CGColor;_cursorLayer.lineWidth=1.5;
+        _cursorLayer.hidden=YES;
         [_controls addSublayer:_cursorLayer];
         _pcInput=[[DCPCInputView alloc] initWithFrame:self.bounds];[self addSubview:_pcInput];
 #if DEBUG

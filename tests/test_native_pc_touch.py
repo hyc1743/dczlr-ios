@@ -58,6 +58,7 @@ class PCTouchTests(unittest.TestCase):
             self.assertEqual(len(set(x.code for x in self.s.targets)),28)
             wheel=self.s.targets[24:28]
             self.assertTrue(all(wheel[i].y<wheel[i+1].y for i in range(3)))
+            self.assertTrue(all(math.isclose(m.diameter,self.s.targets[15].diameter) for m in wheel))
     def test_slide_does_not_click_and_lifted_cursor_is_used_by_short_mouse_tap(self):
         self.assertEqual(self.call('begin',1,400,190),0)
         self.assertEqual(self.call('move',1,470,220),0)

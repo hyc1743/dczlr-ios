@@ -1062,7 +1062,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             ADD_TITLE_LAYER((uint32_t)_selectedTitleOption, 702, 400 + 72 * (_selectedTitleOption - 2));
         if (!_editUnlocked) ADD_TITLE_LAYER(7, 702, 544);
         if (!_extraUnlocked) ADD_TITLE_LAYER(8, 702, 616);
-        if (touching && !pcInput.active) {
+        {
             float screenX = (x + 1.0f) * 0.5f * _width;
             float screenY = (1.0f - y) * 0.5f * _height;
             float gameX = (screenX - offsetX) / scale;
