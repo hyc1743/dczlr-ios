@@ -10,6 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL cardReady;
 @property(nonatomic,readonly) BOOL skinAdvanced;
 - (nullable instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer error:(NSString **)error;
+- (void)pause;
 - (void)detachRenderer;
 - (nullable NSString *)attachRenderer:(dc_vk_sprite *)renderer;
 - (nullable NSString *)drawAtTick:(uint32_t)tick touching:(BOOL)touching width:(uint32_t)width height:(uint32_t)height;

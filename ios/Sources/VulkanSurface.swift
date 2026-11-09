@@ -67,12 +67,20 @@ final class SpritePresenter: NSObject {
     private var mouseMenuPhase = 0
     private var renderPending = false
     private var failed = false
+    private var lastActive: Bool?
+    private var pausedAt: TimeInterval?
+    private var pausedDuration: TimeInterval = 0
     private let start = ProcessInfo.processInfo.systemUptime
 
     init(model: LabModel) { self.model = model }
 
     func attach(_ view: DCVulkanSpriteView) {
         self.view = view
+        lastActive = model.active
+        if !model.active {
+            pausedAt = ProcessInfo.processInfo.systemUptime
+        }
+        view.setActive(model.active)
         let link = CADisplayLink(target: self, selector: #selector(draw))
         link.preferredFramesPerSecond = 30
         link.isPaused = !model.active
@@ -81,8 +89,26 @@ final class SpritePresenter: NSObject {
     }
 
     func setActive(_ active: Bool) {
+        guard lastActive != active else {
+            displayLink?.isPaused = !active || failed || renderProbeDone
+            return
+        }
+        lastActive = active
+        let now = ProcessInfo.processInfo.systemUptime
+        if active {
+            if let pausedAt = pausedAt {
+                pausedDuration += max(0, now - pausedAt)
+                self.pausedAt = nil
+            }
+            if failed {
+                failed = false
+                model.gameError = nil
+            }
+        } else if pausedAt == nil {
+            pausedAt = now
+        }
+        view?.setActive(active)
         displayLink?.isPaused = !active || failed || renderProbeDone
-        if !active { view?.releaseRenderer() }
     }
 
     func stop() {
@@ -295,7 +321,8 @@ final class SpritePresenter: NSObject {
             if !reportedControllerCamera { pad.rx = 10000 }
         }
         wasGameplay = lastReportedScene == .gameplay
-        view.requestDraw(atX: pointerX, y: pointerY, time: ProcessInfo.processInfo.systemUptime - start,
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - start - pausedDuration)
+        view.requestDraw(atX: pointerX, y: pointerY, time: elapsed,
             touching: touching, controller: pad, pcInput: pcInput) { [weak self] error, device, scene, animationAdvanced, materialAdvanced, poseAdvanced, musicAdvanced, introState, skinAdvanced, gameplaySkinAdvanced, interactionCompleted in
                 guard let self = self else { return }
                 self.renderPending = false
@@ -469,6 +496,7 @@ final class SpritePresenter: NSObject {
                     }
                 }
                 if let error = error {
+                    guard self.model.active else { return }
                     self.failed = true
                     self.displayLink?.isPaused = true
                     self.model.gameError = "无法继续运行，请查看应用目录中的 log.txt。"

@@ -29,7 +29,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     DCDecodedImage *_cardImages[2];
     dc_startup_state _startup;
     uint32_t _card,_lastTick;
-    BOOL _finished,_tickInitialized,_wasTouching,_cardReady;
+    BOOL _finished,_tickInitialized,_needsResumeAtNextTick,_wasTouching,_cardReady;
     BOOL _captureEnabled,_capturedCards[2];
     BOOL _skinAdvanced,_capturedSkin;
     NSData *_skinSample;
@@ -110,13 +110,23 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     [self detachRenderer];
     dc_model_close(_model);dc_xx_close(_xx);
 }
+- (void)pause {
+    _needsResumeAtNextTick=YES;
+    _wasTouching=NO;
+}
+- (void)resumeIfNeededAtTick:(uint32_t)tick {
+    if(!_needsResumeAtNextTick)return;
+    _needsResumeAtNextTick=NO;
+    if(_tickInitialized && _model)dc_model_shift_clock(_model,tick-_lastTick);
+    _lastTick=tick;_wasTouching=NO;
+}
 - (void)detachRenderer {
     if (_renderer) {
         for (uint32_t i=0;i<2;++i) if(_cards[i]) dc_vk_sprite_remove_texture(_renderer,_cards[i]);
         for (uint32_t i=0;i<64;++i) if(_textures[i]) dc_vk_sprite_remove_texture(_renderer,_textures[i]);
     }
     memset(_cards,0,sizeof(_cards));memset(_textures,0,sizeof(_textures));
-    _renderer=NULL;_tickInitialized=NO;
+    _renderer=NULL;_needsResumeAtNextTick=YES;_wasTouching=NO;
 }
 - (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
     if (_renderer==renderer && _cards[0] && _cards[1]) return nil;
@@ -138,6 +148,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     return nil;
 }
 - (NSString *)drawAtTick:(uint32_t)tick touching:(BOOL)touching width:(uint32_t)width height:(uint32_t)height {
+    [self resumeIfNeededAtTick:tick];
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;
     uint32_t clip,ready;
     dc_status status=dc_model_query(_model,&clip,&ready);
@@ -160,6 +171,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     return dc_model_query(_model,&clip,ready);
 }
 - (dc_status)requestTransition:(uint32_t)request tick:(uint32_t)tick {
+    [self resumeIfNeededAtTick:tick];
     dc_status status=dc_model_request(_model,request,tick);
     if(status==DC_OK){_tickInitialized=YES;_lastTick=tick;}
     return status;
@@ -168,6 +180,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
 - (NSString *)appendTransitionAtTick:(uint32_t)tick viewport:(dc_viewport)viewport
         draws:(dc_vk_geometry_item *)draws capacity:(size_t)capacity count:(size_t *)count storage:(NSMutableArray *)storage {
     if(!draws||!count||*count>capacity||capacity-*count<_info.submeshes)return @"Transition draw capacity rejected";
+    [self resumeIfNeededAtTick:tick];
     dc_matrix world=dcStartupIdentity();
     dc_status status=dc_model_tick(_model,_tickInitialized?tick-_lastTick:0,tick,&world);
     if(status!=DC_OK)return @"Gameplay transition model tick failed";
@@ -212,6 +225,7 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
 }
 - (NSString *)drawSprites:(const dc_vk_sprite_item *)items count:(size_t)count
         tick:(uint32_t)tick width:(uint32_t)width height:(uint32_t)height readback:(NSMutableData *)readback {
+    [self resumeIfNeededAtTick:tick];
     uint32_t delta=_tickInitialized ? tick-_lastTick : 0;
     dc_matrix world=dcStartupIdentity();
     dc_status status=dc_model_tick(_model,delta,tick,&world);

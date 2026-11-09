@@ -102,8 +102,8 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
     if(_renderer)for(unsigned i=0;i<11;++i)if(_textures[i])dc_vk_sprite_remove_texture(_renderer,_textures[i]);
     memset(_textures,0,sizeof(_textures));_renderer=NULL;
 }
-- (void)pause {_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];[_voice pause];[_select pause];[_toggle pause];}
-- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=_persist=NO;_pausedMusic=NO;[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];}
+- (void)pause {_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];[_voice pause];[_select pause];[_toggle pause];_drag=-1;}
+- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=_persist=NO;_pausedMusic=NO;[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];}
 - (void)dealloc {[self detachRenderer];[_music stop];[_voice stop];[_select stop];[_toggle stop];}
 - (NSString *)depart:(uint32_t)action tick:(uint32_t)tick {
     _pendingAction=action;_persist=action!=5;_drag=-1;
@@ -120,7 +120,7 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
 }
 - (NSString *)drawAtTick:(uint32_t)tick pcInput:(dc_pc_frame)input width:(uint32_t)width height:(uint32_t)height {
     if(!_renderer)return @"Configuration renderer detached";
-    if(_pausedMusic){[AVAudioSession.sharedInstance setActive:YES error:nil];if(![_music play]){[_music prepareToPlay];[_music play];}_pausedMusic=NO;}
+    if(_pausedMusic){[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];if(!_music||[_music play]||([_music prepareToPlay]&&[_music play]))_pausedMusic=NO;}
     if(!_entered){
         if([_transition requestTransition:4 tick:tick]!=DC_OK)return @"Configuration entry transition failed";
         _entered=YES;

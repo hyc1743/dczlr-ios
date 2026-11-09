@@ -1,6 +1,8 @@
 #import "DCVulkanSpriteView.h"
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <AVFoundation/AVFoundation.h>
+#include <stdatomic.h>
 #include "dc_vk_sprite.h"
 #include "dc_sprite_spv.h"
 #include "dc_animation.h"
@@ -180,6 +182,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     BOOL _diagnosticMaterialAdvanced;
     BOOL _diagnosticPoseAdvanced;
     dispatch_queue_t _renderQueue;
+    atomic_bool _suspended;
+    atomic_bool _needsRecoveryAfterResume;
     NSString *_gameplayContext,*_renderProbeStatus;
 #if DEBUG
     uint32_t _probeCase,_probeFrame;
@@ -199,11 +203,20 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         _selectedTitleOption = -1;
         _pendingBadgeStage = -1;
         _pendingBadgeIndex = -1;
+        atomic_init(&_suspended, false);
+        atomic_init(&_needsRecoveryAfterResume, false);
         _renderQueue = dispatch_queue_create("org.example.portlab.vulkan-render", DISPATCH_QUEUE_SERIAL);
         dispatch_queue_set_specific(_renderQueue, &dcRenderQueueKey, (void *)&dcRenderQueueKey, NULL);
+        NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+        [center addObserver:self selector:@selector(applicationWillResignActive:) name:UIApplicationWillResignActiveNotification object:nil];
+        [center addObserver:self selector:@selector(applicationDidEnterBackground:) name:UIApplicationDidEnterBackgroundNotification object:nil];
+        [center addObserver:self selector:@selector(applicationDidBecomeActive:) name:UIApplicationDidBecomeActiveNotification object:nil];
     }
     return self;
 }
+- (void)applicationWillResignActive:(NSNotification *)notification { [self setActive:NO]; }
+- (void)applicationDidEnterBackground:(NSNotification *)notification { [self setActive:NO]; }
+- (void)applicationDidBecomeActive:(NSNotification *)notification { [self setActive:YES]; }
 - (NSString *)deviceName { return _deviceName; }
 - (uint64_t)presentedFrames { return _presentedFrames; }
 - (DCVulkanSpriteScene)presentedScene { return _presentedScene; }
@@ -212,16 +225,45 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 - (BOOL)gameplaySaveCompleted { return _gameScene.manualSaveCompleted; }
 - (NSString *)gameplayContext { return _gameplayContext?:@""; }
 - (NSString *)renderProbeStatus { return _renderProbeStatus?:@""; }
+- (void)pauseActiveScenesAndAudio {
+    if (_renderer) dc_vk_sprite_wait_idle(_renderer);
+    [_gameAudio pause];
+    [_introScene pause];
+    [_configScene pause];
+    [_saveScene pause];
+    [_dummyScene pause];
+    [_endingScene pause];
+    [_startupScene pause];
+    [_gameScene pause];
+    _previousTitleTouch = NO;
+    _previousGameplayTouch = NO;
+    _suppressGameplayTouch = YES;
+    _diagnosticTickInitialized = NO;
+    [AVAudioSession.sharedInstance setActive:NO withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation error:nil];
+}
+- (void)setActive:(BOOL)active {
+    bool shouldSuspend = !active;
+    bool prev = atomic_exchange(&_suspended, shouldSuspend);
+    if (prev == shouldSuspend) return;
+    if (shouldSuspend) {
+        dispatch_async(_renderQueue, ^{
+            [self pauseActiveScenesAndAudio];
+        });
+    } else {
+        atomic_store(&_needsRecoveryAfterResume, true);
+        dispatch_async(_renderQueue, ^{
+            [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
+            [AVAudioSession.sharedInstance setActive:YES error:nil];
+            self->_previousTitleTouch = NO;
+            self->_previousGameplayTouch = NO;
+            self->_suppressGameplayTouch = YES;
+        });
+    }
+}
 - (void)releaseRenderer {
+    atomic_store(&_suspended, true);
     dispatch_async(_renderQueue, ^{
-        [self->_gameAudio pause];
-        [self->_introScene pause];
-        [self->_configScene pause];
-        [self->_saveScene pause];
-        [self->_dummyScene pause];
-        [self->_endingScene pause];
-        self->_previousTitleTouch=NO;
-        self->_previousGameplayTouch=NO;
+        [self pauseActiveScenesAndAudio];
         [self detachRendererOnly];
     });
 }
@@ -978,6 +1020,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     _diagnosticPoseAdvanced = NO;
 }
 - (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
     if (dispatch_get_specific(&dcRenderQueueKey)) [self destroyRenderer];
     else dispatch_sync(_renderQueue, ^{ [self destroyRenderer]; });
 }
@@ -1058,7 +1101,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if (!width || !height) return @"CAMetalLayer has empty drawable size";
     if (_renderer && (_width != width || _height != height)) [self detachRendererOnly];
     if (!_renderer) {
-        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 256, .initial_filter = 2,
+        dc_vk_sprite_config config = {.width = width, .height = height, .max_textures = 1024, .initial_filter = 2,
             .vertex_spirv = dc_sprite_vert_spv, .vertex_spirv_bytes = sizeof(dc_sprite_vert_spv),
             .fragment_spirv = dc_sprite_frag_spv, .fragment_spirv_bytes = sizeof(dc_sprite_frag_spv),
             .metal_layer = (__bridge void *)layer};
@@ -1078,7 +1121,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         }
         if (dc_vk_sprite_upload(_renderer, imageInfo.width, imageInfo.height, checker, sizeof(checker), &_texture) != DC_OK) {
             NSString *message = [NSString stringWithUTF8String:dc_vk_sprite_error(_renderer)];
-            [self releaseRenderer];
+            [self detachRendererOnly];
             return message;
         }
         dc_vk_sprite_info info;
@@ -1813,6 +1856,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             float gameY = (screenY - offsetY) / scale;
             ADD_TITLE_LAYER(0, gameX - 6.4f, gameY - 6.4f);
         } else if (_extraSceneLoaded) {
+            if (_galleryViewingCG && !_galleryTexture) [self loadGalleryImageFromDirectory:directory];
             if (_galleryViewingCG && _galleryTexture) {
                 ADD_EXTRA_LAYER(_galleryTexture, 0, 0, 1024, 768);
             } else {
@@ -2007,10 +2051,18 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 }
 - (void)requestDrawAtX:(float)x y:(float)y time:(double)time touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
             completion:(void (^)(NSString *, NSString *, DCVulkanSpriteScene, BOOL, BOOL, BOOL, BOOL, NSString *, BOOL, BOOL, BOOL))completion {
-    if (!self.window) { completion(@"Vulkan sprite view is not attached to a window", @"", DCVulkanSpriteSceneDiagnostic, NO, NO, NO, NO, @"", NO, NO, NO); return; }
+    if (atomic_load(&_suspended) || !self.window ||
+        UIApplication.sharedApplication.applicationState == UIApplicationStateBackground) {
+        completion(nil, _deviceName ?: @"", _presentedScene, NO, NO, NO, NO, @"", NO, NO, NO);
+        return;
+    }
     CAMetalLayer *layer = (CAMetalLayer *)self.layer;
     CGSize drawableSize = layer.drawableSize;
     uint32_t width = (uint32_t)drawableSize.width, height = (uint32_t)drawableSize.height;
+    if (!width || !height) {
+        completion(nil, _deviceName ?: @"", _presentedScene, NO, NO, NO, NO, @"", NO, NO, NO);
+        return;
+    }
     NSString *directory = [self.startupDataDirectory copy] ?: @"";
     if([self.superview isKindOfClass:DCVulkanContainerView.class] && self.bounds.size.width>0 && self.bounds.size.height>0) {
         CGSize inputSize=self.superview.bounds.size;
@@ -2019,7 +2071,23 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     }
     dispatch_async(_renderQueue, ^{
         @autoreleasepool {
+            if (atomic_load(&self->_suspended)) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(nil, self->_deviceName ?: @"", self->_presentedScene, NO, NO, NO, NO, @"", NO, NO, NO);
+                });
+                return;
+            }
+            BOOL hadRenderer = (self->_renderer != NULL);
+            BOOL canRecover = atomic_exchange(&self->_needsRecoveryAfterResume, false);
             NSString *error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching controller:controller pcInput:pcInput];
+            if (error && (atomic_load(&self->_suspended) || (hadRenderer && canRecover))) {
+                if (atomic_load(&self->_suspended)) {
+                    error = nil;
+                } else {
+                    [self detachRendererOnly];
+                    error = [self drawAtX:x y:y time:time layer:layer width:width height:height dataDirectory:directory touching:touching controller:controller pcInput:pcInput];
+                }
+            }
             NSString *device = self->_deviceName ?: @"";
             DCVulkanSpriteScene scene = self->_presentedScene;
             BOOL advanced = self->_diagnosticAnimationAdvanced;

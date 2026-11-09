@@ -348,6 +348,12 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(ready&&!busy){_chapterEndAction=_pendingSystemAction;_pendingSystemAction=0;}
     return nil;
 }
+- (void)pause {
+    [self savePlayerState];
+    _needsResumeAtNextTick=YES;
+    _pointerCameraOwner=0;_inputInitialized=NO;_previousGameMenuTouch=NO;
+    _watchDragging=NO;_nightDragging=NO;
+}
 - (void)resumeAtTick:(uint32_t)tick {
     uint32_t elapsed=_tickInitialized?tick-_lastTick:0;
     dc_model_shift_clock(_map.model,elapsed);dc_model_shift_clock(_actor.model,elapsed);

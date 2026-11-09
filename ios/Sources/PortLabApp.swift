@@ -57,9 +57,7 @@ struct PortLabApp: App {
                 }
             }
             .onChange(of: phase) { newPhase in
-                DispatchQueue.main.async {
-                    model.setActive(newPhase == .active)
-                }
+                model.setActive(newPhase == .active)
             }
         }
     }

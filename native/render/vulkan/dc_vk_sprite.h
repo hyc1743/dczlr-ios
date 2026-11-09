@@ -75,6 +75,7 @@ typedef struct dc_vk_sprite_info {
 DC_API dc_status dc_vk_sprite_create(const dc_vk_sprite_config *config,
                                      dc_vk_sprite **out, char *error, size_t error_capacity);
 DC_API void dc_vk_sprite_destroy(dc_vk_sprite *renderer);
+DC_API void dc_vk_sprite_wait_idle(dc_vk_sprite *renderer);
 DC_API const char *dc_vk_sprite_error(const dc_vk_sprite *renderer);
 DC_API dc_status dc_vk_sprite_get_info(const dc_vk_sprite *renderer, dc_vk_sprite_info *out);
 DC_API dc_status dc_vk_sprite_upload(dc_vk_sprite *renderer, uint32_t width, uint32_t height,

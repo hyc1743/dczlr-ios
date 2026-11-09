@@ -53,6 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)updateCharacterWithExitSoundBusy:(BOOL)busy tick:(uint32_t)tick;
 - (nullable NSString *)updateSystemWithSelectionSoundBusy:(BOOL)busy tick:(uint32_t)tick;
 - (nullable NSString *)applyConfiguration:(const dc_config *)configuration;
+- (void)pause;
 - (void)resumeAtTick:(uint32_t)tick;
 - (nullable instancetype)initWithDirectory:(NSString *)directory
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter

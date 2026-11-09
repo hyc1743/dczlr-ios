@@ -175,16 +175,16 @@ final class LabModel: ObservableObject {
     }
 
     func setActive(_ value: Bool) {
+        guard active != value else { return }
         gamepad.setActive(value)
         touchActive = false
         active = value
-        if !value {
+        if value {
+            gameError = nil
+            try? AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
+            try? AVAudioSession.sharedInstance().setActive(true)
+        } else {
             player?.stop()
-            do {
-                try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            } catch {
-                record("音频会话释放失败：\(error.localizedDescription)")
-            }
         }
         record(value ? "进入前台，恢复绘制" : "离开前台，暂停绘制与测试音")
     }

@@ -58,6 +58,7 @@ struct dc_vk_sprite {
     VkPhysicalDeviceMemoryProperties memory_properties;
     VkDevice device;
     VkQueue queue;
+    void *metal_layer;
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
     VkImage *present_images;
@@ -237,6 +238,10 @@ static void drop_texture(dc_vk_sprite *r, texture *image) {
     memset(image, 0, sizeof(*image));
 }
 
+void dc_vk_sprite_wait_idle(dc_vk_sprite *r) {
+    if (r && r->device) vkDeviceWaitIdle(r->device);
+}
+
 void dc_vk_sprite_destroy(dc_vk_sprite *r) {
     if (!r) return;
     if (r->device) {
@@ -327,6 +332,7 @@ static dc_status create_device(dc_vk_sprite *r, uint32_t validation, void *metal
     VK_CHECK(vkCreateInstance(&instance, NULL, &r->instance));
 #ifdef __APPLE__
     if (metal_layer) {
+        r->metal_layer = metal_layer;
         VkMetalSurfaceCreateInfoEXT surface = {.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
             .pLayer = metal_layer};
         PFN_vkCreateMetalSurfaceEXT create_surface = (PFN_vkCreateMetalSurfaceEXT)vkGetInstanceProcAddr(r->instance, "vkCreateMetalSurfaceEXT");
@@ -404,7 +410,20 @@ static dc_status create_device(dc_vk_sprite *r, uint32_t validation, void *metal
 
 static dc_status create_swapchain_impl(dc_vk_sprite *r) {
     VkSurfaceCapabilitiesKHR caps;
-    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r->physical, r->surface, &caps));
+    VkResult caps_result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r->physical, r->surface, &caps);
+#ifdef __APPLE__
+    if (caps_result == VK_ERROR_SURFACE_LOST_KHR && r->metal_layer) {
+        if (r->swapchain) { vkDestroySwapchainKHR(r->device, r->swapchain, NULL); r->swapchain = VK_NULL_HANDLE; }
+        if (r->surface) { vkDestroySurfaceKHR(r->instance, r->surface, NULL); r->surface = VK_NULL_HANDLE; }
+        VkMetalSurfaceCreateInfoEXT surface_info = {.sType = VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT,
+            .pLayer = r->metal_layer};
+        PFN_vkCreateMetalSurfaceEXT create_surface = (PFN_vkCreateMetalSurfaceEXT)vkGetInstanceProcAddr(r->instance, "vkCreateMetalSurfaceEXT");
+        if (!create_surface) return fail(r, DC_IO, "Missing Vulkan Metal surface entry point");
+        VK_CHECK(create_surface(r->instance, &surface_info, NULL, &r->surface));
+        caps_result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(r->physical, r->surface, &caps);
+    }
+#endif
+    VK_CHECK(caps_result);
     if (!(caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT))
         return fail(r, DC_IO, "Surface does not support Vulkan transfer destination");
     uint32_t count = 0;
@@ -484,13 +503,20 @@ static dc_status create_swapchain(dc_vk_sprite *r) {
 }
 
 static dc_status present_target(dc_vk_sprite *r) {
+    if (!r->swapchain) {
+        dc_status status = create_swapchain(r);
+        if (status != DC_OK) return status;
+    }
     uint32_t index = 0;
     VkResult result = vkAcquireNextImageKHR(r->device, r->swapchain, 1000000000ull, r->acquired, VK_NULL_HANDLE, &index);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_ERROR_SURFACE_LOST_KHR) {
         dc_status status = create_swapchain(r);
         if (status != DC_OK) return status;
         result = vkAcquireNextImageKHR(r->device, r->swapchain, 1000000000ull, r->acquired, VK_NULL_HANDLE, &index);
     }
+#ifdef __APPLE__
+    if (result == VK_TIMEOUT || result == VK_NOT_READY) return DC_OK;
+#endif
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return vk_fail(r, result, "Acquiring surface image");
     /* After acquisition, any failure requires recreation to retire the semaphore. */
     dc_status status = begin_commands(r);
@@ -525,7 +551,7 @@ static dc_status present_target(dc_vk_sprite *r) {
     result = vkQueuePresentKHR(r->queue, &present);
     VkResult idle = vkQueueWaitIdle(r->queue);
     if (idle != VK_SUCCESS) { r->broken = 1; return vk_fail(r, idle, "Completing surface presentation"); }
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) return create_swapchain(r);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_SURFACE_LOST_KHR) return create_swapchain(r);
     if (result != VK_SUCCESS) { r->broken = 1; return vk_fail(r, result, "Presenting surface image"); }
     return DC_OK;
 }

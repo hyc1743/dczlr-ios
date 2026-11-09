@@ -302,7 +302,7 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
 }
 - (NSString *)drawAtTick:(uint32_t)tick pcInput:(dc_pc_frame)input width:(uint32_t)width height:(uint32_t)height {
     if(!_renderer||!_transition)return @"Ending selector renderer unavailable";
-    if(_pausedMusic){[AVAudioSession.sharedInstance setActive:YES error:nil];if(![_music play]){[_music prepareToPlay];[_music play];}_pausedMusic=NO;}
+    if(_pausedMusic){[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];if(!_music||[_music play]||([_music prepareToPlay]&&[_music play]))_pausedMusic=NO;}
     uint32_t ready=0;if(!_entered){if([_transition requestTransition:4 tick:tick]!=DC_OK)return @"Ending selector entry transition failed";_entered=YES;}
     if([_transition queryTransitionReady:&ready]!=DC_OK)return @"Ending selector transition query failed";
     if(ready){
@@ -436,6 +436,7 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     if(_music)_music.volume=bgmVol;
     if(_select)_select.volume=seVol;
     if(_toggle)_toggle.volume=seVol;
+    _pausedMusic=NO;[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];
 }
 - (void)detachRenderer {
     for(NSNumber *value in _textures.allValues)if(_renderer)dc_vk_sprite_remove_texture(_renderer,value.unsignedLongLongValue);

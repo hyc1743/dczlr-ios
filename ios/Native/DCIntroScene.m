@@ -50,11 +50,11 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     uint32_t _entryFrame,_targetEntryFrame,_auxiliaryDestination;
     uint8_t _finishFlags[3];
     size_t _cursor;
-    BOOL _touching,_completed,_dirty,_tickInitialized,_textStarted,_initialUpdateSkipped,_hasTextPlan;
+    BOOL _touching,_completed,_dirty,_tickInitialized,_needsResumeAtNextTick,_textStarted,_initialUpdateSkipped,_hasTextPlan;
     BOOL _windowHidden,_fastForward;
     AVAudioPlayer *_music,*_sound,*_voice,*_selection;
     float _musicVolume,_soundVolume,_voiceVolume;
-    BOOL _pausedMusic,_pausedVoice;
+    BOOL _pausedMusic,_pausedVoice,_pausedSound;
     BOOL _seeking;
     BOOL _musicAdvanced,_voiceAdvanced,_soundAdvanced;
     BOOL _captureEnabled,_capturedFirstRecord;
@@ -66,6 +66,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
 - (NSData *)numericState {return _gameState;}
 - (void)consumeAuxiliaryDestination {_auxiliaryDestination=0;}
 - (void)resumeAtTick:(uint32_t)tick {
+    _needsResumeAtNextTick=NO;
     if(_tickInitialized)_text.wait_stamp+=tick-_lastTick;
     _lastTick=tick;_tickInitialized=YES;_touching=NO;
 }
@@ -183,7 +184,13 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         _text.frame=frame;failure=[self loadRecord];if(failure){_seeking=NO;_targetEntryFrame=0;return failure;}
     }
     _text.frame=(int32_t)entryFrame-1;_seeking=NO;_targetEntryFrame=0;
-    if(entryFrame){if(_music&&![_music play])return @"Saved script music did not start";if(_voice&&![_voice play])return @"Saved script voice did not start";if(_sound&&![_sound play])return @"Saved script sound did not start";}
+    if(entryFrame){
+        [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
+        [AVAudioSession.sharedInstance setActive:YES error:nil];
+        if(_music&&![_music play]){[_music prepareToPlay];if(![_music play])_pausedMusic=YES;}
+        if(_voice&&![_voice play]){[_voice prepareToPlay];if(![_voice play])_pausedVoice=YES;}
+        if(_sound&&![_sound play]){[_sound prepareToPlay];if(![_sound play])_pausedSound=YES;}
+    }
     return nil;
 }
 - (AVAudioPlayer *)playerForName:(const uint8_t *)name archive:(NSString *)archiveName loop:(BOOL)loop error:(NSString **)error {
@@ -205,7 +212,8 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     AVAudioPlayer *player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
     [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
     [AVAudioSession.sharedInstance setActive:YES error:nil];
-    if(!player || ![player prepareToPlay]) {if(error)*error=reason.localizedDescription ?: @"Intro audio decoder failed";return nil;}
+    if(!player) {if(error)*error=reason.localizedDescription ?: @"Intro audio decoder failed";return nil;}
+    [player prepareToPlay];
     player.numberOfLoops=loop ? -1 : 0;
     return player;
 }
@@ -251,10 +259,15 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         if(_backgroundTexture)dc_vk_sprite_remove_texture(_renderer,_backgroundTexture);
         _backgroundTexture=0;_background=image;
     }
-    if(next.music[0]) {[_music stop];_music=music;if(_music&&!_seeking&&![_music play])return @"Intro music did not start";}
+    if(next.music[0]) {
+        [_music stop];_music=music;_pausedMusic=NO;
+        if(_music&&!_seeking&&![_music play]){[_music prepareToPlay];if(![_music play])_pausedMusic=YES;}
+    }
     if(!_seeking || frame==_targetEntryFrame) {
-        [_sound stop];_sound=sound;if(_sound&&!_seeking&&![_sound play])return @"Intro sound did not start";
-        [_voice stop];_voice=voice;if(_voice&&!_seeking&&![_voice play])return @"Intro voice did not start";
+        [_sound stop];_sound=sound;_pausedSound=NO;
+        if(_sound&&!_seeking&&![_sound play]){[_sound prepareToPlay];if(![_sound play])_pausedSound=YES;}
+        [_voice stop];_voice=voice;_pausedVoice=NO;
+        if(_voice&&!_seeking&&![_voice play]){[_voice prepareToPlay];if(![_voice play])_pausedVoice=YES;}
     }
     _decoded=next;_cursor=next.record.next_offset;_speaker=speaker;
     _bodyBytes=[_script subdataWithRange:NSMakeRange(next.record.body.offset,next.record.body.length)];
@@ -269,12 +282,13 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         if(_windowFrameTexture)dc_vk_sprite_remove_texture(_renderer,_windowFrameTexture);
         if(_nextPromptTexture)dc_vk_sprite_remove_texture(_renderer,_nextPromptTexture);
     }
-    _renderer=NULL;_backgroundTexture=_textTexture=_windowFrameTexture=_nextPromptTexture=0;_dirty=YES;_tickInitialized=NO;
+    _renderer=NULL;_backgroundTexture=_textTexture=_windowFrameTexture=_nextPromptTexture=0;_dirty=YES;_needsResumeAtNextTick=YES;
 }
 - (void)pause {
     _pausedMusic=_pausedMusic||_music.isPlaying;
     _pausedVoice=_pausedVoice||_voice.isPlaying;
-    [_music pause];[_voice pause];[_sound stop];[_selection stop];_touching=NO;_tickInitialized=NO;
+    _pausedSound=_pausedSound||_sound.isPlaying;
+    [_music pause];[_voice pause];[_sound pause];[_selection stop];_touching=NO;_needsResumeAtNextTick=YES;
 }
 - (void)dealloc { [self detachRenderer];[_music stop];[_sound stop];[_voice stop];[_selection stop]; }
 - (NSString *)uploadText {
@@ -372,15 +386,21 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         tick:(uint32_t)tick touching:(BOOL)touching width:(uint32_t)width height:(uint32_t)height {
     if(_renderer!=renderer) { [self detachRenderer];_renderer=renderer; }
     if(_completed)return nil;
+    if(_needsResumeAtNextTick) [self resumeAtTick:tick];
     if(_pausedMusic) {
+        [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
         [AVAudioSession.sharedInstance setActive:YES error:nil];
-        if(![_music play]){[_music prepareToPlay];if(![_music play])return @"Intro music resume failed";}
-        _pausedMusic=NO;
+        if(!_music || [_music play] || ([_music prepareToPlay] && [_music play])) _pausedMusic=NO;
     }
     if(_pausedVoice) {
+        [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
         [AVAudioSession.sharedInstance setActive:YES error:nil];
-        if(![_voice play]){[_voice prepareToPlay];[_voice play];}
-        _pausedVoice=NO;
+        if(!_voice || [_voice play] || ([_voice prepareToPlay] && [_voice play])) _pausedVoice=NO;
+    }
+    if(_pausedSound) {
+        [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
+        [AVAudioSession.sharedInstance setActive:YES error:nil];
+        if(!_sound || [_sound play] || ([_sound prepareToPlay] && [_sound play])) _pausedSound=NO;
     }
     uint32_t ready=0,delta=_tickInitialized ? tick-_lastTick : 0;
     if([transition queryTransitionReady:&ready]!=DC_OK)return @"Intro transition query failed";
