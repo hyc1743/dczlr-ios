@@ -25,14 +25,14 @@ dc_status dc_game_map_presentation_profile(uint32_t selector,dc_game_map_present
     if(!out)return DC_ARGUMENT;
     static const dc_game_map_presentation profiles[9]={
         {"m_Nn_yuka_l_a","home_sh.cam"},
-        {"m_Nn_yuka_p_a","hote_5p.cam"},
+        {"m_Nn_yuka_p_a","trai_ch.cam"},
         {NULL,NULL},
-        {"m_Nn_yuka_r_a","home_sh.cam"},
+        {"m_Nn_yuka_r_a","toil_ta.cam"},
+        {"m_Nn_yuka_r_a","hote_tb.cam"},
         {"m_Nn_yuka_5_a","roji_5p.cam"},
-        {"m_Nn_yuka_5_a","home_sh.cam"},
-        {"m_Nn_yuka_2b_a","roji_5p.cam"},
-        {"m_Nn_yuka_2b_a","roji_5p.cam"},
-        {"m_Nn_yuka_5_a","home_sh.cam"}
+        {"m_Nn_yuka_r_a","park_tc.cam"},
+        {"m_Nn_yuka_r_a","park_tc.cam"},
+        {"m_Nn_yuka_5_a","mana_5p.cam"}
     };
     if(selector>=9||!profiles[selector].anchor)return DC_RANGE;
     *out=profiles[selector];return DC_OK;

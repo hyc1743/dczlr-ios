@@ -280,7 +280,13 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
     return nil;
 #endif
 }
+- (BOOL)pointerContactActive {
+    if(_pcMode||!inputActive)return NO;
+    for(unsigned i=0;i<16;++i)if(_touch.contacts[i].id&&_touch.contacts[i].control==DC_PC_TOUCH_POINTER)return YES;
+    return NO;
+}
 @end
+BOOL dc_gamepad_pointer_contact_active(void) { return currentView?[currentView pointerContactActive]:NO; }
 NSString *dc_gamepad_presentation(void) { return currentView?[currentView presentationState]:@"not-created"; }
 void dc_gamepad_set_context(uint32_t scene,BOOL completed,BOOL busy) { [currentView setScene:scene completed:completed busy:busy]; }
 void dc_gamepad_set_active(BOOL active) {

@@ -116,7 +116,7 @@ static uint32_t saveDword(const uint8_t *p) {
     AVAudioPlayer *_music,*_select,*_toggle;
     uint32_t _page,_row,_ownerSceneType,_chapter,_pendingAction,_action;
     int32_t _hoverButton,_hoverAction;
-    BOOL _entered,_ready,_saveRequested,_saveDisabled;
+    BOOL _entered,_ready,_saveRequested,_saveDisabled,_pausedMusic;
     NSDictionary *_lastRenderCapture;
 }
 - (NSData *)compatibilitySlotFromExistingState {
@@ -171,23 +171,12 @@ static uint32_t saveDword(const uint8_t *p) {
         transition:(DCStartupScene *)transition ownerSceneType:(uint32_t)ownerSceneType
         chapter:(uint32_t)chapter error:(NSString **)error {
     if(!(self=[super init]))return nil;
-    _directory=[directory copy];_renderer=renderer;_transition=transition;
+    _directory=[directory copy];_transition=transition;
     _ownerSceneType=ownerSceneType;_chapter=chapter;_hoverButton=_hoverAction=-1;
     /*0052e070 disables Save for these owner/chapter combinations only. */
     _saveDisabled=ownerSceneType==1||ownerSceneType==12||(ownerSceneType==3&&chapter>24);
-    NSError *reason=nil;
-    DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
-    if(!archive){if(error)*error=reason.localizedDescription;return nil;}
-    NSMutableDictionary<NSString *,NSNumber *> *indices=[NSMutableDictionary dictionary];
-    for(uint32_t i=0;i<archive.entryCount;++i){NSString *name=[archive asciiNameAtIndex:i];if(name)indices[name.lowercaseString]=@(i);}
-    for(unsigned i=0;i<85;++i){
-        NSString *name=[NSString stringWithUTF8String:saveSprites[i].name];NSNumber *index=indices[name.lowercaseString];
-        if(!index){if(error)*error=[NSString stringWithFormat:@"Missing original save bitmap %@",name];return nil;}
-        DCDecodedImage *image=[archive decodeImageAtIndex:index.unsignedIntValue inputLimit:8*1024*1024 outputLimit:64*1024*1024 error:&reason];
-        if(!image||dc_vk_sprite_upload(renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_textures[i])!=DC_OK){
-            if(error)*error=reason.localizedDescription?:@"Save bitmap upload failed";return nil;
-        }
-    }
+    NSString *attachError=[self attachRenderer:renderer];
+    if(attachError){if(error)*error=attachError;return nil;}
     _music=[self audio:@"bgm015.wav" archive:@"RPP_01.pp" error:error];
     _select=[self audio:@"se100.wav" archive:@"RPP_14.pp" error:error];
     _toggle=[self audio:@"se101.wav" archive:@"RPP_14.pp" error:error];
@@ -203,7 +192,76 @@ static uint32_t saveDword(const uint8_t *p) {
     for(uint32_t i=0;i<80;++i){uint64_t stamp=[_slots[i][@"stamp"] unsignedLongLongValue];if(stamp>newest){newest=stamp;_page=i/10;_row=i%10;}}
     _music.numberOfLoops=-1;[_music play];return self;
 }
+- (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
+    if(!renderer)return @"Save renderer is unavailable";
+    if(_renderer==renderer&&_textures[0])return nil;
+    [self detachRenderer];_renderer=renderer;
+    NSError *reason=nil;
+    DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
+    if(!archive)return reason.localizedDescription?:@"Save archive is unavailable";
+    NSMutableDictionary<NSString *,NSNumber *> *indices=[NSMutableDictionary dictionary];
+    for(uint32_t i=0;i<archive.entryCount;++i){NSString *name=[archive asciiNameAtIndex:i];if(name)indices[name.lowercaseString]=@(i);}
+    for(unsigned i=0;i<85;++i){
+        NSString *name=[NSString stringWithUTF8String:saveSprites[i].name];NSNumber *index=indices[name.lowercaseString];
+        if(!index)return [NSString stringWithFormat:@"Missing original save bitmap %@",name];
+        DCDecodedImage *image=[archive decodeImageAtIndex:index.unsignedIntValue inputLimit:8*1024*1024 outputLimit:64*1024*1024 error:&reason];
+        if(!image||dc_vk_sprite_upload(renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_textures[i])!=DC_OK)
+            return reason.localizedDescription?:@"Save bitmap upload failed";
+    }
+    return nil;
+}
+- (void)syncExternalSaveFiles {
+    NSFileManager *fm=[NSFileManager defaultManager];
+    NSString *targetDir=[_directory stringByAppendingPathComponent:@"save"];
+    [fm createDirectoryAtPath:targetDir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *gameRoot=[_directory stringByDeletingLastPathComponent];
+    NSString *docsRoot=[gameRoot stringByDeletingLastPathComponent];
+    NSMutableArray<NSString *> *searchDirs=[NSMutableArray array];
+    for(NSString *candidate in @[
+        docsRoot ?: @"",
+        [docsRoot stringByAppendingPathComponent:@"save"] ?: @"",
+        [docsRoot stringByAppendingPathComponent:@"Save"] ?: @"",
+        [docsRoot stringByAppendingPathComponent:@"saves"] ?: @"",
+        [docsRoot stringByAppendingPathComponent:@"Saves"] ?: @"",
+        [[docsRoot stringByAppendingPathComponent:@"Data"] stringByAppendingPathComponent:@"save"] ?: @"",
+        [gameRoot stringByAppendingPathComponent:@"save"] ?: @"",
+        [gameRoot stringByAppendingPathComponent:@"saves"] ?: @"",
+        targetDir ?: @""
+    ]) {
+        if(candidate.length && ![searchDirs containsObject:candidate])[searchDirs addObject:candidate];
+    }
+    NSMutableData *decoded=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
+    for(NSString *dir in searchDirs) {
+        NSArray<NSString *> *items=[fm contentsOfDirectoryAtPath:dir error:nil];
+        if(!items.count)continue;
+        for(NSString *item in items) {
+            NSString *lower=item.lowercaseString;
+            if(lower.length!=9 || ![lower hasPrefix:@"rp_"] || ![lower hasSuffix:@".sav"])continue;
+            unichar d0=[lower characterAtIndex:3],d1=[lower characterAtIndex:4];
+            if(d0<'0'||d0>'9'||d1<'0'||d1>'9')continue;
+            uint32_t slot=(uint32_t)((d0-'0')*10+(d1-'0'));
+            if(slot>=80)continue;
+            char canonical[16];
+            if(dc_save_slot_name(slot,canonical,sizeof(canonical))!=DC_OK)continue;
+            NSString *srcPath=[dir stringByAppendingPathComponent:item];
+            NSString *dstPath=[targetDir stringByAppendingPathComponent:[NSString stringWithUTF8String:canonical]];
+            if([srcPath isEqualToString:dstPath])continue;
+            NSData *bytes=[NSData dataWithContentsOfFile:srcPath];
+            dc_save_slot_meta meta={0};
+            if(!bytes || bytes.length<DC_SAVE_SLOT_BYTES ||
+               dc_save_slot_decode(bytes.bytes,bytes.length,decoded.mutableBytes,decoded.length,&meta)!=DC_OK)continue;
+            BOOL shouldCopy=![fm fileExistsAtPath:dstPath];
+            if(!shouldCopy) {
+                NSDate *srcDate=[fm attributesOfItemAtPath:srcPath error:nil][NSFileModificationDate];
+                NSDate *dstDate=[fm attributesOfItemAtPath:dstPath error:nil][NSFileModificationDate];
+                if(srcDate && (!dstDate || [srcDate compare:dstDate]==NSOrderedDescending))shouldCopy=YES;
+            }
+            if(shouldCopy)[bytes writeToFile:dstPath options:NSDataWritingAtomic error:nil];
+        }
+    }
+}
 - (void)refreshSlots {
+    [self syncExternalSaveFiles];
     NSMutableArray<NSDictionary *> *slots=[NSMutableArray arrayWithCapacity:80];
     NSCalendar *calendar=[[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierGregorian];
     calendar.timeZone=NSTimeZone.localTimeZone;
@@ -240,13 +298,32 @@ static uint32_t saveDword(const uint8_t *p) {
         }
         [slots addObject:entry];
     }
-    BOOL anyValid=NO;for(NSDictionary *entry in slots)if([entry[@"data"] length]){anyValid=YES;break;}
-    if(!anyValid) {
+    if(![slots[0][@"data"] length]) {
         NSData *compatibility=[self compatibilitySlotFromExistingState];
         if(compatibility) {
-            NSMutableData *decoded=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];dc_save_slot_meta meta={0};
-            if(dc_save_slot_decode(compatibility.bytes,compatibility.length,decoded.mutableBytes,decoded.length,&meta)==DC_OK) {
-                NSMutableDictionary *entry=[slots[0] mutableCopy];entry[@"data"]=compatibility;entry[@"prefix"]=[NSData dataWithBytes:decoded.bytes length:DC_SAVE_RECORD_BYTES];entry[@"chapter"]=@(meta.chapter);entry[@"complete"]=@NO;slots[0]=entry;
+            NSMutableData *compatDecoded=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];dc_save_slot_meta meta={0};
+            if(dc_save_slot_decode(compatibility.bytes,compatibility.length,compatDecoded.mutableBytes,compatDecoded.length,&meta)==DC_OK) {
+                const uint8_t *p=compatDecoded.bytes;
+                NSMutableDictionary *entry=[slots[0] mutableCopy];
+                entry[@"data"]=compatibility;
+                entry[@"prefix"]=[NSData dataWithBytes:p length:DC_SAVE_RECORD_BYTES];
+                entry[@"chapter"]=@(meta.chapter);
+                entry[@"complete"]=@(p[0x23]==2&&p[0x2198+0x23]==2&&p[0x4330+0x23]==2);
+                NSString *saveDirectory=[_directory stringByAppendingPathComponent:@"save"];
+                NSDate *date=[[NSFileManager defaultManager] attributesOfItemAtPath:[saveDirectory stringByAppendingPathComponent:@"flow.state"] error:nil][NSFileModificationDate];
+                if(!date)date=[[NSFileManager defaultManager] attributesOfItemAtPath:[saveDirectory stringByAppendingPathComponent:@"player.state"] error:nil][NSFileModificationDate];
+                if(date){
+                    NSDateComponents *c=[calendar components:NSCalendarUnitYear|NSCalendarUnitMonth|NSCalendarUnitDay|NSCalendarUnitHour|NSCalendarUnitMinute|NSCalendarUnitSecond fromDate:date];
+                    unsigned values[5]={(unsigned)c.year,(unsigned)c.month,(unsigned)c.day,(unsigned)c.hour,(unsigned)c.minute};
+                    NSMutableArray *digits=[NSMutableArray arrayWithCapacity:12];
+                    unsigned year=values[0];[digits addObject:@((year/10)%10)];[digits addObject:@((year/100)%10)];[digits addObject:@((year/1000)%10)];
+                    for(unsigned field=1;field<5;++field){unsigned value=values[field];[digits addObject:@(value%10)];[digits addObject:@((value/10)%10)];}
+                    [digits addObject:@0];
+                    entry[@"digits"]=digits;
+                    uint64_t stamp=(((uint64_t)c.year*10000+(uint64_t)c.month*100+(uint64_t)c.day)*1000000+(uint64_t)c.hour*10000+(uint64_t)c.minute*100+(uint64_t)c.second/2);
+                    entry[@"stamp"]=@(stamp);
+                }
+                slots[0]=entry;
             }
         }
     }
@@ -256,8 +333,8 @@ static uint32_t saveDword(const uint8_t *p) {
     if(_renderer)for(unsigned i=0;i<85;++i)if(_textures[i])dc_vk_sprite_remove_texture(_renderer,_textures[i]);
     memset(_textures,0,sizeof(_textures));_renderer=NULL;
 }
-- (void)pause {[_music pause];[_select pause];[_toggle pause];}
-- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=NO;_loadData=nil;[_music play];}
+- (void)pause {_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];[_select pause];[_toggle pause];}
+- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=NO;_loadData=nil;_pausedMusic=NO;[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];}
 - (void)dealloc {[self detachRenderer];[_music stop];[_select stop];[_toggle stop];}
 - (NSString *)depart:(uint32_t)action tick:(uint32_t)tick {
     _pendingAction=action;
@@ -274,6 +351,7 @@ static uint32_t saveDword(const uint8_t *p) {
 }
 - (NSString *)drawAtTick:(uint32_t)tick pcInput:(dc_pc_frame)input width:(uint32_t)width height:(uint32_t)height {
     if(!_renderer)return @"Save renderer detached";
+    if(_pausedMusic){[AVAudioSession.sharedInstance setActive:YES error:nil];if(![_music play]){[_music prepareToPlay];[_music play];}_pausedMusic=NO;}
     if(!_entered){if([_transition requestTransition:4 tick:tick]!=DC_OK)return @"Save entry transition failed";_entered=YES;}
     uint32_t ready=0;if([_transition queryTransitionReady:&ready]!=DC_OK)return @"Save transition query failed";
     if(ready){if(_pendingAction&&(_pendingAction==6||!_select.isPlaying))_action=_pendingAction;else if(!_pendingAction)_ready=YES;}
@@ -282,10 +360,25 @@ static uint32_t saveDword(const uint8_t *p) {
         _hoverButton=_hoverAction=-1;
         if(input.keys[1]==3){NSString *failure=[self depart:6 tick:tick];if(failure)return failure;}
         else if(input.mouse[1]==2||input.keys[0x3c]==3){NSString *failure=[self depart:1 tick:tick];if(failure)return failure;}
+        else if(input.keys[0x3b]==3){NSString *failure=[self depart:3 tick:tick];if(failure)return failure;}
+        else if(input.keys[0xc8]==3||input.wheel>0){_row=(_row+9)%10;_loadData=nil;_toggle.currentTime=0;[_toggle play];}
+        else if(input.keys[0xd0]==3||input.wheel<0){_row=(_row+1)%10;_loadData=nil;_toggle.currentTime=0;[_toggle play];}
+        else if(input.keys[0xcb]==3||input.keys[0xc9]==3){_page=(_page+7)%8;_loadData=nil;_toggle.currentTime=0;[_toggle play];}
+        else if(input.keys[0xcd]==3||input.keys[0xd1]==3){_page=(_page+1)%8;_loadData=nil;_toggle.currentTime=0;[_toggle play];}
         else {
             BOOL hit=NO;
             for(unsigned row=0;row<10&&!hit;++row)if(saveHit(x,y,412,67+56*row,536,40)){
-                hit=YES;if(input.mouse[0]==3){_row=row;_loadData=nil;_toggle.currentTime=0;[_toggle play];}
+                hit=YES;
+                if(input.mouse[0]==3){
+                    BOOL sameRow=(_row==row);
+                    _row=row;_loadData=nil;
+                    if(_saveDisabled&&sameRow&&self.selectedSlotData){
+                        _loadData=[self.selectedSlotData copy];
+                        NSString *failure=[self depart:5 tick:tick];if(failure)return failure;
+                    } else {
+                        _toggle.currentTime=0;[_toggle play];
+                    }
+                }
             }
             for(unsigned page=0;page<8&&!hit;++page){save_sprite s=saveSprites[5+page];if(saveHit(x,y,s.x,s.y,s.w,s.h)){
                 hit=YES;if(input.mouse[0]==3){_page=page;_loadData=nil;_toggle.currentTime=0;[_toggle play];}
@@ -330,9 +423,9 @@ static uint32_t saveDword(const uint8_t *p) {
     static const float scoreX[4]={260,245,230,215},timeX[5]={260,245,218,203,176};
     for(unsigned panel=0;panel<3;++panel){
         unsigned character=2-panel;const uint8_t *p=prefix.length>=DC_SAVE_RECORD_BYTES?state+character*0x2198:NULL;
-        /* 0052d970 copies the per-character selector from record+0x23
-         * (the stack alias named auStack_65ba). */
-        unsigned portrait=p?p[0x23]:0;
+        /* 0052d970 reads the per-character status icon selector from record+0x22
+         * (EBP + ECX + 0xffff9a4a where record starts at 0xffff9a28). */
+        unsigned portrait=p?p[0x22]:0;
         static const unsigned portraitVariant[6]={0,0,1,0,2,3};
         if(portrait>0&&portrait<6&&portrait!=3){unsigned index=73+panel*4+portraitVariant[portrait];save_sprite s=saveSprites[index];SAVE_APPEND(index,s.x,s.y);}
         for(unsigned flag=0;flag<9;++flag)if(p&&p[3+flag])SAVE_APPEND(13+flag,saveSprites[13+flag].x,237+196*panel);

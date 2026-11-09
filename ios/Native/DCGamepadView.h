@@ -9,6 +9,7 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 /* Thread-safe snapshots: the renderer receives a value, never shared UIKit state. */
 dc_pad_frame dc_gamepad_read(void);
+BOOL dc_gamepad_pointer_contact_active(void);
 NSString *dc_gamepad_presentation(void);
 void dc_gamepad_set_active(BOOL active);
 void dc_gamepad_set_context(uint32_t scene,BOOL completed,BOOL busy);

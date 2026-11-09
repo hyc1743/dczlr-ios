@@ -10,8 +10,12 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t category,mapIndex,stageMask,firstStage,secondStage;
 - (nullable instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer
     transition:(DCStartupScene *)transition story:(const dc_story_state *)story error:(NSString **)error;
+- (void)setPendingBadgeStage:(int32_t)stage badgeIndex:(int32_t)badgeIndex;
 - (nullable NSString *)drawAtTick:(uint32_t)tick pcInput:(dc_pc_frame)input
     width:(uint32_t)width height:(uint32_t)height;
+- (nullable NSString *)attachRenderer:(dc_vk_sprite *)renderer;
 - (void)detachRenderer;
+- (void)pause;
+- (void)resumeFromTemporaryScreen;
 @end
 NS_ASSUME_NONNULL_END

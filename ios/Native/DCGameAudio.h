@@ -11,6 +11,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)cancelGameplayVoice;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;
 - (nullable NSString *)startTitleMusic;
+- (nullable NSString *)startExtraMusic;
 - (nullable NSString *)prepareGameplayAudio;
 - (BOOL)playGameplayEffectNamed:(NSString *)name;
 - (BOOL)playGameplaySlot:(NSUInteger)slot;
@@ -23,5 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)resumeAfterSystemPage;
 - (void)applyConfiguration:(NSData *)configuration;
 - (void)stopTitleMusic;
+- (void)stopExtraMusic;
+- (void)stopGameplayAudio;
 @end
 NS_ASSUME_NONNULL_END

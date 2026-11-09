@@ -7,6 +7,7 @@
 #include "dc_script.h"
 #include "dc_save.h"
 #include "dc_text.h"
+#include "dc_config.h"
 #include <CoreFoundation/CFStringEncodingExt.h>
 #include <math.h>
 #include <string.h>
@@ -37,20 +38,22 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     NSData *_script,*_bodyBytes;
     NSMutableData *_gameState,*_textPixels;
     DCArchive *_images,*_scripts;
-    DCDecodedImage *_background;
+    DCDecodedImage *_background,*_windowFrame,*_nextPrompt;
     NSString *_speaker;
     dc_script_decoded _decoded;
     dc_vk_sprite *_renderer;
-    uintptr_t _backgroundTexture,_textTexture;
+    uintptr_t _backgroundTexture,_textTexture,_windowFrameTexture,_nextPromptTexture;
     dc_text_state _text;
     dc_text_plan _textPlan;
     dc_intro_state _flow;
     uint32_t _lastTick,_pendingChapter;
-    uint32_t _entryFrame,_auxiliaryDestination;
+    uint32_t _entryFrame,_targetEntryFrame,_auxiliaryDestination;
     uint8_t _finishFlags[3];
     size_t _cursor;
     BOOL _touching,_completed,_dirty,_tickInitialized,_textStarted,_initialUpdateSkipped,_hasTextPlan;
-    AVAudioPlayer *_music,*_sound,*_voice;
+    BOOL _windowHidden,_fastForward;
+    AVAudioPlayer *_music,*_sound,*_voice,*_selection;
+    float _musicVolume,_soundVolume,_voiceVolume;
     BOOL _pausedMusic,_pausedVoice;
     BOOL _seeking;
     BOOL _musicAdvanced,_voiceAdvanced,_soundAdvanced;
@@ -71,10 +74,37 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     _auxiliaryDestination=0;
     [self resumeAtTick:tick];
 }
+- (void)applyConfiguration:(NSData *)configuration {
+    if(!configuration)return;
+    dc_config state;
+    if(dc_config_decode(configuration.bytes,configuration.length,&state)!=DC_OK)return;
+    float voice=0,bgm=0,se=0;
+    dc_config_slider_value(&state,0,&voice);
+    dc_config_slider_value(&state,1,&bgm);
+    dc_config_slider_value(&state,2,&se);
+    _voiceVolume=powf(10.0f,voice/2000.0f);
+    _musicVolume=powf(10.0f,bgm/2000.0f);
+    _soundVolume=powf(10.0f,se/2000.0f);
+    if(_music)_music.volume=_musicVolume;
+    if(_sound)_sound.volume=_soundVolume;
+    if(_voice)_voice.volume=_voiceVolume;
+    if(_selection)_selection.volume=_soundVolume;
+}
+- (void)toggleWindowHidden { _windowHidden=!_windowHidden; }
+- (void)setFastForward:(BOOL)fastForward { _fastForward=fastForward; }
 - (NSString *)requestAuxiliary:(uint32_t)destination transition:(DCStartupScene *)transition tick:(uint32_t)tick {
     if(_flow.waiting||_auxiliaryDestination)return nil;
     if(destination!=2&&destination!=5&&destination!=7)return @"Unknown original script system destination";
     if([transition requestTransition:destination==5?3:2 tick:tick]!=DC_OK)return @"Script system transition failed";
+    if(destination==2||destination==7) {
+        [_sound stop];[_voice stop];_pausedVoice=NO;
+        if(!_selection)_selection=[self playerForName:(const uint8_t *)"se100" archive:@"RPP_14.pp" loop:NO error:nil];
+        if(_selection) {
+            if(_selection.isPlaying)[_selection stop];
+            _selection.volume=_soundVolume;_selection.currentTime=0;
+            if(![_selection play]){[_selection prepareToPlay];[_selection play];}
+        }
+    }
     _flow.action=destination;_flow.waiting=1;return nil;
 }
 - (NSString *)presentationState {
@@ -100,6 +130,9 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(!(self=[super init]))return nil;
     if(startChapter>=DC_INTRO_CHAPTERS) { if(error)*error=@"Story chapter is outside the script table";return nil; }
     _directory=[directory copy];
+    _musicVolume=_soundVolume=_voiceVolume=1.0f;
+    NSData *cfgData=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"gcd.cfg"]];
+    if(cfgData)[self applyConfiguration:cfgData];
     _captureEnabled=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_STARTUP"] isEqualToString:@"1"];
     if(state.length!=DC_GAME_STATE_BYTES){if(error)*error=@"Original numeric state size rejected";return nil;}
     if(frame>(uint32_t)dcIntroChapters[startChapter].last_frame){if(error)*error=@"Saved script frame outside original descriptor";return nil;}
@@ -108,9 +141,18 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     _scripts=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_16.pp"]] error:&reason];
     _images=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
     if(!_scripts || !_images) {if(error)*error=reason.localizedDescription;return nil;}
-    if(startChapter) {
-        /* Mid-story entry: the transition host is not needed; the chapter
-         * script starts immediately and the chapter-end routing advances. */
+    if(!_captureEnabled) {
+        for(uint32_t i=0;i<_images.entryCount;++i) {
+            NSString *entryName=[_images asciiNameAtIndex:i];
+            if([entryName caseInsensitiveCompare:@"bt_00.ema"]==NSOrderedSame)
+                _windowFrame=[_images decodeImageAtIndex:i inputLimit:8*1024*1024 outputLimit:16*1024*1024 error:nil];
+            else if([entryName caseInsensitiveCompare:@"bt_01.ema"]==NSOrderedSame)
+                _nextPrompt=[_images decodeImageAtIndex:i inputLimit:8*1024*1024 outputLimit:16*1024*1024 error:nil];
+        }
+    }
+    if(startChapter || frame) {
+        /* Mid-story or saved-frame entry: the transition host is not needed;
+         * the chapter script starts immediately and the chapter-end routing advances. */
         _flow=(dc_intro_state){.chapter=startChapter,.waiting=0};
     } else {
         _flow=(dc_intro_state){.waiting=1};
@@ -135,12 +177,12 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         .wait_state=-1,.wait_glyph=-1,.frame=-1,.last_frame=dcIntroChapters[chapter].last_frame,
         .wait_line=255,.active=1,.x=135,.y=652,.font_size=29,.scale=1,.rgb=0xffffff};
     _textStarted=NO;_hasTextPlan=NO;
-    uint32_t entryFrame=_entryFrame;_entryFrame=0;_seeking=entryFrame!=0;
+    uint32_t entryFrame=_entryFrame;_entryFrame=0;_targetEntryFrame=entryFrame;_seeking=entryFrame!=0;
     NSString *failure=nil;
     for(uint32_t frame=0;frame<=entryFrame;++frame){
-        _text.frame=frame;failure=[self loadRecord];if(failure){_seeking=NO;return failure;}
+        _text.frame=frame;failure=[self loadRecord];if(failure){_seeking=NO;_targetEntryFrame=0;return failure;}
     }
-    _text.frame=(int32_t)entryFrame-1;_seeking=NO;
+    _text.frame=(int32_t)entryFrame-1;_seeking=NO;_targetEntryFrame=0;
     if(entryFrame){if(_music&&![_music play])return @"Saved script music did not start";if(_voice&&![_voice play])return @"Saved script voice did not start";if(_sound&&![_sound play])return @"Saved script sound did not start";}
     return nil;
 }
@@ -161,6 +203,8 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     }
     if(!data) {if(error)*error=reason.localizedDescription ?: @"Intro audio resource is unavailable";return nil;}
     AVAudioPlayer *player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
+    [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
+    [AVAudioSession.sharedInstance setActive:YES error:nil];
     if(!player || ![player prepareToPlay]) {if(error)*error=reason.localizedDescription ?: @"Intro audio decoder failed";return nil;}
     player.numberOfLoops=loop ? -1 : 0;
     return player;
@@ -181,14 +225,19 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(next.music[0] && !musicOff) {
         music=[self playerForName:next.music archive:@"RPP_01.pp" loop:YES error:&audioError];
         if(!music)return audioError;
+        music.volume=_musicVolume;
     }
-    if(next.sound[0]) {
-        sound=[self playerForName:next.sound archive:@"RPP_14.pp" loop:NO error:&audioError];
-        if(!sound)return audioError;
-    }
-    if(next.controls[1][0]) {
-        voice=[self playerForName:next.controls[1] archive:@"RPP_00.pp" loop:NO error:&audioError];
-        if(!voice)return audioError;
+    if(!_seeking || frame==_targetEntryFrame) {
+        if(next.sound[0]) {
+            sound=[self playerForName:next.sound archive:@"RPP_14.pp" loop:NO error:&audioError];
+            if(!sound)return audioError;
+            sound.volume=_soundVolume;
+        }
+        if(next.controls[1][0]) {
+            voice=[self playerForName:next.controls[1] archive:@"RPP_00.pp" loop:NO error:&audioError];
+            if(!voice)return audioError;
+            voice.volume=_voiceVolume;
+        }
     }
     if(next.background[0]) {
         NSString *name=[NSString stringWithFormat:@"%s.ema",(const char *)next.background];
@@ -203,8 +252,10 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         _backgroundTexture=0;_background=image;
     }
     if(next.music[0]) {[_music stop];_music=music;if(_music&&!_seeking&&![_music play])return @"Intro music did not start";}
-    if(sound) {[_sound stop];_sound=sound;if(!_seeking&&![_sound play])return @"Intro sound did not start";}
-    if(voice) {[_voice stop];_voice=voice;if(!_seeking&&![_voice play])return @"Intro voice did not start";}
+    if(!_seeking || frame==_targetEntryFrame) {
+        [_sound stop];_sound=sound;if(_sound&&!_seeking&&![_sound play])return @"Intro sound did not start";
+        [_voice stop];_voice=voice;if(_voice&&!_seeking&&![_voice play])return @"Intro voice did not start";
+    }
     _decoded=next;_cursor=next.record.next_offset;_speaker=speaker;
     _bodyBytes=[_script subdataWithRange:NSMakeRange(next.record.body.offset,next.record.body.length)];
     if(_bodyBytes.length>=DC_TEXT_BYTE_LIMIT || _bodyBytes.length<2)return @"Intro text exceeds the native controller profile";
@@ -215,14 +266,17 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(_renderer) {
         if(_backgroundTexture)dc_vk_sprite_remove_texture(_renderer,_backgroundTexture);
         if(_textTexture)dc_vk_sprite_remove_texture(_renderer,_textTexture);
+        if(_windowFrameTexture)dc_vk_sprite_remove_texture(_renderer,_windowFrameTexture);
+        if(_nextPromptTexture)dc_vk_sprite_remove_texture(_renderer,_nextPromptTexture);
     }
-    _renderer=NULL;_backgroundTexture=_textTexture=0;_dirty=YES;_tickInitialized=NO;
+    _renderer=NULL;_backgroundTexture=_textTexture=_windowFrameTexture=_nextPromptTexture=0;_dirty=YES;_tickInitialized=NO;
 }
 - (void)pause {
-    _pausedMusic=_music.isPlaying;_pausedVoice=_voice.isPlaying;
-    [_music pause];[_voice pause];[_sound stop];_touching=NO;_tickInitialized=NO;
+    _pausedMusic=_pausedMusic||_music.isPlaying;
+    _pausedVoice=_pausedVoice||_voice.isPlaying;
+    [_music pause];[_voice pause];[_sound stop];[_selection stop];_touching=NO;_tickInitialized=NO;
 }
-- (void)dealloc { [self detachRenderer];[_music stop];[_sound stop];[_voice stop]; }
+- (void)dealloc { [self detachRenderer];[_music stop];[_sound stop];[_voice stop];[_selection stop]; }
 - (NSString *)uploadText {
     /* Numeric layout/fade comes from the original-verified normal controller.
      * Apple rasterizes CP936 cells; original Windows font pixels are unproven. */
@@ -284,11 +338,15 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         case DC_INTRO_LOAD_SCRIPT: {
             NSString *failure=[self loadChapter:command.value];if(failure)return failure;break;
         }
-        case DC_INTRO_CLEANUP: [_music stop];[_voice stop];[_sound stop];break;
+        case DC_INTRO_CLEANUP: [_music stop];[_voice stop];[_sound stop];[_selection stop];break;
         case DC_INTRO_ENTER_CHAPTER:
             _pendingChapter=command.value;_completed=YES;break;
         case DC_INTRO_UNLOCK_PROGRESS: {
-            uint8_t *bytes=_gameState.mutableBytes;bytes[0x23]=bytes[0x21bb]=bytes[0x4353]=1;break;
+            uint8_t *bytes=_gameState.mutableBytes;
+            if(!bytes[0x23])bytes[0x23]=1;
+            if(!bytes[0x21bb])bytes[0x21bb]=1;
+            if(!bytes[0x4353])bytes[0x4353]=1;
+            break;
         }
         case DC_INTRO_CLEAR_FINISH: memset(_finishFlags,0,sizeof(_finishFlags));break;
         case DC_INTRO_STOP_AUDIO:
@@ -296,7 +354,10 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
             else if(command.value==0){_pausedVoice=_voice.isPlaying;[_voice pause];}
             else [_sound stop];
             break;
-        case DC_INTRO_QUIT: return @"Game session ended";
+        case DC_INTRO_QUIT:
+            [_music stop];[_voice stop];[_sound stop];[_selection stop];
+            _pendingChapter=DC_INTRO_CHAPTERS;_completed=YES;
+            break;
         case DC_INTRO_BACKUP: break;
         case DC_INTRO_ENTER_AUX:
             if(command.value==6){_pendingChapter=DC_INTRO_CHAPTERS;_completed=YES;}
@@ -311,23 +372,35 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         tick:(uint32_t)tick touching:(BOOL)touching width:(uint32_t)width height:(uint32_t)height {
     if(_renderer!=renderer) { [self detachRenderer];_renderer=renderer; }
     if(_completed)return nil;
-    if(_pausedMusic) {if(![_music play])return @"Intro music resume failed";_pausedMusic=NO;}
-    if(_pausedVoice) {if(![_voice play])return @"Intro voice resume failed";_pausedVoice=NO;}
+    if(_pausedMusic) {
+        [AVAudioSession.sharedInstance setActive:YES error:nil];
+        if(![_music play]){[_music prepareToPlay];if(![_music play])return @"Intro music resume failed";}
+        _pausedMusic=NO;
+    }
+    if(_pausedVoice) {
+        [AVAudioSession.sharedInstance setActive:YES error:nil];
+        if(![_voice play]){[_voice prepareToPlay];[_voice play];}
+        _pausedVoice=NO;
+    }
     uint32_t ready=0,delta=_tickInitialized ? tick-_lastTick : 0;
     if([transition queryTransitionReady:&ready]!=DC_OK)return @"Intro transition query failed";
     dc_intro_plan flowPlan;
     if(dc_intro_transition(&_flow,dcIntroChapters,DC_INTRO_CHAPTERS,ready,&flowPlan)!=DC_OK)return @"Intro transition planning failed";
     NSString *flowError=[self applyFlow:&flowPlan transition:transition tick:tick];if(flowError)return flowError;
     if(_text.active && _initialUpdateSkipped) {
-        if(!_textStarted || (!_flow.waiting && !touching && _touching)) {
+        BOOL requestAdvance=!_textStarted || (!_flow.waiting && ((!touching && _touching) || _fastForward));
+        if(requestAdvance && _windowHidden && _textStarted && !_fastForward) {
+            _windowHidden=NO;
+        } else if(requestAdvance) {
+            _windowHidden=NO;
             dc_text_advance_plan advance;
-            if(dc_text_advance(&_text,0,&advance)!=DC_OK)return @"Intro text advance failed";
+            if(dc_text_advance(&_text,_fastForward?1:0,&advance)!=DC_OK)return @"Intro text advance failed";
             _text=advance.next;_textStarted=YES;
             if(advance.load_record) {NSString *failure=[self loadRecord];if(failure)return failure;}
         }
         if(_text.active) {
             dc_text_plan plan;
-            if(dc_text_build_plan(&_text,_bodyBytes.bytes,_bodyBytes.length,(int32_t)delta,tick,0,&plan)!=DC_OK)return @"Intro text layout/fade failed";
+            if(dc_text_build_plan(&_text,_bodyBytes.bytes,_bodyBytes.length,(int32_t)delta,tick,_fastForward?1:0,&plan)!=DC_OK)return @"Intro text layout/fade failed";
             if(!_hasTextPlan || plan.count!=_textPlan.count || memcmp(plan.glyphs,_textPlan.glyphs,plan.count*sizeof(dc_text_glyph)))_dirty=YES;
             _textPlan=plan;_text=plan.next;_hasTextPlan=YES;
         }
@@ -340,13 +413,34 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     _touching=touching;
     if(_background && !_backgroundTexture && dc_vk_sprite_upload(_renderer,_background.width,_background.height,
         _background.rgba.bytes,_background.rgba.length,&_backgroundTexture)!=DC_OK)return @"Intro background upload failed";
+    if(_windowFrame && !_windowFrameTexture)
+        dc_vk_sprite_upload(_renderer,_windowFrame.width,_windowFrame.height,_windowFrame.rgba.bytes,_windowFrame.rgba.length,&_windowFrameTexture);
+    if(_nextPrompt && !_nextPromptTexture)
+        dc_vk_sprite_upload(_renderer,_nextPrompt.width,_nextPrompt.height,_nextPrompt.rgba.bytes,_nextPrompt.rgba.length,&_nextPromptTexture);
     if(_hasTextPlan && _dirty) {NSString *failure=[self uploadText];if(failure)return failure;}
     float scale=fminf((float)width/1024,(float)height/768);
     dc_sprite_pose pose={.width=1024*scale,.height=768*scale,.x=(width-1024*scale)*.5f,.y=(height-768*scale)*.5f,
         .z=.5f,.scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1};
-    dc_vk_sprite_item items[2]={0};size_t count=0;
+    dc_vk_sprite_item items[4]={0};size_t count=0;
     if(_backgroundTexture)items[count++]=(dc_vk_sprite_item){.pose=pose,.texture=_backgroundTexture,.blend_mode=3};
-    if(_textTexture)items[count++]=(dc_vk_sprite_item){.pose=pose,.texture=_textTexture,.blend_mode=3};
+    if(!_captureEnabled && !_windowHidden && _text.active && _windowFrameTexture) {
+        dc_sprite_pose windowPose=pose;
+        windowPose.y=pose.y+608.0f*scale;
+        windowPose.width=1024.0f*scale;
+        windowPose.height=160.0f*scale;
+        windowPose.alpha=98.0f/255.0f;
+        items[count++]=(dc_vk_sprite_item){.pose=windowPose,.texture=_windowFrameTexture,.blend_mode=3};
+    }
+    if((_captureEnabled || !_windowHidden) && _textTexture)items[count++]=(dc_vk_sprite_item){.pose=pose,.texture=_textTexture,.blend_mode=3};
+    if(!_captureEnabled && !_windowHidden && _text.active && _nextPromptTexture && _hasTextPlan &&
+       _text.body_bytes>=2 && _text.alpha[_text.body_bytes/2-1]==255 && ((tick/500u)%2u)==0) {
+        dc_sprite_pose promptPose=pose;
+        promptPose.x=pose.x+954.0f*scale;
+        promptPose.y=pose.y+720.0f*scale;
+        promptPose.width=32.0f*scale;
+        promptPose.height=32.0f*scale;
+        items[count++]=(dc_vk_sprite_item){.pose=promptPose,.texture=_nextPromptTexture,.blend_mode=3};
+    }
     BOOL capture=_captureEnabled && !_capturedFirstRecord && _flow.chapter==0 && self.frame==0 &&
         _hasTextPlan && _text.fade_index>_text.body_bytes/2 && ready;
     NSMutableData *readback=capture ? [NSMutableData dataWithLength:(size_t)width*height*4] : nil;

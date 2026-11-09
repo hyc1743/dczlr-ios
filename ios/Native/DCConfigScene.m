@@ -33,7 +33,7 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
     DCStartupScene *_transition;
     NSString *_directory,*_captureName;
     AVAudioPlayer *_music,*_voice,*_select,*_toggle;
-    BOOL _entered,_ready,_persist;
+    BOOL _entered,_ready,_persist,_pausedMusic;
     uint32_t _pendingAction,_action,_changes;
     int32_t _drag,_hover;
     NSDictionary *_lastRenderCapture;
@@ -68,22 +68,10 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer
         configuration:(NSData *)configuration transition:(DCStartupScene *)transition error:(NSString **)error {
     if(!(self=[super init]))return nil;
-    _directory=[directory copy];_renderer=renderer;_transition=transition;_drag=_hover=-1;
+    _directory=[directory copy];_transition=transition;_drag=_hover=-1;
     if(dc_config_decode(configuration.bytes,configuration.length,&_config)!=DC_OK){if(error)*error=@"Original configuration state rejected";return nil;}
-    NSError *reason=nil;
-    DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
-    if(!archive){if(error)*error=reason.localizedDescription;return nil;}
-    for(unsigned target=0;target<11;++target){
-        NSString *name=[NSString stringWithUTF8String:configSprites[target].name];BOOL found=NO;
-        for(uint32_t i=0;i<archive.entryCount;++i)if([[archive asciiNameAtIndex:i] caseInsensitiveCompare:name]==NSOrderedSame){
-            DCDecodedImage *image=[archive decodeImageAtIndex:i inputLimit:8*1024*1024 outputLimit:64*1024*1024 error:&reason];
-            if(!image||dc_vk_sprite_upload(renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_textures[target])!=DC_OK){
-                if(error)*error=reason.localizedDescription?:@"Configuration bitmap upload failed";return nil;
-            }
-            found=YES;break;
-        }
-        if(!found){if(error)*error=[NSString stringWithFormat:@"Missing original configuration bitmap %@",name];return nil;}
-    }
+    NSString *attachError=[self attachRenderer:renderer];
+    if(attachError){if(error)*error=attachError;return nil;}
     _voice=[self audio:@"sample_v.wav" archive:@"RPP_00.pp" error:error];
     _music=[self audio:@"bgm005.wav" archive:@"RPP_01.pp" error:error];
     _select=[self audio:@"se100.wav" archive:@"RPP_14.pp" error:error];
@@ -91,12 +79,31 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
     if(!_voice||!_music||!_select||!_toggle)return nil;
     _music.numberOfLoops=-1;[self updateVolumes];[_music play];return self;
 }
+- (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
+    if(!renderer)return @"Configuration renderer is unavailable";
+    if(_renderer==renderer&&_textures[0])return nil;
+    [self detachRenderer];_renderer=renderer;
+    NSError *reason=nil;
+    DCArchive *archive=[[DCArchive alloc] initWithURL:[NSURL fileURLWithPath:[_directory stringByAppendingPathComponent:@"RPP_02.pp"]] error:&reason];
+    if(!archive)return reason.localizedDescription?:@"Configuration archive is unavailable";
+    for(unsigned target=0;target<11;++target){
+        NSString *name=[NSString stringWithUTF8String:configSprites[target].name];BOOL found=NO;
+        for(uint32_t i=0;i<archive.entryCount;++i)if([[archive asciiNameAtIndex:i] caseInsensitiveCompare:name]==NSOrderedSame){
+            DCDecodedImage *image=[archive decodeImageAtIndex:i inputLimit:8*1024*1024 outputLimit:64*1024*1024 error:&reason];
+            if(!image||dc_vk_sprite_upload(renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_textures[target])!=DC_OK)
+                return reason.localizedDescription?:@"Configuration bitmap upload failed";
+            found=YES;break;
+        }
+        if(!found)return [NSString stringWithFormat:@"Missing original configuration bitmap %@",name];
+    }
+    return nil;
+}
 - (void)detachRenderer {
     if(_renderer)for(unsigned i=0;i<11;++i)if(_textures[i])dc_vk_sprite_remove_texture(_renderer,_textures[i]);
     memset(_textures,0,sizeof(_textures));_renderer=NULL;
 }
-- (void)pause {[_music pause];[_voice pause];[_select pause];[_toggle pause];}
-- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=_persist=NO;[_music play];}
+- (void)pause {_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];[_voice pause];[_select pause];[_toggle pause];}
+- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=_persist=NO;_pausedMusic=NO;[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];}
 - (void)dealloc {[self detachRenderer];[_music stop];[_voice stop];[_select stop];[_toggle stop];}
 - (NSString *)depart:(uint32_t)action tick:(uint32_t)tick {
     _pendingAction=action;_persist=action!=5;_drag=-1;
@@ -113,6 +120,7 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
 }
 - (NSString *)drawAtTick:(uint32_t)tick pcInput:(dc_pc_frame)input width:(uint32_t)width height:(uint32_t)height {
     if(!_renderer)return @"Configuration renderer detached";
+    if(_pausedMusic){[AVAudioSession.sharedInstance setActive:YES error:nil];if(![_music play]){[_music prepareToPlay];[_music play];}_pausedMusic=NO;}
     if(!_entered){
         if([_transition requestTransition:4 tick:tick]!=DC_OK)return @"Configuration entry transition failed";
         _entered=YES;
@@ -123,6 +131,7 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
     if(_ready&&!_pendingAction){
         if(input.keys[1]==3){NSString *failure=[self depart:5 tick:tick];if(failure)return failure;}
         else if(input.mouse[1]==2||input.keys[0x3b]==3){NSString *failure=[self depart:1 tick:tick];if(failure)return failure;}
+        else if(input.keys[0x3c]==3||input.keys[0x1f]==3){NSString *failure=[self depart:3 tick:tick];if(failure)return failure;}
         else {
             if(_drag>=0){
                 if(input.mouse[0]&1){

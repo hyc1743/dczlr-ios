@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
     configuration:(NSData *)configuration transition:(DCStartupScene *)transition error:(NSString **)error;
 - (nullable NSString *)drawAtTick:(uint32_t)tick pcInput:(dc_pc_frame)input width:(uint32_t)width height:(uint32_t)height;
 - (void)requestRenderCapture:(NSString *)name;
+- (nullable NSString *)attachRenderer:(dc_vk_sprite *)renderer;
 - (void)detachRenderer;
 - (void)pause;
 - (void)resumeFromTemporaryScreen;

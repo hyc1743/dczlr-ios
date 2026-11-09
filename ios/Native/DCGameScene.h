@@ -32,12 +32,19 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t chapterEndAction;
 @property(nonatomic,readonly) uint32_t stageOutcomeA;
 @property(nonatomic,readonly) uint32_t stageOutcomeB;
+@property(nonatomic,readonly) uint32_t watchClimaxElapsedMs;
+@property(nonatomic,readonly) uint32_t outfitVariant;
+@property(nonatomic,readonly) uint32_t pos2SelectedCount;
+@property(nonatomic,readonly) BOOL vibeNekoUsed;
+@property(nonatomic,readonly) BOOL vibeToriUsed;
+@property(nonatomic,readonly) BOOL accessoryToggled;
 @property(nonatomic,readonly) uint32_t flowLevel;
 @property(nonatomic,readonly) uint32_t flowFlagB;
 @property(nonatomic,readonly) uint32_t flowCount;
 @property(nonatomic,readonly) uint32_t storyStage;
 @property(nonatomic,readonly) uint32_t sceneKind;
 @property(nonatomic,readonly) uint32_t sceneType;
+@property(nonatomic,readonly) BOOL editMode;
 @property(nonatomic,readonly) BOOL interactiveScene;
 @property(nonatomic) BOOL secondaryViewVisible;
 @property(nonatomic) float voiceMouthPhase;
@@ -54,6 +61,7 @@ NS_ASSUME_NONNULL_BEGIN
     renderer:(dc_vk_sprite *)renderer chapter:(uint32_t)chapter
     mapSelector:(uint32_t)mapSelector stage:(uint32_t)stage stageProgress:(uint32_t)progress
     sceneTypeOverride:(uint32_t)sceneTypeOverride resumeSavedPlayer:(BOOL)resume error:(NSString **)error;
+- (nullable NSString *)attachRenderer:(dc_vk_sprite *)renderer;
 - (void)detachRenderer;
 - (nullable NSString *)drawAtTick:(uint32_t)tick inputX:(float)x inputY:(float)y touching:(BOOL)touching controller:(dc_pad_frame)controller pcInput:(dc_pc_frame)pcInput
     width:(uint32_t)width height:(uint32_t)height;

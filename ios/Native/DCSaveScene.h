@@ -21,6 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)consumeSaveRequest;
 - (void)refreshSlots;
 - (void)requestRenderCapture:(NSString *)name;
+- (nullable NSString *)attachRenderer:(dc_vk_sprite *)renderer;
 - (void)detachRenderer;
 - (void)pause;
 - (void)resumeFromTemporaryScreen;
