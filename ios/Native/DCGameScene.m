@@ -827,8 +827,7 @@ static void freeMorphCaches(dc_game_model *slot) {
     if(_contextMenu.icon==4&&_editMode&&!touchExercise) {
         if(selection==0) {
             _watchDragging=NO;_nightDragging=NO;_pendingSystemAction=3;
-            dc_status transStatus=[self.transitionScene requestTransition:2];
-            if(transStatus!=DC_OK)return @"System transition request failed";
+            if(!self.transitionScene||[self.transitionScene requestTransition:2 tick:_lastTick]!=DC_OK)return @"System transition request failed";
             _pendingEffectSlot=0u;_hasPendingEffect=YES;
             return nil;
         }
@@ -844,8 +843,7 @@ static void freeMorphCaches(dc_game_model *slot) {
         }
         if(selection==3) {
             _watchDragging=NO;_nightDragging=NO;_pendingSystemAction=6;
-            dc_status transStatus=[self.transitionScene requestTransition:2];
-            if(transStatus!=DC_OK)return @"System transition request failed";
+            if(!self.transitionScene||[self.transitionScene requestTransition:2 tick:_lastTick]!=DC_OK)return @"System transition request failed";
             _pendingEffectSlot=1u;_hasPendingEffect=YES;
             return nil;
         }
