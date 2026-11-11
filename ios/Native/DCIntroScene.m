@@ -98,7 +98,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(destination!=2&&destination!=5&&destination!=7)return @"Unknown original script system destination";
     if([transition requestTransition:destination==5?3:2 tick:tick]!=DC_OK)return @"Script system transition failed";
     if(destination==2||destination==7) {
-        [_sound stop];[_voice stop];_pausedVoice=NO;
+        [_sound stop];[_voice stop];_pausedVoice=NO;_pausedSound=NO;
         if(!_selection)_selection=[self playerForName:(const uint8_t *)"se100" archive:@"RPP_14.pp" loop:NO error:nil];
         if(_selection) {
             if(_selection.isPlaying)[_selection stop];
@@ -352,7 +352,9 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         case DC_INTRO_LOAD_SCRIPT: {
             NSString *failure=[self loadChapter:command.value];if(failure)return failure;break;
         }
-        case DC_INTRO_CLEANUP: [_music stop];[_voice stop];[_sound stop];[_selection stop];break;
+        case DC_INTRO_CLEANUP:
+            _pausedMusic=_pausedVoice=_pausedSound=NO;
+            [_music stop];[_voice stop];[_sound stop];[_selection stop];break;
         case DC_INTRO_ENTER_CHAPTER:
             _pendingChapter=command.value;_completed=YES;break;
         case DC_INTRO_UNLOCK_PROGRESS: {
@@ -364,18 +366,19 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         }
         case DC_INTRO_CLEAR_FINISH: memset(_finishFlags,0,sizeof(_finishFlags));break;
         case DC_INTRO_STOP_AUDIO:
-            if(command.value==2){_pausedMusic=_music.isPlaying;[_music pause];}
-            else if(command.value==0){_pausedVoice=_voice.isPlaying;[_voice pause];}
-            else [_sound stop];
+            if(command.value==2){_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];}
+            else if(command.value==0){_pausedVoice=NO;[_voice stop];}
+            else {_pausedSound=NO;[_sound stop];}
             break;
         case DC_INTRO_QUIT:
+            _pausedMusic=_pausedVoice=_pausedSound=NO;
             [_music stop];[_voice stop];[_sound stop];[_selection stop];
             _pendingChapter=DC_INTRO_CHAPTERS;_completed=YES;
             break;
         case DC_INTRO_BACKUP: break;
         case DC_INTRO_ENTER_AUX:
             if(command.value==6){_pendingChapter=DC_INTRO_CHAPTERS;_completed=YES;}
-            else _auxiliaryDestination=command.value;
+            else {_auxiliaryDestination=command.value;_touching=NO;_needsResumeAtNextTick=YES;}
             break;
         default: return @"Intro auxiliary destination is not implemented";
         }

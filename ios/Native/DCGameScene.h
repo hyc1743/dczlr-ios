@@ -37,6 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) uint32_t pos2SelectedCount;
 @property(nonatomic,readonly) BOOL vibeNekoUsed;
 @property(nonatomic,readonly) BOOL vibeToriUsed;
+@property(nonatomic,readonly) BOOL vibratorLoopActive;
 @property(nonatomic,readonly) BOOL accessoryToggled;
 @property(nonatomic,readonly) uint32_t flowLevel;
 @property(nonatomic,readonly) uint32_t flowFlagB;
@@ -49,6 +50,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic) BOOL secondaryViewVisible;
 @property(nonatomic) float voiceMouthPhase;
 @property(nonatomic,strong,nullable) DCStartupScene *transitionScene;
+- (BOOL)takeEditPauseStopRequest;
 - (uint32_t)takePendingEffectSlot;
 - (nullable NSString *)updateCharacterWithExitSoundBusy:(BOOL)busy tick:(uint32_t)tick;
 - (nullable NSString *)updateSystemWithSelectionSoundBusy:(BOOL)busy tick:(uint32_t)tick;

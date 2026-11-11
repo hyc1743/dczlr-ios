@@ -15,13 +15,30 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     return dc_scene_effect_name((uint32_t)slot,name,sizeof(name))==DC_OK?[NSString stringWithUTF8String:name]:nil;
 }
 
+static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
+    if(sceneType==2)return nil;
+    switch(mapSelector) {
+        case 0: return (sceneType==7||sceneType==12)?@"bgm100.wav":@"bgm101.wav";
+        case 1: return @"bgm102.wav";
+        case 2: return nil;
+        case 3: return @"bgm107.wav";
+        case 4: return @"bgm108.wav";
+        case 5: return @"bgm103.wav";
+        case 6: return @"bgm104.wav";
+        case 7: return @"bgm105.wav";
+        case 8: return @"bgm106.wav";
+        default: return nil;
+    }
+}
+
 @implementation DCGameAudio {
-    AVAudioPlayer *_music,*_extraMusic,*_selection;
+    AVAudioPlayer *_music,*_extraMusic,*_gameplayMusic,*_selection;
     NSMutableDictionary<NSString *,DCArchive *> *_archives;
     NSMutableDictionary<NSString *,AVAudioPlayer *> *_gameplayEffects,*_gameplayVoices;
     NSMutableSet<NSString *> *_pausedGameplayEffects;
     NSMutableSet<NSString *> *_pausedGameplayVoices;
-    BOOL _resumeTitleAfterSystem,_resumeExtraAfterSystem,_suspendedForSystemPage,_sessionConfigured;
+    BOOL _resumeTitleAfterSystem,_resumeExtraAfterSystem,_resumeGameplayMusicAfterSystem,_suspendedForSystemPage,_sessionConfigured;
+    BOOL _pausedTitleMusic,_pausedExtraMusic,_pausedGameplayMusic;
     float _voiceVolume,_effectVolume,_musicVolume;
     NSString *_directory;
     NSString *_voiceChainNext;
@@ -89,6 +106,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
             _gameplayEffects[name]=player;
         }
         if(player.isPlaying)[player stop];
+        player.numberOfLoops=0;
         player.currentTime=0;player.volume=_effectVolume;
         if([self ensureAudioSession] && ([player play] || ([player prepareToPlay] && [player play])))return YES;
         if(!_pausedGameplayEffects)_pausedGameplayEffects=[NSMutableSet set];
@@ -100,25 +118,63 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     NSString *name=DCGameplaySlotName(slot);
     return name && [self playGameplayEffectNamed:name];
 }
+- (void)setGameplayLoopSlot:(NSUInteger)slot active:(BOOL)active {
+    @synchronized(self) {
+        NSString *name=DCGameplaySlotName(slot);
+        if(!name.length)return;
+        if(!active) {
+            AVAudioPlayer *player=_gameplayEffects[name];
+            if(player) {
+                if(player.isPlaying)[player stop];
+                player.numberOfLoops=0;
+                player.currentTime=0;
+            }
+            [_pausedGameplayEffects removeObject:name];
+            return;
+        }
+        if(!_gameplayEffects)_gameplayEffects=[NSMutableDictionary dictionary];
+        AVAudioPlayer *player=_gameplayEffects[name];
+        if(!player) {
+            NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_14.pp" directory:_directory error:&error];
+            if(!data)return;
+            NSError *reason=nil;player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
+            if(!player || ![player prepareToPlay])return;
+            _gameplayEffects[name]=player;
+        }
+        player.numberOfLoops=-1;
+        player.volume=_effectVolume;
+        if(player.isPlaying || [_pausedGameplayEffects containsObject:name])return;
+        player.currentTime=0;
+        if(!_suspendedForSystemPage && [self ensureAudioSession] && ([player play] || ([player prepareToPlay] && [player play])))return;
+        if(!_pausedGameplayEffects)_pausedGameplayEffects=[NSMutableSet set];
+        [_pausedGameplayEffects addObject:name];
+    }
+}
 - (BOOL)gameplaySlotBusy:(NSUInteger)slot {
     @synchronized(self) {
         NSString *name=DCGameplaySlotName(slot);
-        return name && _gameplayEffects[name].isPlaying;
+        return name && (_gameplayEffects[name].isPlaying || [_pausedGameplayEffects containsObject:name]);
     }
 }
 - (BOOL)resumeGameplayEffects {
     @synchronized(self) {
-        if(!_pausedGameplayEffects.count && !_pausedGameplayVoices.count)return YES;
+        if(_suspendedForSystemPage)return YES;
+        if(!_pausedGameplayMusic && !_pausedGameplayEffects.count && !_pausedGameplayVoices.count)return YES;
         if(![self ensureAudioSession])return YES;
+        if(_pausedGameplayMusic && _gameplayMusic) {
+            _gameplayMusic.volume=_musicVolume;
+            if([_gameplayMusic play] || ([_gameplayMusic prepareToPlay] && [_gameplayMusic play]))
+                _pausedGameplayMusic=NO;
+        }
         for(NSString *name in [_pausedGameplayEffects allObjects]) {
             AVAudioPlayer *player=_gameplayEffects[name];
-            if(!player || [player play] || ([player prepareToPlay] && [player play]))
-                [_pausedGameplayEffects removeObject:name];
+            if(player && ![player play]) { [player prepareToPlay]; [player play]; }
+            [_pausedGameplayEffects removeObject:name];
         }
         for(NSString *name in [_pausedGameplayVoices allObjects]) {
             AVAudioPlayer *player=_gameplayVoices[name];
-            if(!player || [player play] || ([player prepareToPlay] && [player play]))
-                [_pausedGameplayVoices removeObject:name];
+            if(player && ![player play]) { [player prepareToPlay]; [player play]; }
+            [_pausedGameplayVoices removeObject:name];
         }
         return YES;
     }
@@ -169,18 +225,18 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
 }
 - (NSString *)startTitleMusic {
     @synchronized(self) {
+        _pausedExtraMusic=NO;
         if (_extraMusic.isPlaying) [_extraMusic stop];
-        if (_music.isPlaying) return nil;
-        if(![self ensureAudioSession]) return nil;
-        if(![_music play]) {
-            [_music prepareToPlay];
-            [_music play];
-        }
+        if (_music.isPlaying) { _pausedTitleMusic=NO; return nil; }
+        if(![self ensureAudioSession]) { _pausedTitleMusic=YES; return nil; }
+        if([_music play] || ([_music prepareToPlay] && [_music play])) _pausedTitleMusic=NO;
+        else _pausedTitleMusic=YES;
         return nil;
     }
 }
 - (NSString *)startExtraMusic {
     @synchronized(self) {
+        _pausedTitleMusic=NO;
         if (_music.isPlaying) [_music stop];
         if (!_extraMusic) {
             NSString *error=nil;
@@ -196,19 +252,45 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
             }
         }
         AVAudioPlayer *target=_extraMusic?:_music;
-        if (target.isPlaying) return nil;
-        if(![self ensureAudioSession]) return nil;
+        if (target.isPlaying) { _pausedExtraMusic=NO; return nil; }
+        if(![self ensureAudioSession]) { _pausedExtraMusic=YES; return nil; }
         target.volume=_musicVolume;
-        if(![target play]) {
-            [target prepareToPlay];
-            [target play];
+        if([target play] || ([target prepareToPlay] && [target play])) _pausedExtraMusic=NO;
+        else _pausedExtraMusic=YES;
+        return nil;
+    }
+}
+- (NSString *)startGameplayMusicForSceneType:(uint32_t)sceneType map:(uint32_t)mapSelector {
+    @synchronized(self) {
+        if(_gameplayMusic.isPlaying)[_gameplayMusic stop];
+        _gameplayMusic=nil;
+        _pausedGameplayMusic=NO;
+        _resumeGameplayMusicAfterSystem=NO;
+        NSString *name=DCGameplayMusicName(sceneType,mapSelector);
+        if(!name.length)return nil;
+        NSString *error=nil;
+        NSData *data=[self sound:name inArchive:@"RPP_01.pp" directory:_directory error:&error];
+        if(!data)return nil;
+        NSError *reason=nil;
+        _gameplayMusic=[[AVAudioPlayer alloc] initWithData:data error:&reason];
+        if(!_gameplayMusic)return nil;
+        _gameplayMusic.numberOfLoops=-1;
+        _gameplayMusic.volume=_musicVolume;
+        [_gameplayMusic prepareToPlay];
+        if(!_suspendedForSystemPage && [self ensureAudioSession] &&
+           ([_gameplayMusic play] || ([_gameplayMusic prepareToPlay] && [_gameplayMusic play]))) {
+            _pausedGameplayMusic=NO;
+        } else {
+            _pausedGameplayMusic=YES;
         }
         return nil;
     }
 }
 - (BOOL)musicAdvanced {
     @synchronized(self) {
-        if((_music.isPlaying && _music.currentTime>.1) || (_extraMusic.isPlaying && _extraMusic.currentTime>.1))_advanced=YES;
+        if((_music.isPlaying && _music.currentTime>.1) ||
+           (_extraMusic.isPlaying && _extraMusic.currentTime>.1) ||
+           (_gameplayMusic.isPlaying && _gameplayMusic.currentTime>.1))_advanced=YES;
         return _advanced;
     }
 }
@@ -224,6 +306,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
 - (BOOL)selectionBusy { @synchronized(self) { return _selection.isPlaying; } }
 - (BOOL)gameplayVoiceBusy {
     @synchronized(self) {
+        if (_pausedGameplayVoices.count > 0) return YES;
         for (AVAudioPlayer *player in _gameplayVoices.allValues) if (player.isPlaying) return YES;
         return NO;
     }
@@ -244,6 +327,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
 - (void)stopTitleMusic {
     @synchronized(self) {
         [_music stop];
+        _pausedTitleMusic=NO;
         _resumeTitleAfterSystem=NO;
         _suspendedForSystemPage=NO;
     }
@@ -252,6 +336,7 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     @synchronized(self) {
         [_extraMusic stop];
         if(_extraMusic)_extraMusic.currentTime=0;
+        _pausedExtraMusic=NO;
         _resumeExtraAfterSystem=NO;
         _suspendedForSystemPage=NO;
     }
@@ -260,9 +345,13 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     @synchronized(self) {
         _voiceChainNext=nil;
         _suspendedForSystemPage=NO;
+        _pausedGameplayMusic=NO;
+        _resumeGameplayMusicAfterSystem=NO;
+        if(_gameplayMusic.isPlaying)[_gameplayMusic stop];
+        _gameplayMusic=nil;
         [_pausedGameplayEffects removeAllObjects];
         [_pausedGameplayVoices removeAllObjects];
-        for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];
+        for(AVAudioPlayer *player in _gameplayEffects.allValues){[player stop];player.numberOfLoops=0;}
         for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop];
     }
 }
@@ -273,9 +362,26 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
         for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop];
     }
 }
+- (void)stopActiveGameplayEffectsAndVoice {
+    @synchronized(self) {
+        _voiceChainNext=nil;
+        [_pausedGameplayVoices removeAllObjects];
+        for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop];
+        for(NSString *name in _gameplayEffects) {
+            if([name caseInsensitiveCompare:@"se101.wav"]==NSOrderedSame)continue;
+            AVAudioPlayer *player=_gameplayEffects[name];
+            if(player.isPlaying)[player stop];
+            player.numberOfLoops=0;
+            [_pausedGameplayEffects removeObject:name];
+        }
+    }
+}
 - (void)pause {
     @synchronized(self) {
-        [_music pause];[_extraMusic pause];[_selection stop];
+        _pausedTitleMusic=_pausedTitleMusic||_music.isPlaying;
+        _pausedExtraMusic=_pausedExtraMusic||_extraMusic.isPlaying;
+        _pausedGameplayMusic=_pausedGameplayMusic||_gameplayMusic.isPlaying;
+        [_music pause];[_extraMusic pause];[_gameplayMusic pause];[_selection stop];
         if(!_pausedGameplayEffects)_pausedGameplayEffects=[NSMutableSet set];
         if(!_pausedGameplayVoices)_pausedGameplayVoices=[NSMutableSet set];
         for(NSString *name in _gameplayEffects) {
@@ -295,7 +401,9 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
         dc_config state;if(dc_config_decode(configuration.bytes,configuration.length,&state)!=DC_OK)return;
         float voice,bgm,se;dc_config_slider_value(&state,0,&voice);dc_config_slider_value(&state,1,&bgm);dc_config_slider_value(&state,2,&se);
         _voiceVolume=powf(10,voice/2000);_effectVolume=powf(10,se/2000);_musicVolume=powf(10,bgm/2000);
-        _music.volume=_musicVolume;if(_extraMusic)_extraMusic.volume=_musicVolume;_selection.volume=_effectVolume;
+        _music.volume=_musicVolume;if(_extraMusic)_extraMusic.volume=_musicVolume;
+        if(_gameplayMusic)_gameplayMusic.volume=_musicVolume;
+        _selection.volume=_effectVolume;
         for(AVAudioPlayer *player in _gameplayEffects.allValues)player.volume=_effectVolume;
         for(AVAudioPlayer *player in _gameplayVoices.allValues)player.volume=_voiceVolume;
     }
@@ -304,8 +412,12 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
     @synchronized(self) {
         if(_suspendedForSystemPage)return;
         _suspendedForSystemPage=YES;
-        _resumeTitleAfterSystem=_music.isPlaying;[_music pause];
-        _resumeExtraAfterSystem=_extraMusic.isPlaying;[_extraMusic pause];
+        _resumeTitleAfterSystem=_pausedTitleMusic||_music.isPlaying;
+        _pausedTitleMusic=NO;[_music pause];
+        _resumeExtraAfterSystem=_pausedExtraMusic||_extraMusic.isPlaying;
+        _pausedExtraMusic=NO;[_extraMusic pause];
+        _resumeGameplayMusicAfterSystem=_pausedGameplayMusic||_gameplayMusic.isPlaying;
+        _pausedGameplayMusic=NO;[_gameplayMusic pause];
         [_selection stop];
         if(!_pausedGameplayEffects)_pausedGameplayEffects=[NSMutableSet set];
         if(!_pausedGameplayVoices)_pausedGameplayVoices=[NSMutableSet set];
@@ -316,18 +428,27 @@ static NSString *DCGameplaySlotName(NSUInteger slot) {
 - (BOOL)resumeAfterSystemPage {
     @synchronized(self) {
         _suspendedForSystemPage=NO;
-        [self ensureAudioSession];
+        BOOL sessionReady=[self ensureAudioSession];
         if(_resumeTitleAfterSystem){
-            if(![_music play]){[_music prepareToPlay];[_music play];}
+            if(sessionReady&&([_music play]||([_music prepareToPlay]&&[_music play])))_pausedTitleMusic=NO;
+            else _pausedTitleMusic=YES;
         }
         _resumeTitleAfterSystem=NO;
         if(_resumeExtraAfterSystem){
-            if(![_extraMusic play]){[_extraMusic prepareToPlay];[_extraMusic play];}
+            AVAudioPlayer *target=_extraMusic?:_music;
+            if(sessionReady&&([target play]||([target prepareToPlay]&&[target play])))_pausedExtraMusic=NO;
+            else _pausedExtraMusic=YES;
         }
         _resumeExtraAfterSystem=NO;
+        if(_resumeGameplayMusicAfterSystem&&_gameplayMusic){
+            _gameplayMusic.volume=_musicVolume;
+            if(sessionReady&&([_gameplayMusic play]||([_gameplayMusic prepareToPlay]&&[_gameplayMusic play])))_pausedGameplayMusic=NO;
+            else _pausedGameplayMusic=YES;
+        }
+        _resumeGameplayMusicAfterSystem=NO;
         [self resumeGameplayEffects];
         return YES;
     }
 }
-- (void)dealloc { [_music stop];[_extraMusic stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
+- (void)dealloc { [_music stop];[_extraMusic stop];[_gameplayMusic stop];[_selection stop];for(AVAudioPlayer *player in _gameplayEffects.allValues)[player stop];for(AVAudioPlayer *player in _gameplayVoices.allValues)[player stop]; }
 @end

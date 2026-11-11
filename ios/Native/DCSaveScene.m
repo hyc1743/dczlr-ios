@@ -190,7 +190,9 @@ static uint32_t saveDword(const uint8_t *p) {
      * earlier slot. Selection stays unchanged on subsequent refreshes. */
     uint64_t newest=0;
     for(uint32_t i=0;i<80;++i){uint64_t stamp=[_slots[i][@"stamp"] unsignedLongLongValue];if(stamp>newest){newest=stamp;_page=i/10;_row=i%10;}}
-    _music.numberOfLoops=-1;[_music play];return self;
+    _music.numberOfLoops=-1;
+    _pausedMusic=(_music&&!([_music play]||([_music prepareToPlay]&&[_music play])));
+    return self;
 }
 - (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
     if(!renderer)return @"Save renderer is unavailable";
@@ -334,11 +336,22 @@ static uint32_t saveDword(const uint8_t *p) {
     memset(_textures,0,sizeof(_textures));_renderer=NULL;
 }
 - (void)pause {_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];[_select pause];[_toggle pause];}
-- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=NO;_loadData=nil;_pausedMusic=NO;[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];}
+- (void)resumeFromTemporaryScreen {
+    _pendingAction=_action=0;_entered=_ready=NO;_loadData=nil;
+    NSData *configuration=[NSData dataWithContentsOfFile:[_directory stringByAppendingPathComponent:@"gcd.cfg"]];
+    int32_t se=-1200,bgm=-1200;
+    if(configuration.length>=12){const uint8_t *p=configuration.bytes;se=(int32_t)saveDword(p+4);bgm=(int32_t)saveDword(p+8);}
+    if(_music)_music.volume=powf(10,bgm/2000.f);
+    if(_select)_select.volume=powf(10,se/2000.f);
+    if(_toggle)_toggle.volume=powf(10,se/2000.f);
+    [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
+    [AVAudioSession.sharedInstance setActive:YES error:nil];
+    _pausedMusic=(_music&&!([_music play]||([_music prepareToPlay]&&[_music play])));
+}
 - (void)dealloc {[self detachRenderer];[_music stop];[_select stop];[_toggle stop];}
 - (NSString *)depart:(uint32_t)action tick:(uint32_t)tick {
-    _pendingAction=action;
-    if(action==6)[self pause];else {_select.currentTime=0;[_select play];}
+    _pendingAction=action;_hoverButton=_hoverAction=-1;
+    if(action!=6){_select.currentTime=0;[_select play];}
     return [_transition requestTransition:action==6?3:2 tick:tick]==DC_OK?nil:@"Save departure transition failed";
 }
 - (void)append:(unsigned)index x:(float)x y:(float)y scale:(float)scale
@@ -354,7 +367,13 @@ static uint32_t saveDword(const uint8_t *p) {
     if(_pausedMusic){[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];if(!_music||[_music play]||([_music prepareToPlay]&&[_music play]))_pausedMusic=NO;}
     if(!_entered){if([_transition requestTransition:4 tick:tick]!=DC_OK)return @"Save entry transition failed";_entered=YES;}
     uint32_t ready=0;if([_transition queryTransitionReady:&ready]!=DC_OK)return @"Save transition query failed";
-    if(ready){if(_pendingAction&&(_pendingAction==6||!_select.isPlaying))_action=_pendingAction;else if(!_pendingAction)_ready=YES;}
+    if(ready){
+        if(_pendingAction==6){
+            _pausedMusic=NO;[_music pause];[_select pause];[_toggle pause];_action=6;
+        } else if(_pendingAction&&!_select.isPlaying){
+            _pausedMusic=NO;[_music stop];_action=_pendingAction;
+        } else if(!_pendingAction)_ready=YES;
+    }
     float x=input.x*1024,y=input.y*768;
     if(_ready&&!_pendingAction&&!_saveRequested){
         _hoverButton=_hoverAction=-1;

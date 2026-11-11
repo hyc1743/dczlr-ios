@@ -72,7 +72,7 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     uint32_t _pendingAction,_action,_category,_mapIndex,_stageMask,_firstStage,_secondStage;
     uint32_t _bank,_clearedCount;
     int32_t _hover,_hoverBottom,_badgeVoiceStage,_badgeVoiceIndex;
-    BOOL _entered,_ready,_pausedMusic,_badgeVoiceStarted;
+    BOOL _entered,_ready,_pausedMusic,_pausedBadgeVoice,_badgeVoiceStarted;
 }
 - (uint32_t)action{return _action;}
 - (BOOL)routeReady{return _action==1;}
@@ -137,10 +137,10 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     int32_t se=-1200,bgm=-1200;
     if(configuration.length>=12){const uint8_t *p=configuration.bytes;se=(int32_t)endingDword(p+4);bgm=(int32_t)endingDword(p+8);}
     float bgmVol=powf(10,bgm/2000.f),seVol=powf(10,se/2000.f);
-    if(_music){_music.volume=bgmVol;_music.numberOfLoops=-1;[_music play];}
+    if(_music){_music.volume=bgmVol;_music.numberOfLoops=-1;_pausedMusic=!([_music play]||([_music prepareToPlay]&&[_music play]));}
     if(_select)_select.volume=seVol;
     if(_toggle)_toggle.volume=seVol;
-    _bank=0;_hover=-1;_hoverBottom=-1;_badgeVoiceStage=-1;_badgeVoiceIndex=-1;return self;
+    _bank=0;_category=6;_mapIndex=7;_firstStage=3;_secondStage=3;_hover=-1;_hoverBottom=-1;_badgeVoiceStage=-1;_badgeVoiceIndex=-1;return self;
 }
 - (void)setPendingBadgeStage:(int32_t)stage badgeIndex:(int32_t)badgeIndex {
     if(stage>=0&&stage<3&&badgeIndex>=0&&badgeIndex<9){
@@ -166,7 +166,7 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
         voiceEnabled=p[32+voiceSlot]!=0;
     }
     _badgeVoice.volume=voiceEnabled?powf(10,voiceDb/2000.f):0.f;
-    [_badgeVoice play];
+    _pausedBadgeVoice=!([_badgeVoice play]||([_badgeVoice prepareToPlay]&&[_badgeVoice play]));
 }
 - (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
     if(!renderer)return @"Ending selector renderer unavailable";
@@ -216,9 +216,8 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
 - (void)playSelect {if(_select){_select.currentTime=0;[_select play];}}
 - (NSString *)depart:(uint32_t)action tick:(uint32_t)tick {
     _pendingAction=action;_hover=-1;_hoverBottom=-1;
-    if(_badgeVoice){[_badgeVoice stop];_badgeVoiceStage=-1;_badgeVoiceIndex=-1;}
+    if(_badgeVoice){[_badgeVoice stop];_badgeVoiceStage=-1;_badgeVoiceIndex=-1;_pausedBadgeVoice=NO;}
     if(action!=6)[self playSelect];
-    else [self pause];
     return [_transition requestTransition:action==6?3:2 tick:tick]==DC_OK?nil:@"Ending selector departure transition failed";
 }
 - (NSString *)chooseFromInput:(dc_pc_frame)input x:(float)x y:(float)y tick:(uint32_t)tick {
@@ -232,15 +231,7 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
         else if(x>=248&&x<=304)_hoverBottom=2;
         else if(x>=328&&x<=384)_hoverBottom=3;
     }
-    if(_bank==0){
-        for(unsigned i=0;i<6;++i)if(![self categoryDisabled:i]&&[self hit:x y:y item:categoryItems[i]]){_hover=(int32_t)i;break;}
-    } else if(_bank==2){
-        for(unsigned i=0;i<7;++i)if(![self mapDisabled:i]&&[self hit:x y:y item:mapItems[i]]){_hover=(int32_t)i;break;}
-    } else if(_bank==1){
-        for(unsigned i=0;i<3;++i)if(![self stageDisabled:i]&&[self hit:x y:y item:stageItems[i]]){_hover=(int32_t)i;break;}
-    } else if(_bank==3){
-        if([self hit:x y:y item:(ending_item){"Hscene_PLAY.ema",NULL,800,624,200,48}])_hover=0;
-    }
+    if(_bank==3&&[self hit:x y:y item:(ending_item){"Hscene_PLAY.ema",NULL,800,624,200,48}])_hover=0;
     if(input.keys[0x3b]==3)return [self depart:3 tick:tick];
     if(input.keys[0x3c]==3||input.keys[0x1f]==3)return [self depart:5 tick:tick];
     if(input.mouse[0]==3&&_hoverBottom>=0){
@@ -249,8 +240,9 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     }
     if(input.mouse[1]==2||input.mouse[1]==3){
         if(_bank==3){_bank=1;}
-        else if(_bank==1){_stageMask=0;_bank=2;}
-        else if(_bank==2){_bank=0;}
+        else if(_bank==1){_stageMask=0;_firstStage=3;_secondStage=3;_bank=2;}
+        else if(_bank==2){_mapIndex=7;_bank=0;}
+        else if(_bank==0){_category=6;}
         return nil;
     }
     if(input.mouse[0]!=3)return nil;
@@ -262,7 +254,7 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     if(_bank==0){
         for(unsigned i=0;i<6;++i)if([self hit:x y:y item:categoryItems[i]]){
             if([self categoryDisabled:i])return nil;
-            _category=i;_stageMask=0;_bank=2;[self playToggle];
+            _category=i;_mapIndex=7;_stageMask=0;_firstStage=3;_secondStage=3;_bank=2;[self playToggle];
             return nil;
         }
     } else if(_bank==2){
@@ -303,20 +295,25 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
 - (NSString *)drawAtTick:(uint32_t)tick pcInput:(dc_pc_frame)input width:(uint32_t)width height:(uint32_t)height {
     if(!_renderer||!_transition)return @"Ending selector renderer unavailable";
     if(_pausedMusic){[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];if(!_music||[_music play]||([_music prepareToPlay]&&[_music play]))_pausedMusic=NO;}
+    if(_pausedBadgeVoice){[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];if(!_badgeVoice||[_badgeVoice play]||([_badgeVoice prepareToPlay]&&[_badgeVoice play]))_pausedBadgeVoice=NO;}
     uint32_t ready=0;if(!_entered){if([_transition requestTransition:4 tick:tick]!=DC_OK)return @"Ending selector entry transition failed";_entered=YES;}
     if([_transition queryTransitionReady:&ready]!=DC_OK)return @"Ending selector transition query failed";
     if(ready){
         if(_pendingAction){
             if(_pendingAction==6){
+                _pausedMusic=NO;_pausedBadgeVoice=NO;
+                [_music pause];[_select pause];[_toggle pause];[_badgeVoice pause];
                 _action=6;
             } else if(!_select||!_select.isPlaying){
+                _pausedMusic=NO;_pausedBadgeVoice=NO;
                 if(_pendingAction==1||_pendingAction==2||_pendingAction==4)[_music stop];
+                else {[_music pause];[_select pause];[_toggle pause];[_badgeVoice pause];}
                 _action=_pendingAction;
             }
         } else {
             _ready=YES;
             [self startPendingBadgeVoiceIfNeeded];
-            if(_badgeVoiceStarted&&(!_badgeVoice||!_badgeVoice.isPlaying)){_badgeVoiceStage=-1;_badgeVoiceIndex=-1;}
+            if(_badgeVoiceStarted&&!_pausedBadgeVoice&&(!_badgeVoice||!_badgeVoice.isPlaying)){_badgeVoiceStage=-1;_badgeVoiceIndex=-1;}
         }
     }
     float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
@@ -331,9 +328,11 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
         unsigned character=2-panel;
         const uint8_t *p=_flowState.raw+character*DC_FLOW_STAGE_BYTES;
         unsigned portrait=p[0x22];
-        if(_ready&&!_pendingAction&&_badgeVoiceStage==(int32_t)character){
-            NSString *pName=[NSString stringWithUTF8String:badgePortraitNames[panel]];
-            endingAddSprite(spriteItems,&spriteCount,[self texture:pName],scale,ox,oy,72,96+196*panel,224,64);
+        if(_badgeVoiceStage==(int32_t)character){
+            if(_ready&&!_pendingAction){
+                NSString *pName=[NSString stringWithUTF8String:badgePortraitNames[panel]];
+                endingAddSprite(spriteItems,&spriteCount,[self texture:pName],scale,ox,oy,72,96+196*panel,224,64);
+            }
         } else if(portrait>0&&portrait<6&&portrait!=3){
             NSString *pName=[NSString stringWithUTF8String:portraitNames[panel][portraitVariant[portrait]]];
             endingAddSprite(spriteItems,&spriteCount,[self texture:pName],scale,ox,oy,72,96+196*panel,224,64);
@@ -365,70 +364,58 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     }
     BOOL secret3P=(_clearedCount<2);
     BOOL secret4P=(_clearedCount<3);
-    if(_bank==0){
-        for(unsigned i=0;i<6;++i){
-            if(i==4&&secret3P){
-                endingAddSprite(spriteItems,&spriteCount,[self texture:@"secret.ema"],scale,ox,oy,categoryItems[i].x,categoryItems[i].y,176,72);
-            } else if(i==5&&secret4P){
-                endingAddSprite(spriteItems,&spriteCount,[self texture:@"secret.ema"],scale,ox,oy,categoryItems[i].x,categoryItems[i].y,176,72);
-            } else if(![self categoryDisabled:i]){
-                endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:categoryItems[i].mono]],scale,ox,oy,categoryItems[i].x,categoryItems[i].y,176,72);
-                if(_hover==(int32_t)i){
-                    endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:categoryItems[i].name]],scale,ox,oy,categoryItems[i].x,categoryItems[i].y,176,72);
-                }
-            }
-        }
-        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select01.ema"],scale,ox,oy,336,48,200,536);
-    } else if(_category<6){
+    if(_category<6){
         endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:categoryItems[_category].name]],scale,ox,oy,categoryItems[_category].x,categoryItems[_category].y,176,72);
-        if(secret3P)endingAddSprite(spriteItems,&spriteCount,[self texture:@"secret.ema"],scale,ox,oy,categoryItems[4].x,categoryItems[4].y,176,72);
-        if(secret4P)endingAddSprite(spriteItems,&spriteCount,[self texture:@"secret.ema"],scale,ox,oy,categoryItems[5].x,categoryItems[5].y,176,72);
     }
-    if(_bank==2){
-        for(unsigned i=0;i<7;++i){
-            if(![self mapDisabled:i]){
-                endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:mapItems[i].mono]],scale,ox,oy,mapItems[i].x,mapItems[i].y,176,72);
-                if(_hover==(int32_t)i){
-                    endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:mapItems[i].name]],scale,ox,oy,mapItems[i].x,mapItems[i].y,176,72);
-                }
-            }
-        }
-        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select02.ema"],scale,ox,oy,544,48,200,616);
-    } else if((_bank==1||_bank==3)&&_mapIndex<7){
+    for(unsigned i=0;i<3;++i)if(_stageMask&(1u<<i)){
+        endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].name]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+    }
+    if(_mapIndex<7){
         endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:mapItems[_mapIndex].name]],scale,ox,oy,mapItems[_mapIndex].x,mapItems[_mapIndex].y,176,72);
     }
-    if(_bank==1){
-        for(unsigned i=0;i<3;++i){
-            if(![self stageDisabled:i]){
-                endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].mono]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
-                if(_hover==(int32_t)i||(_stageMask&(1u<<i))!=0){
-                    endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].name]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
-                }
-            }
-        }
-        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select03.ema"],scale,ox,oy,752,48,200,296);
-    } else if(_bank==3){
-        for(unsigned i=0;i<3;++i)if(_stageMask&(1u<<i)){
-            endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].name]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
-        }
-        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_PLAY_mono.ema"],scale,ox,oy,800,624,200,48);
-        if(_hover==0){
-            endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_PLAY.ema"],scale,ox,oy,800,624,200,48);
-        }
+    if(_bank==3&&_hover==0){
+        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_PLAY.ema"],scale,ox,oy,800,624,200,48);
     }
     if(_hoverBottom==0)endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_gameend.ema"],scale,ox,oy,48,704,56,56);
     else if(_hoverBottom==1)endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_title.ema"],scale,ox,oy,128,704,56,56);
     else if(_hoverBottom==2)endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_config.ema"],scale,ox,oy,248,704,56,56);
     else if(_hoverBottom==3)endingAddSprite(spriteItems,&spriteCount,[self texture:@"hanyo_saveload.ema"],scale,ox,oy,328,704,56,56);
+    for(unsigned i=0;i<6;++i){
+        BOOL showMono=(_bank==0)?[self categoryDisabled:i]:(i!=_category);
+        if(showMono){
+            endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:categoryItems[i].mono]],scale,ox,oy,categoryItems[i].x,categoryItems[i].y,176,72);
+        }
+    }
+    for(unsigned i=0;i<3;++i){
+        BOOL showMono=(_bank==0||_bank==2)?YES:((_bank==1)?[self stageDisabled:i]:((_stageMask&(1u<<i))==0));
+        if(showMono){
+            endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:stageItems[i].mono]],scale,ox,oy,stageItems[i].x,stageItems[i].y,176,72);
+        }
+    }
+    for(unsigned i=0;i<7;++i){
+        BOOL showMono=(_bank==0)?YES:((_bank==2)?[self mapDisabled:i]:(i!=_mapIndex));
+        if(showMono){
+            endingAddSprite(spriteItems,&spriteCount,[self texture:[NSString stringWithUTF8String:mapItems[i].mono]],scale,ox,oy,mapItems[i].x,mapItems[i].y,176,72);
+        }
+    }
+    if(_bank!=3){
+        endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_PLAY_mono.ema"],scale,ox,oy,800,624,200,48);
+    }
+    if(secret3P)endingAddSprite(spriteItems,&spriteCount,[self texture:@"secret.ema"],scale,ox,oy,categoryItems[4].x,categoryItems[4].y,176,72);
+    if(secret4P)endingAddSprite(spriteItems,&spriteCount,[self texture:@"secret.ema"],scale,ox,oy,categoryItems[5].x,categoryItems[5].y,176,72);
+    if(_bank==0)endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select01.ema"],scale,ox,oy,336,48,200,536);
+    else if(_bank==2)endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select02.ema"],scale,ox,oy,544,48,200,616);
+    else if(_bank==1)endingAddSprite(spriteItems,&spriteCount,[self texture:@"Hscene_select03.ema"],scale,ox,oy,752,48,200,296);
     endingAddSprite(spriteItems,&spriteCount,[self texture:@"k_defo.ema"],scale,ox,oy,x-6,y-6,64,64);
     return [_transition drawSprites:spriteItems count:spriteCount tick:tick width:width height:height];
 }
 - (void)pause {
     _pausedMusic=_pausedMusic||_music.isPlaying;
+    _pausedBadgeVoice=_pausedBadgeVoice||_badgeVoice.isPlaying;
     [_music pause];[_select pause];[_toggle pause];[_badgeVoice pause];
 }
 - (void)resumeFromTemporaryScreen {
-    _pendingAction=_action=0;_entered=_ready=NO;
+    _pendingAction=_action=0;_entered=_ready=NO;_pausedBadgeVoice=NO;
     NSData *configuration=[NSData dataWithContentsOfFile:[_directory stringByAppendingPathComponent:@"gcd.cfg"]];
     int32_t se=-1200,bgm=-1200;
     if(configuration.length>=12){const uint8_t *p=configuration.bytes;se=(int32_t)endingDword(p+4);bgm=(int32_t)endingDword(p+8);}
@@ -436,7 +423,9 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     if(_music)_music.volume=bgmVol;
     if(_select)_select.volume=seVol;
     if(_toggle)_toggle.volume=seVol;
-    _pausedMusic=NO;[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];
+    [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
+    [AVAudioSession.sharedInstance setActive:YES error:nil];
+    _pausedMusic=(_music&&!([_music play]||([_music prepareToPlay]&&[_music play])));
 }
 - (void)detachRenderer {
     for(NSNumber *value in _textures.allValues)if(_renderer)dc_vk_sprite_remove_texture(_renderer,value.unsignedLongLongValue);

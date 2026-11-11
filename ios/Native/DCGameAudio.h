@@ -9,12 +9,15 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)gameplayVoiceBusy;
 - (float)gameplayVoiceMouthPhase;
 - (void)cancelGameplayVoice;
+- (void)stopActiveGameplayEffectsAndVoice;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;
 - (nullable NSString *)startTitleMusic;
 - (nullable NSString *)startExtraMusic;
+- (nullable NSString *)startGameplayMusicForSceneType:(uint32_t)sceneType map:(uint32_t)mapSelector;
 - (nullable NSString *)prepareGameplayAudio;
 - (BOOL)playGameplayEffectNamed:(NSString *)name;
 - (BOOL)playGameplaySlot:(NSUInteger)slot;
+- (void)setGameplayLoopSlot:(NSUInteger)slot active:(BOOL)active;
 - (BOOL)gameplaySlotBusy:(NSUInteger)slot;
 - (BOOL)resumeGameplayEffects;
 - (BOOL)playGameplayVoiceNamed:(NSString *)name;

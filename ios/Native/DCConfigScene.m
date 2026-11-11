@@ -77,7 +77,9 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
     _select=[self audio:@"se100.wav" archive:@"RPP_14.pp" error:error];
     _toggle=[self audio:@"se101.wav" archive:@"RPP_14.pp" error:error];
     if(!_voice||!_music||!_select||!_toggle)return nil;
-    _music.numberOfLoops=-1;[self updateVolumes];[_music play];return self;
+    _music.numberOfLoops=-1;[self updateVolumes];
+    _pausedMusic=(_music&&!([_music play]||([_music prepareToPlay]&&[_music play])));
+    return self;
 }
 - (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
     if(!renderer)return @"Configuration renderer is unavailable";
@@ -103,12 +105,11 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
     memset(_textures,0,sizeof(_textures));_renderer=NULL;
 }
 - (void)pause {_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];[_voice pause];[_select pause];[_toggle pause];_drag=-1;}
-- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=_persist=NO;_pausedMusic=NO;[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];[_music play];}
+- (void)resumeFromTemporaryScreen {_pendingAction=_action=0;_entered=_ready=_persist=NO;[AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];[AVAudioSession.sharedInstance setActive:YES error:nil];_pausedMusic=(_music&&!([_music play]||([_music prepareToPlay]&&[_music play])));}
 - (void)dealloc {[self detachRenderer];[_music stop];[_voice stop];[_select stop];[_toggle stop];}
 - (NSString *)depart:(uint32_t)action tick:(uint32_t)tick {
-    _pendingAction=action;_persist=action!=5;_drag=-1;
+    _pendingAction=action;_persist=action!=5;_drag=-1;_hover=-1;
     if(action!=5){_select.currentTime=0;[_select play];}
-    else [self pause];
     return [_transition requestTransition:action==5?3:2 tick:tick]==DC_OK?nil:@"Configuration departure transition failed";
 }
 - (void)append:(unsigned)index x:(float)x y:(float)y scale:(float)scale
@@ -126,7 +127,13 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
         _entered=YES;
     }
     uint32_t ready=0;if([_transition queryTransitionReady:&ready]!=DC_OK)return @"Configuration transition query failed";
-    if(ready){if(_pendingAction&&!_select.isPlaying)_action=_pendingAction;else if(!_pendingAction)_ready=YES;}
+    if(ready){
+        if(_pendingAction==5){
+            _pausedMusic=NO;[_music pause];[_voice pause];[_select pause];[_toggle pause];_action=5;
+        } else if(_pendingAction&&!_select.isPlaying){
+            _pausedMusic=NO;[_music stop];[_voice stop];_action=_pendingAction;
+        } else if(!_pendingAction)_ready=YES;
+    }
     float x=input.x*1024,y=input.y*768;_hover=-1;
     if(_ready&&!_pendingAction){
         if(input.keys[1]==3){NSString *failure=[self depart:5 tick:tick];if(failure)return failure;}
