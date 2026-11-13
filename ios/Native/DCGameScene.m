@@ -4449,9 +4449,12 @@ static void freeMorphCaches(dc_game_model *slot) {
                 [self replaceModel:bs textureNamed:[NSString stringWithFormat:@"%ct00_01_20.bmp",pfx]
                                      withRPP15Name:[NSString stringWithFormat:@"%ct00_02_20.bmp",pfx]];
             }
+            BOOL isType7Oral=(_type7State.sub_mode==DC_TYPE7_SUB_2P_ORAL||
+                              _type7State.sub_mode==DC_TYPE7_SUB_3P_ORAL||
+                              _type7State.sub_mode==DC_TYPE7_SUB_4P_ORAL);
             BOOL hVirginBlood=(h==0u&&(_type7NonVirginMask&1u)==0u&&
                                (_type7State.metrics[0].vaginal_in_ejac>0u||
-                                (_type7State.phase!=DC_TYPE7_PHASE_IDLE&&_type7State.hole==0u&&_type7State.rig_mode!=DC_TYPE7_RIG_ORAL&&
+                                (_type7State.phase!=DC_TYPE7_PHASE_IDLE&&_type7State.hole==0u&&!isType7Oral&&
                                  (_type7State.active_slot<0?_type7State.slots[0]==0u:_type7State.slots[(uint8_t)_type7State.active_slot]==0u))));
             if(bs&&hVirginBlood) {
                 [self replaceModel:bs textureNamed:@"bt00_01_08.bmp" withRPP15Name:@"bt00_01_08s.bmp"];
@@ -6608,13 +6611,15 @@ static void freeMorphCaches(dc_game_model *slot) {
             failure=[self append:&_extraActors[eb] camera:&camera viewport:&viewport draws:draws capacity:geometryCapacity count:&count storage:storage triangles:&_visibleActorTriangles];
     }
     if(!failure && delta && _actorSkinMeshCount)_actorSkinAdvanced=YES;
-    BOOL actorHeadVis=(!_actor.model||_actorHeadNode==UINT32_MAX||dc_model_node_visible(_actor.model,_actorHeadNode)!=0);
-    BOOL actorBodyVis=(!_actor.model||_kosiNode==UINT32_MAX||dc_model_node_visible(_actor.model,_kosiNode)!=0);
+    uint32_t headVisVal=1u,bodyVisVal=1u;
+    BOOL actorHeadVis=(!_actor.model||_actorHeadNode==UINT32_MAX||dc_model_node_visible(_actor.model,_actorHeadNode,&headVisVal)!=DC_OK||headVisVal!=0u);
+    BOOL actorBodyVis=(!_actor.model||_kosiNode==UINT32_MAX||dc_model_node_visible(_actor.model,_kosiNode,&bodyVisVal)!=DC_OK||bodyVisVal!=0u);
     if(!failure && _face.model && actorHeadVis)failure=[self append:&_face camera:&camera viewport:&viewport draws:draws capacity:geometryCapacity count:&count storage:storage triangles:&_visibleActorTriangles];
     for(uint32_t ef=0;!failure&&ef<_extraFaceCount&&ef<2u;++ef) {
         if(!_extraFaces[ef].model)continue;
         dc_game_model *hbs=[self bodySlotAtIndex:_headBodyIndices[ef+1u]];
-        BOOL ehVis=(!hbs||!hbs->model||_extraActorHeadNodes[ef]==UINT32_MAX||dc_model_node_visible(hbs->model,_extraActorHeadNodes[ef])!=0);
+        uint32_t ehVisVal=1u;
+        BOOL ehVis=(!hbs||!hbs->model||_extraActorHeadNodes[ef]==UINT32_MAX||dc_model_node_visible(hbs->model,_extraActorHeadNodes[ef],&ehVisVal)!=DC_OK||ehVisVal!=0u);
         if(ehVis)failure=[self append:&_extraFaces[ef] camera:&camera viewport:&viewport draws:draws capacity:geometryCapacity count:&count storage:storage triangles:&_visibleActorTriangles];
     }
     for(unsigned auxiliary=0;auxiliary<2;++auxiliary)if(!failure&&actorBodyVis&&!_watchAuxUserHidden&&_watchAuxiliary[auxiliary].model)
@@ -6646,7 +6651,8 @@ static void freeMorphCaches(dc_game_model *slot) {
         for(uint32_t ef=0;!failure&&ef<_extraFaceCount&&ef<2u;++ef) {
             if(!_extraFaces[ef].model)continue;
             dc_game_model *hbs=[self bodySlotAtIndex:_headBodyIndices[ef+1u]];
-            BOOL ehVis=(!hbs||!hbs->model||_extraActorHeadNodes[ef]==UINT32_MAX||dc_model_node_visible(hbs->model,_extraActorHeadNodes[ef])!=0);
+            uint32_t ehVisVal=1u;
+            BOOL ehVis=(!hbs||!hbs->model||_extraActorHeadNodes[ef]==UINT32_MAX||dc_model_node_visible(hbs->model,_extraActorHeadNodes[ef],&ehVisVal)!=DC_OK||ehVisVal!=0u);
             if(ehVis)failure=[self append:&_extraFaces[ef] camera:&secondaryCamera viewport:&_secondaryViewport draws:draws capacity:geometryCapacity count:&count storage:storage triangles:&secondaryActorTriangles];
         }
         for(unsigned auxiliary=0;auxiliary<2;++auxiliary) {
