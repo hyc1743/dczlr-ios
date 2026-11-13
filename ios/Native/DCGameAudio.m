@@ -4,12 +4,14 @@
 #import <dispatch/dispatch.h>
 #include "dc_scene_ui.h"
 #include "dc_config.h"
+#include <ctype.h>
 #include <math.h>
 
 @interface DCGameAudio () <AVAudioPlayerDelegate>
 @end
 
 static NSString *DCGameplaySlotName(NSUInteger slot) {
+    if(slot==100u)return @"camera.wav";
     if(slot>=35)return nil;
     char name[16];
     return dc_scene_effect_name((uint32_t)slot,name,sizeof(name))==DC_OK?[NSString stringWithUTF8String:name]:nil;
@@ -41,6 +43,7 @@ static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
     BOOL _pausedTitleMusic,_pausedExtraMusic,_pausedGameplayMusic;
     float _voiceVolume,_effectVolume,_musicVolume;
     NSString *_directory;
+    NSString *_gameplayMusicName;
     NSString *_voiceChainNext;
     BOOL _advanced;
 }
@@ -100,6 +103,7 @@ static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
         AVAudioPlayer *player=_gameplayEffects[name];
         if(!player) {
             NSString *error=nil;NSData *data=[self sound:name inArchive:@"RPP_14.pp" directory:_directory error:&error];
+            if(!data)data=[self sound:name inArchive:@"RPP_17.pp" directory:_directory error:&error];
             if(!data)return NO;
             NSError *reason=nil;player=[[AVAudioPlayer alloc] initWithData:data error:&reason];
             if(!player || ![player prepareToPlay])return NO;
@@ -200,12 +204,20 @@ static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
             if (!_gameplayVoices) _gameplayVoices=[NSMutableDictionary dictionary];
             _gameplayVoices[name]=player;
         }
-        for (AVAudioPlayer *other in _gameplayVoices.allValues) if (other.isPlaying) [other stop];
-        [_pausedGameplayVoices removeAllObjects];
+        unichar targetPrefix=(unichar)tolower([name characterAtIndex:0]);
+        for (NSString *otherName in _gameplayVoices) {
+            if (!otherName.length || (unichar)tolower([otherName characterAtIndex:0])!=targetPrefix) continue;
+            AVAudioPlayer *other=_gameplayVoices[otherName];
+            if (other.isPlaying) [other stop];
+        }
+        for (NSString *pausedName in [_pausedGameplayVoices allObjects]) {
+            if (pausedName.length && (unichar)tolower([pausedName characterAtIndex:0])==targetPrefix)
+                [_pausedGameplayVoices removeObject:pausedName];
+        }
         player.delegate=self;
         if (name.length>=3 && [[name substringFromIndex:1] caseInsensitiveCompare:@"st001_01.wav"]==NSOrderedSame)
             _voiceChainNext=[NSString stringWithFormat:@"%cst002_01.wav",[name characterAtIndex:0]];
-        else
+        else if (_voiceChainNext.length && (unichar)tolower([_voiceChainNext characterAtIndex:0])==targetPrefix)
             _voiceChainNext=nil;
         player.currentTime=0;
         player.volume=_voiceVolume;
@@ -218,7 +230,16 @@ static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
 - (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player successfully:(BOOL)flag {
     NSString *next=nil;
     @synchronized(self) {
-        if (!flag || player.delegate!=self) return;
+        if (!flag || player.delegate!=self || !_voiceChainNext.length) return;
+        unichar chainPrefix=(unichar)tolower([_voiceChainNext characterAtIndex:0]);
+        BOOL matchesFinished=NO;
+        for (NSString *key in _gameplayVoices) {
+            if (_gameplayVoices[key]==player && key.length && (unichar)tolower([key characterAtIndex:0])==chainPrefix) {
+                matchesFinished=YES;
+                break;
+            }
+        }
+        if (!matchesFinished) return;
         next=_voiceChainNext;_voiceChainNext=nil;
     }
     if (next) [self playGameplayVoiceNamed:next];
@@ -261,19 +282,30 @@ static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
     }
 }
 - (NSString *)startGameplayMusicForSceneType:(uint32_t)sceneType map:(uint32_t)mapSelector {
+    NSString *name=DCGameplayMusicName(sceneType,mapSelector);
+    return [self startGameplayMusicNamed:name?:@""];
+}
+- (NSString *)startGameplayMusicNamed:(NSString *)name {
     @synchronized(self) {
+        BOOL silent=(!name.length || [name caseInsensitiveCompare:@"none"]==NSOrderedSame);
+        if(!silent && _gameplayMusic && _gameplayMusicName &&
+           [_gameplayMusicName caseInsensitiveCompare:name]==NSOrderedSame &&
+           (_gameplayMusic.isPlaying || _pausedGameplayMusic)) {
+            return nil;
+        }
         if(_gameplayMusic.isPlaying)[_gameplayMusic stop];
         _gameplayMusic=nil;
+        _gameplayMusicName=nil;
         _pausedGameplayMusic=NO;
         _resumeGameplayMusicAfterSystem=NO;
-        NSString *name=DCGameplayMusicName(sceneType,mapSelector);
-        if(!name.length)return nil;
+        if(silent)return nil;
         NSString *error=nil;
         NSData *data=[self sound:name inArchive:@"RPP_01.pp" directory:_directory error:&error];
         if(!data)return nil;
         NSError *reason=nil;
         _gameplayMusic=[[AVAudioPlayer alloc] initWithData:data error:&reason];
         if(!_gameplayMusic)return nil;
+        _gameplayMusicName=[name copy];
         _gameplayMusic.numberOfLoops=-1;
         _gameplayMusic.volume=_musicVolume;
         [_gameplayMusic prepareToPlay];
@@ -311,9 +343,28 @@ static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
         return NO;
     }
 }
-- (float)gameplayVoiceMouthPhase {
+- (BOOL)gameplayVoiceBusyForPrefix:(char)prefix {
     @synchronized(self) {
-        for (AVAudioPlayer *player in _gameplayVoices.allValues) {
+        unichar target=(unichar)tolower((unsigned char)prefix);
+        for (NSString *paused in _pausedGameplayVoices) {
+            if (paused.length && (unichar)tolower([paused characterAtIndex:0])==target) return YES;
+        }
+        for (NSString *name in _gameplayVoices) {
+            if (!name.length || (unichar)tolower([name characterAtIndex:0])!=target) continue;
+            if (_gameplayVoices[name].isPlaying) return YES;
+        }
+        return NO;
+    }
+}
+- (float)gameplayVoiceMouthPhase {
+    return [self gameplayVoiceMouthPhaseForPrefix:0];
+}
+- (float)gameplayVoiceMouthPhaseForPrefix:(char)prefix {
+    @synchronized(self) {
+        unichar target=prefix?(unichar)tolower((unsigned char)prefix):0;
+        for (NSString *name in _gameplayVoices) {
+            if (target && (!name.length || (unichar)tolower([name characterAtIndex:0])!=target)) continue;
+            AVAudioPlayer *player=_gameplayVoices[name];
             if (!player.isPlaying) continue;
             [player updateMeters];
             float power=[player averagePowerForChannel:0];
@@ -349,6 +400,7 @@ static NSString *DCGameplayMusicName(uint32_t sceneType,uint32_t mapSelector) {
         _resumeGameplayMusicAfterSystem=NO;
         if(_gameplayMusic.isPlaying)[_gameplayMusic stop];
         _gameplayMusic=nil;
+        _gameplayMusicName=nil;
         [_pausedGameplayEffects removeAllObjects];
         [_pausedGameplayVoices removeAllObjects];
         for(AVAudioPlayer *player in _gameplayEffects.allValues){[player stop];player.numberOfLoops=0;}

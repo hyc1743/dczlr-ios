@@ -25,8 +25,8 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
     dc_model *_model;
     dc_xx *_xx;
     dc_xx_info _info;
-    uintptr_t _cards[2],_textures[64];
-    DCDecodedImage *_cardImages[2];
+    uintptr_t _cards[2],_textures[64],_loadingTextures[5];
+    DCDecodedImage *_cardImages[2],*_loadingImages[5];
     dc_startup_state _startup;
     uint32_t _card,_lastTick;
     BOOL _finished,_tickInitialized,_needsResumeAtNextTick,_wasTouching,_cardReady;
@@ -98,6 +98,15 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
         if (!image) {if(error)*error=reason.localizedDescription;return nil;}
         _cardImages[target]=image;
     }
+    for (uint32_t step=0;step<5;++step) {
+        NSString *roadName=[NSString stringWithFormat:@"road%03u.ema",step+1];
+        for (uint32_t i=0;i<cards.entryCount;++i) {
+            if ([[cards asciiNameAtIndex:i] caseInsensitiveCompare:roadName]==NSOrderedSame) {
+                _loadingImages[step]=[cards decodeImageAtIndex:i inputLimit:8*1024*1024 outputLimit:16*1024*1024 error:nil];
+                break;
+            }
+        }
+    }
     NSString *uploadFailure=[self attachRenderer:renderer];
     if(uploadFailure) {if(error)*error=uploadFailure;return nil;}
     dc_startup_plan begin;
@@ -123,9 +132,10 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
 - (void)detachRenderer {
     if (_renderer) {
         for (uint32_t i=0;i<2;++i) if(_cards[i]) dc_vk_sprite_remove_texture(_renderer,_cards[i]);
+        for (uint32_t i=0;i<5;++i) if(_loadingTextures[i]) dc_vk_sprite_remove_texture(_renderer,_loadingTextures[i]);
         for (uint32_t i=0;i<64;++i) if(_textures[i]) dc_vk_sprite_remove_texture(_renderer,_textures[i]);
     }
-    memset(_cards,0,sizeof(_cards));memset(_textures,0,sizeof(_textures));
+    memset(_cards,0,sizeof(_cards));memset(_loadingTextures,0,sizeof(_loadingTextures));memset(_textures,0,sizeof(_textures));
     _renderer=NULL;_needsResumeAtNextTick=YES;_wasTouching=NO;
 }
 - (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
@@ -145,7 +155,31 @@ static uint32_t dcStartupColor(const dc_material_value *value) {
         if(!image || dc_vk_sprite_upload(_renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_cards[i])!=DC_OK)
             return @"Startup card texture upload failed";
     }
+    for (uint32_t i=0;i<5;++i) {
+        DCDecodedImage *image=_loadingImages[i];
+        if(image) dc_vk_sprite_upload(_renderer,image.width,image.height,image.rgba.bytes,image.rgba.length,&_loadingTextures[i]);
+    }
     return nil;
+}
+- (void)presentLoadingStep:(uint32_t)step width:(uint32_t)width height:(uint32_t)height {
+    if (!_renderer || !width || !height) return;
+    if (step > 4) step = 4;
+    uintptr_t tex = _loadingTextures[step];
+    if (!tex) return;
+    float scale = fminf((float)width / 1024.0f, (float)height / 768.0f);
+    float ox = ((float)width - 1024.0f * scale) * 0.5f;
+    float oy = ((float)height - 768.0f * scale) * 0.5f;
+    dc_sprite_pose pose = {.width = 368.0f * scale, .height = 72.0f * scale,
+        .x = ox + 344.0f * scale, .y = oy + 344.0f * scale, .z = 0.5f,
+        .scale_x = 1, .scale_y = 1, .alpha = 1, .red = 1, .green = 1, .blue = 1, .u1 = 1, .v1 = 1};
+    dc_sprite_vertex corners[4], quad[6];
+    if (dc_sprite_build_vertices(&pose, corners) != DC_OK) return;
+    const unsigned order[6] = {0, 1, 2, 2, 1, 3};
+    for (unsigned j = 0; j < 6; ++j) quad[j] = corners[order[j]];
+    dc_vk_geometry_item draw = {.vertices = quad, .vertex_count = 6, .texture = tex, .blend_mode = 3};
+    const uint8_t clear[4] = {0, 0, 0, 255};
+    dc_vk_clip_rect clip = {0, 0, width, height};
+    dc_vk_geometry_render_region(_renderer, &draw, 1, clear, NULL, 0, &clip);
 }
 - (NSString *)drawAtTick:(uint32_t)tick touching:(BOOL)touching width:(uint32_t)width height:(uint32_t)height {
     [self resumeIfNeededAtTick:tick];

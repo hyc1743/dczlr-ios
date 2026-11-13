@@ -361,16 +361,113 @@ dc_status dc_model_vertex_space(const dc_model *m,uint32_t mesh,uint32_t *out) {
     if (mesh>=m->info.submeshes) return DC_RANGE;
     *out=m->meshes[mesh].deformed ? DC_MODEL_SPACE_WORLD : DC_MODEL_SPACE_LOCAL;return DC_OK;
 }
-dc_status dc_model_mesh_visible(const dc_model *m,uint32_t mesh,uint32_t *out) {
+dc_status dc_model_node_visible(const dc_model *m,uint32_t node,uint32_t *out) {
     if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
-    if (mesh>=m->info.submeshes) return DC_RANGE;
-    uint32_t node=m->meshes[mesh].info.node;
-    if(m->render_hidden[node]==1){*out=0;return DC_OK;}
+    if (node>=m->info.nodes) return DC_RANGE;
+    if (m->render_hidden[node]==1) {*out=0;return DC_OK;}
     while (node!=DC_XX_NO_PARENT) {
         if (m->nodes[node].hidden) {*out=0;return DC_OK;}
         node=m->nodes[node].parent;
     }
     *out=1;return DC_OK;
+}
+dc_status dc_model_mesh_visible(const dc_model *m,uint32_t mesh,uint32_t *out) {
+    if (!m || !output_allowed(m,out,sizeof(*out))) return DC_ARGUMENT;
+    if (mesh>=m->info.submeshes) return DC_RANGE;
+    return dc_model_node_visible(m,m->meshes[mesh].info.node,out);
+}
+dc_status dc_model_set_node_extra(dc_model *m,uint32_t node,uint32_t modifier,const dc_matrix *extra) {
+    if (!m) return DC_ARGUMENT;
+    if (node>=m->info.nodes || modifier>2) return DC_RANGE;
+    if (modifier==0) {
+        if (extra) for (unsigned i=0;i<16;++i) if (!isfinite(extra->values[i])) return DC_RANGE;
+        m->nodes[node].modifier=0;
+        m->nodes[node].extra=extra ? *extra : identity();
+        return DC_OK;
+    }
+    if (!extra) return DC_ARGUMENT;
+    for (unsigned i=0;i<16;++i) if (!isfinite(extra->values[i])) return DC_RANGE;
+    m->nodes[node].modifier=modifier;
+    m->nodes[node].extra=*extra;
+    return DC_OK;
+}
+dc_status dc_model_refresh_pose(dc_model *m,const dc_matrix *world) {
+    if (!m || !world) return DC_ARGUMENT;
+    memcpy(m->scratch_globals,m->globals,m->info.nodes*sizeof(*m->globals));
+    dc_status status=dc_scene_update(m->nodes,m->info.nodes,world,m->scratch_globals,m->info.nodes);
+    if (status!=DC_OK) return status;
+    for (uint32_t i=0;i<m->info.nodes;++i) {
+        skin_node *skin=&m->skins[i];if (!skin->palette) continue;
+        *skin->scratch_palette=*skin->palette;
+        status=dc_skin_palette_update(skin->scratch_palette,skin->bones,skin->count,m->scratch_globals,m->info.nodes);
+        if (status!=DC_OK) return status;
+    }
+    for (uint32_t i=0;i<m->info.submeshes;++i) {
+        mesh_data *mesh=&m->meshes[i];if (!mesh->deformed) continue;
+        const dc_mesh_vertex *source_vertices=mesh->event_vertices ? mesh->event_vertices : mesh->vertices;
+        status=dc_skin_apply(m->skins[mesh->info.node].scratch_palette,source_vertices,mesh->weights,
+            mesh->info.vertex_count,DC_SKIN_TRANSFORM_NORMAL,mesh->scratch_deformed,mesh->info.vertex_count);
+        if (status!=DC_OK) return status;
+    }
+    memcpy(m->globals,m->scratch_globals,m->info.nodes*sizeof(*m->globals));
+    for (uint32_t i=0;i<m->info.nodes;++i) if (m->skins[i].palette) *m->skins[i].palette=*m->skins[i].scratch_palette;
+    for (uint32_t i=0;i<m->info.submeshes;++i) if (m->meshes[i].deformed)
+        memcpy(m->meshes[i].deformed,m->meshes[i].scratch_deformed,m->meshes[i].info.vertex_count*sizeof(dc_mesh_vertex));
+    return DC_OK;
+}
+dc_status dc_model_scrub_clip(dc_model *m,uint32_t clip,float normalized_t,float frame_offset,const dc_matrix *world) {
+    if (!m || !world) return DC_ARGUMENT;
+    if (m->static_only) return clip<512 ? DC_NOT_FOUND : DC_ARGUMENT;
+    if (clip>=512 || !isfinite(normalized_t) || !isfinite(frame_offset)) return DC_RANGE;
+    const dc_animation_clip *desc=&m->clips[clip];
+    if (!isfinite(desc->first_frame) || !isfinite(desc->last_frame) || desc->first_frame>desc->last_frame) return DC_FORMAT;
+    float t=normalized_t<0.0f ? 0.0f : (normalized_t>1.0f ? 1.0f : normalized_t);
+    float frame=desc->first_frame+(desc->last_frame-desc->first_frame)*t+frame_offset;
+    if (frame<desc->first_frame) frame=desc->first_frame;
+    if (frame>desc->last_frame) frame=desc->last_frame;
+    memcpy(m->scratch_nodes,m->nodes,m->info.nodes*sizeof(*m->nodes));
+    memcpy(m->scratch_globals,m->globals,m->info.nodes*sizeof(*m->globals));
+    memcpy(m->scratch_materials,m->materials,m->info.materials*sizeof(*m->materials));
+    dc_status status=DC_OK;
+    for (uint32_t i=0;i<m->xa_info.bone_tracks;++i) {
+        pose_track *p=&m->poses[i];if (p->target==UINT32_MAX) continue;
+        status=dc_pose_sample(p->keys,p->count,p->mode,frame,&m->scratch_nodes[p->target].local);
+        if (status!=DC_OK) return status;
+    }
+    for (uint32_t i=0;i<m->xa_info.material_tracks;++i) {
+        material_track *p=&m->tracks[i];if (p->target==UINT32_MAX) continue;
+        status=dc_material_sample(p->keys,p->count,&p->baseline,frame,&m->scratch_materials[p->target]);
+        if (status!=DC_OK) return status;
+    }
+    status=dc_scene_update(m->scratch_nodes,m->info.nodes,world,m->scratch_globals,m->info.nodes);
+    if (status!=DC_OK) return status;
+    for (uint32_t i=0;i<m->info.nodes;++i) {
+        skin_node *skin=&m->skins[i];if (!skin->palette) continue;
+        *skin->scratch_palette=*skin->palette;
+        status=dc_skin_palette_update(skin->scratch_palette,skin->bones,skin->count,m->scratch_globals,m->info.nodes);
+        if (status!=DC_OK) return status;
+    }
+    for (uint32_t i=0;i<m->info.submeshes;++i) {
+        mesh_data *mesh=&m->meshes[i];if (!mesh->deformed) continue;
+        const dc_mesh_vertex *source_vertices=mesh->event_vertices ? mesh->event_vertices : mesh->vertices;
+        status=dc_skin_apply(m->skins[mesh->info.node].scratch_palette,source_vertices,mesh->weights,
+            mesh->info.vertex_count,DC_SKIN_TRANSFORM_NORMAL,mesh->scratch_deformed,mesh->info.vertex_count);
+        if (status!=DC_OK) return status;
+    }
+    memcpy(m->nodes,m->scratch_nodes,m->info.nodes*sizeof(*m->nodes));
+    memcpy(m->globals,m->scratch_globals,m->info.nodes*sizeof(*m->globals));
+    memcpy(m->materials,m->scratch_materials,m->info.materials*sizeof(*m->materials));
+    for (uint32_t i=0;i<m->info.nodes;++i) if (m->skins[i].palette) *m->skins[i].palette=*m->skins[i].scratch_palette;
+    for (uint32_t i=0;i<m->info.submeshes;++i) if (m->meshes[i].deformed)
+        memcpy(m->meshes[i].deformed,m->meshes[i].scratch_deformed,m->meshes[i].info.vertex_count*sizeof(dc_mesh_vertex));
+    m->animation.previous=clip;
+    m->animation.current=clip;
+    m->animation.pending=clip;
+    m->animation.blend=1.0f;
+    m->animation.frame=frame;
+    m->animation.pending_frame=frame;
+    m->animation.fixed_frame=1;
+    return DC_OK;
 }
 dc_status dc_model_hide_node(dc_model *m,uint32_t node,uint32_t hidden) {
     if(!m)return DC_ARGUMENT;
@@ -379,9 +476,14 @@ dc_status dc_model_hide_node(dc_model *m,uint32_t node,uint32_t hidden) {
      * independent +0x1f8 transform-suppression byte must stay unchanged. */
     uint8_t *subtree=calloc(m->info.nodes,1);if(!subtree)return DC_MEMORY;
     subtree[node]=1;
-    for(uint32_t i=node+1;i<m->info.nodes;++i)
-        if(m->nodes[i].parent!=DC_SCENE_NO_PARENT&&subtree[m->nodes[i].parent])subtree[i]=1;
-    for(uint32_t i=node;i<m->info.nodes;++i)if(subtree[i])m->render_hidden[i]=(uint8_t)hidden;
+    for(uint32_t pass=0,changed=1;changed&&pass<m->info.nodes;++pass) {
+        changed=0;
+        for(uint32_t i=0;i<m->info.nodes;++i) {
+            uint32_t parent=m->nodes[i].parent;
+            if(!subtree[i]&&parent<m->info.nodes&&subtree[parent]){subtree[i]=1;changed=1;}
+        }
+    }
+    for(uint32_t i=0;i<m->info.nodes;++i)if(subtree[i])m->render_hidden[i]=(uint8_t)hidden;
     free(subtree);
     return DC_OK;
 }
@@ -466,6 +568,87 @@ dc_status dc_model_project_vertices_clipped(const dc_model *m,uint32_t mesh,
     }
     status=dc_mesh_clip_project(projected,vertex_count,data->indices,data->info.index_count,
         &mvp,viewport,diffuse,out,capacity,written);
+    free(owned);
+    return status;
+}
+
+dc_status dc_model_project_lit_clipped(const dc_model *m,uint32_t mesh,
+        const dc_matrix *vp,const dc_viewport *viewport,
+        const dc_material_value *material,const dc_light_rig *rig,
+        dc_sprite_vertex *out,dc_sprite_vertex *spec_out,dc_sprite_vertex *sheen_out,
+        size_t capacity,size_t *written,uint32_t *out_has_specular) {
+    if (!m || !vp || !viewport || !material || !rig || !output_allowed(m,written,sizeof(*written)))
+        return DC_ARGUMENT;
+    if (out_has_specular && !output_allowed(m,out_has_specular,sizeof(*out_has_specular)))
+        return DC_ARGUMENT;
+    if (mesh>=m->info.submeshes || capacity>1048576) return DC_RANGE;
+    size_t bytes=capacity*sizeof(*out);
+    if ((out && !output_allowed(m,out,bytes)) ||
+        (spec_out && !output_allowed(m,spec_out,bytes)) ||
+        (sheen_out && !output_allowed(m,sheen_out,bytes))) return DC_ARGUMENT;
+    const mesh_data *data=&m->meshes[mesh];
+    dc_matrix mvp;
+    const dc_matrix *world_transform=NULL;
+    if (data->deformed) {
+        mvp=*vp;
+    } else {
+        world_transform=&m->globals[data->info.node];
+        dc_status status=dc_matrix_multiply(world_transform,vp,&mvp);
+        if (status!=DC_OK) return status;
+    }
+    if ((out && overlap(vp,sizeof(*vp),out,bytes)) ||
+        (spec_out && overlap(vp,sizeof(*vp),spec_out,bytes)) ||
+        (sheen_out && overlap(vp,sizeof(*vp),sheen_out,bytes)) ||
+        overlap(vp,sizeof(*vp),written,sizeof(*written)) ||
+        (out_has_specular && overlap(vp,sizeof(*vp),out_has_specular,sizeof(*out_has_specular))))
+        return DC_ARGUMENT;
+    const dc_mesh_vertex *vertices=data->deformed ? data->deformed : (data->event_vertices ? data->event_vertices : data->vertices);
+    return dc_mesh_clip_project_lit(vertices,data->info.vertex_count,
+        data->indices,data->info.index_count,world_transform,&mvp,viewport,
+        material,rig,out,spec_out,sheen_out,capacity,written,out_has_specular);
+}
+
+dc_status dc_model_project_vertices_lit_clipped(const dc_model *m,uint32_t mesh,
+        const dc_mesh_vertex *vertices,size_t vertex_count,const dc_matrix *vp,
+        const dc_viewport *viewport,const dc_material_value *material,const dc_light_rig *rig,
+        dc_sprite_vertex *out,dc_sprite_vertex *spec_out,dc_sprite_vertex *sheen_out,
+        size_t capacity,size_t *written,uint32_t *out_has_specular) {
+    if (!m || !vertices || !vp || !viewport || !material || !rig || !written)
+        return DC_ARGUMENT;
+    if (!output_allowed(m,written,sizeof(*written)) ||
+        (out_has_specular && !output_allowed(m,out_has_specular,sizeof(*out_has_specular))))
+        return DC_ARGUMENT;
+    if (mesh>=m->info.submeshes || vertex_count!=m->meshes[mesh].info.vertex_count || capacity>1048576)
+        return DC_RANGE;
+    const mesh_data *data=&m->meshes[mesh];
+    size_t bytes=capacity*sizeof(*out),vbytes=vertex_count*sizeof(*vertices);
+    if ((out && (!output_allowed(m,out,bytes) || overlap(vertices,vbytes,out,bytes) || overlap(vp,sizeof(*vp),out,bytes))) ||
+        (spec_out && (!output_allowed(m,spec_out,bytes) || overlap(vertices,vbytes,spec_out,bytes) || overlap(vp,sizeof(*vp),spec_out,bytes))) ||
+        (sheen_out && (!output_allowed(m,sheen_out,bytes) || overlap(vertices,vbytes,sheen_out,bytes) || overlap(vp,sizeof(*vp),sheen_out,bytes))) ||
+        overlap(vertices,vbytes,written,sizeof(*written)) || overlap(vp,sizeof(*vp),written,sizeof(*written)) ||
+        (out_has_specular && (overlap(vertices,vbytes,out_has_specular,sizeof(*out_has_specular)) || overlap(vp,sizeof(*vp),out_has_specular,sizeof(*out_has_specular)))))
+        return DC_ARGUMENT;
+    const dc_mesh_vertex *projected=vertices;
+    dc_mesh_vertex *owned=NULL;
+    dc_matrix mvp;
+    const dc_matrix *world_transform=NULL;
+    dc_status status;
+    if (data->deformed) {
+        if (!data->weights || !m->skins[data->info.node].palette) return DC_FORMAT;
+        owned=calloc(vertex_count,sizeof(*owned));
+        if (!owned) return DC_MEMORY;
+        status=dc_skin_apply(m->skins[data->info.node].palette,vertices,data->weights,vertex_count,
+            DC_SKIN_TRANSFORM_NORMAL,owned,vertex_count);
+        if (status!=DC_OK) { free(owned); return status; }
+        projected=owned;
+        mvp=*vp;
+    } else {
+        world_transform=&m->globals[data->info.node];
+        status=dc_matrix_multiply(world_transform,vp,&mvp);
+        if (status!=DC_OK) return status;
+    }
+    status=dc_mesh_clip_project_lit(projected,vertex_count,data->indices,data->info.index_count,
+        world_transform,&mvp,viewport,material,rig,out,spec_out,sheen_out,capacity,written,out_has_specular);
     free(owned);
     return status;
 }

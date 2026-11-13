@@ -7,7 +7,7 @@ import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'tools'))
-from native_core import library,CameraOrbit,CameraLens,CameraMatrices,Matrix
+from native_core import library,CameraOrbit,CameraLens,CameraMatrices,CameraPointerLimits,CameraPointerInput,Matrix
 from scene_cases import matrix
 from camera_cases import cases
 
@@ -151,6 +151,16 @@ class NativeCameraTests(unittest.TestCase):
         buffer=C.create_string_buffer(C.sizeof(out));C.memmove(buffer,data,len(data))
         self.assertEqual(self.lib.dc_camera_read_preset(buffer,28,0,C.cast(buffer,C.POINTER(CameraOrbit))),0)
         self.assertEqual(buffer.raw,bytes(out))
+
+    def test_primary_pointer_clamps_around_target_anchor(self):
+        anchor=(C.c_float*3)(120.0,10.0,-90.0)
+        orbit=CameraOrbit(matrix(translation=(120.0,10.0,-90.0)),-20.0,2.0,0.0,0.0)
+        limits=CameraPointerLimits(100.0,5.0,30.0,-10.0,3.0)
+        inp=CameraPointerInput(2000,0,0,0,0,1,0)  # middle-drag +2000 -> +200 X -> clamps at 120+50=170
+        out=CameraOrbit()
+        self.assertEqual(self.lib.dc_camera_primary_pointer(C.byref(orbit),anchor,C.byref(limits),C.byref(inp),C.byref(out)),0)
+        self.assertAlmostEqual(out.base.values[12],170.0,places=4)
+        self.assertAlmostEqual(out.base.values[14],-90.0,places=4)
 
 
 if __name__=='__main__':unittest.main()

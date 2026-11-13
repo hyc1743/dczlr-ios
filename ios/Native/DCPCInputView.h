@@ -12,6 +12,7 @@ void dc_pc_touch_input_end(dc_pc_touch *state,uint64_t id);
 void dc_pc_touch_input_reset(dc_pc_touch *state);
 
 @interface DCPCInputView : UIView
+@property(nonatomic, copy, nullable) dispatch_block_t onSwitchToGamepad;
 - (void)reset;
 - (void)setInputEnabled:(BOOL)enabled;
 /* Game-specific virtual keys share the portable PC latch with a physical

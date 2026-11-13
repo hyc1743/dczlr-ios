@@ -67,14 +67,24 @@ dc_status dc_pc_touch_move(dc_pc_touch *s,dc_pc_latch *in,uint64_t id,float x,fl
     if(!isfinite(x)||!isfinite(y))return DC_RANGE;
     int at=slot(s,id);if(at<0)return DC_NOT_FOUND;
     dc_pc_touch_contact *f=&s->contacts[at];
-    if(f->control==DC_PC_TOUCH_POINTER) {
+    int pointer_drag=(f->control==DC_PC_TOUCH_POINTER);
+    if(!pointer_drag&&(f->control==26||f->control==27)) {
+        int pointer_held=0;
+        for(int i=0;i<16;++i)if(s->contacts[i].id&&s->contacts[i].control==DC_PC_TOUCH_POINTER){pointer_held=1;break;}
+        dc_pc_touch_target btn=s->targets[f->control];
+        if(!pointer_held&&btn.diameter>0&&hypotf(x-btn.x,y-btn.y)>btn.diameter*.42f)pointer_drag=1;
+    }
+    if(pointer_drag) {
         float before_x=s->cursor_x,before_y=s->cursor_y;
         s->cursor_x=fmaxf(s->view.x/s->width,fminf((s->view.x+s->view.width)/s->width,s->cursor_x+(x-f->x)/s->width));
         s->cursor_y=fmaxf(s->view.y/s->height,fminf((s->view.y+s->view.height)/s->height,s->cursor_y+(y-f->y)/s->height));
         dc_pc_input_pointer(in,27,s->cursor_x,s->cursor_y);
         float scale=s->view.width/1024.f;
-        dc_pc_input_motion(in,27,(int32_t)lrintf((s->cursor_x-before_x)*s->width/scale),
-            (int32_t)lrintf((s->cursor_y-before_y)*s->height/scale),0);
+        int32_t prev_lx=(int32_t)lrintf((before_x*s->width-s->view.x)/scale);
+        int32_t prev_ly=(int32_t)lrintf((before_y*s->height-s->view.y)/scale);
+        int32_t next_lx=(int32_t)lrintf((s->cursor_x*s->width-s->view.x)/scale);
+        int32_t next_ly=(int32_t)lrintf((s->cursor_y*s->height-s->view.y)/scale);
+        dc_pc_input_motion(in,27,next_lx-prev_lx,next_ly-prev_ly,0);
     }
     f->x=x;f->y=y;return DC_OK;
 }

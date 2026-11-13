@@ -134,11 +134,14 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
             _pausedMusic=NO;[_music stop];[_voice stop];_action=_pendingAction;
         } else if(!_pendingAction)_ready=YES;
     }
-    float x=input.x*1024,y=input.y*768;_hover=-1;
+    float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
+    float x=scale>0.f?(input.x*width-ox)/scale:input.x*1024.f;
+    float y=scale>0.f?(input.y*height-oy)/scale:input.y*768.f;
+    _hover=-1;
     if(_ready&&!_pendingAction){
         if(input.keys[1]==3){NSString *failure=[self depart:5 tick:tick];if(failure)return failure;}
         else if(input.mouse[1]==2||input.keys[0x3b]==3){NSString *failure=[self depart:1 tick:tick];if(failure)return failure;}
-        else if(input.keys[0x3c]==3||input.keys[0x1f]==3){NSString *failure=[self depart:3 tick:tick];if(failure)return failure;}
+        else if(input.keys[0x3c]==3){NSString *failure=[self depart:3 tick:tick];if(failure)return failure;}
         else {
             if(_drag>=0){
                 if(input.mouse[0]&1){
@@ -177,7 +180,6 @@ static BOOL configHit(float x,float y,float rx,float ry,float w,float h) {
         }
     }
     dc_vk_sprite_item items[24]={0};size_t count=0;
-    float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
     [self append:1 x:0 y:0 scale:scale offsetX:ox offsetY:oy items:items count:&count];
     if(_hover>=0){config_sprite sprite=configSprites[_hover+2];[self append:(unsigned)_hover+2 x:sprite.x y:sprite.y scale:scale offsetX:ox offsetY:oy items:items count:&count];}
     for(unsigned slider=0;slider<DC_CONFIG_SLIDERS;++slider){

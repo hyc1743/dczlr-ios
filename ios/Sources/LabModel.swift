@@ -15,9 +15,43 @@ final class LabModel: ObservableObject {
     @Published var status = "等待 Vulkan 初始化"
     private var player: AVAudioPlayer?
     private let root: URL
-    var gameDataDirectory: URL { root.appendingPathComponent("game/Data", isDirectory: true) }
+    var gameDataDirectory: URL { Self.resolveGameDataDirectory(documentsRoot: root) }
     private var logReady = false
     private var auditingResources = false
+
+    static func hasGameArchives(at directory: URL, fileManager: FileManager = .default) -> Bool {
+        fileManager.fileExists(atPath: directory.appendingPathComponent("RPP_02.pp").path) &&
+        fileManager.fileExists(atPath: directory.appendingPathComponent("RPP_17.pp").path)
+    }
+
+    static func resolveGameDataDirectory(documentsRoot: URL, bundle: Bundle = .main, fileManager: FileManager = .default) -> URL {
+        var candidates: [URL] = [
+            documentsRoot.appendingPathComponent("game/Data", isDirectory: true),
+            documentsRoot.appendingPathComponent("Data", isDirectory: true),
+            documentsRoot.appendingPathComponent("data", isDirectory: true),
+            documentsRoot.appendingPathComponent("game", isDirectory: true),
+            documentsRoot
+        ]
+        if let subdirs = try? fileManager.contentsOfDirectory(at: documentsRoot, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+            for sub in subdirs.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                guard (try? sub.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+                candidates.append(sub.appendingPathComponent("Data", isDirectory: true))
+                candidates.append(sub.appendingPathComponent("data", isDirectory: true))
+                candidates.append(sub.appendingPathComponent("game/Data", isDirectory: true))
+                candidates.append(sub)
+            }
+        }
+        for bundleBase in [bundle.resourceURL, Optional(bundle.bundleURL)].compactMap({ $0 }) {
+            candidates.append(bundleBase.appendingPathComponent("game/Data", isDirectory: true))
+            candidates.append(bundleBase.appendingPathComponent("Data", isDirectory: true))
+            candidates.append(bundleBase.appendingPathComponent("data", isDirectory: true))
+            candidates.append(bundleBase)
+        }
+        for candidate in candidates where hasGameArchives(at: candidate, fileManager: fileManager) {
+            return candidate
+        }
+        return documentsRoot.appendingPathComponent("game/Data", isDirectory: true)
+    }
 
     private struct Position: Codable {
         let version: Int
@@ -63,14 +97,43 @@ final class LabModel: ObservableObject {
         #endif
     }
 
-    private func importResourcePacksIfPresent() {
+    private func importResourcePacksIfPresent(force: Bool = false) {
         guard !importingResources else { return }
+        let resolved = gameDataDirectory
+        if !force && Self.hasGameArchives(at: resolved) {
+            resourcesReady = true
+            record("已定位游戏资源目录：\(resolved.path)")
+            return
+        }
         guard let manifest = Bundle.main.url(forResource: "DczlrData.manifest", withExtension: "json") else { return }
         let packNames = (1...3).map { String(format: "DczlrData.part%03d.dczdata", $0) }
-        let packs = root.appendingPathComponent("ResourcePacks", isDirectory: true)
-        let hasParts = packNames.contains { FileManager.default.fileExists(atPath: root.appendingPathComponent($0).path) }
-            || packNames.contains { FileManager.default.fileExists(atPath: packs.appendingPathComponent($0).path) }
-        guard hasParts else { resourcesReady = true; record("未找到资源分卷：\(root.path)"); return }
+        var searchDirs: [URL] = [
+            root,
+            root.appendingPathComponent("ResourcePacks", isDirectory: true),
+            root.appendingPathComponent("Data", isDirectory: true),
+            root.appendingPathComponent("game/Data", isDirectory: true)
+        ]
+        if let bundleRes = Bundle.main.resourceURL {
+            searchDirs.append(bundleRes)
+            searchDirs.append(bundleRes.appendingPathComponent("ResourcePacks", isDirectory: true))
+            searchDirs.append(bundleRes.appendingPathComponent("Data", isDirectory: true))
+        }
+        let bundleRoot = Bundle.main.bundleURL
+        searchDirs.append(bundleRoot)
+        searchDirs.append(bundleRoot.appendingPathComponent("ResourcePacks", isDirectory: true))
+        searchDirs.append(bundleRoot.appendingPathComponent("Data", isDirectory: true))
+        let hasParts = packNames.allSatisfy { name in
+            searchDirs.contains { FileManager.default.fileExists(atPath: $0.appendingPathComponent(name).path) }
+        }
+        guard hasParts else {
+            resourcesReady = true
+            if Self.hasGameArchives(at: resolved) {
+                record("已定位游戏资源目录：\(resolved.path)")
+            } else {
+                record("未找到资源分卷：\(root.path)")
+            }
+            return
+        }
         importingResources = true
         resourcesReady = false
         record("发现资源分卷，开始校验与解包：\(root.path)")
@@ -89,13 +152,17 @@ final class LabModel: ObservableObject {
             } catch {
                 DispatchQueue.main.async {
                     self?.importingResources = false
+                    self?.resourcesReady = true
                     self?.record("资源分卷失败：\(error.localizedDescription)")
                 }
             }
         }
     }
 
-    func retryResourceImport() { importResourcePacksIfPresent() }
+    func retryResourceImport() {
+        importResourcePacksIfPresent(force: true)
+        objectWillChange.send()
+    }
 
     func record(_ message: String, event: String? = nil) {
         status = message
@@ -127,7 +194,7 @@ final class LabModel: ObservableObject {
         guard !auditingResources else { return }
         auditingResources = true
         record("正在用原生模块检查资源包")
-        let directory = root.appendingPathComponent("game/Data", isDirectory: true)
+        let directory = gameDataDirectory
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let result: String
             do { result = try NativeResourceAudit.inspect(dataDirectory: directory) }
@@ -181,6 +248,10 @@ final class LabModel: ObservableObject {
         active = value
         if value {
             gameError = nil
+            if !gameResourcesActive && !importingResources {
+                importResourcePacksIfPresent()
+                objectWillChange.send()
+            }
             try? AVAudioSession.sharedInstance().setCategory(.playback, options: .mixWithOthers)
             try? AVAudioSession.sharedInstance().setActive(true)
         } else {

@@ -7,13 +7,16 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL musicAdvanced;
 @property(nonatomic,readonly) BOOL selectionBusy;
 - (BOOL)gameplayVoiceBusy;
+- (BOOL)gameplayVoiceBusyForPrefix:(char)prefix;
 - (float)gameplayVoiceMouthPhase;
+- (float)gameplayVoiceMouthPhaseForPrefix:(char)prefix;
 - (void)cancelGameplayVoice;
 - (void)stopActiveGameplayEffectsAndVoice;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;
 - (nullable NSString *)startTitleMusic;
 - (nullable NSString *)startExtraMusic;
 - (nullable NSString *)startGameplayMusicForSceneType:(uint32_t)sceneType map:(uint32_t)mapSelector;
+- (nullable NSString *)startGameplayMusicNamed:(NSString *)name;
 - (nullable NSString *)prepareGameplayAudio;
 - (BOOL)playGameplayEffectNamed:(NSString *)name;
 - (BOOL)playGameplaySlot:(NSUInteger)slot;

@@ -169,6 +169,44 @@ class XLLight(C.Structure):
                 ("transform", C.c_float * 16)]
 
 
+class XLD3DLight(C.Structure):
+    _fields_ = [("name", XLSpan), ("target", XLSpan),
+                ("mode", C.c_uint8), ("d3d_type", C.c_uint32),
+                ("diffuse", C.c_float * 4), ("specular", C.c_float * 4),
+                ("ambient", C.c_float * 4), ("position", C.c_float * 3),
+                ("direction", C.c_float * 3), ("range", C.c_float),
+                ("falloff", C.c_float), ("attenuation", C.c_float * 3),
+                ("theta", C.c_float), ("phi", C.c_float),
+                ("transform", C.c_float * 16)]
+
+
+class GlareInfo(C.Structure):
+    _fields_ = [("scale", C.c_float), ("flag", C.c_uint8),
+                ("threshold", C.c_float), ("intensity", C.c_float),
+                ("spread", C.c_float), ("passes", C.c_uint8),
+                ("power_a", C.c_float), ("power_b", C.c_float)]
+
+
+class LightEntry(C.Structure):
+    _fields_ = [("d3d_type", C.c_uint32),
+                ("diffuse", C.c_float * 3), ("specular", C.c_float * 3),
+                ("ambient", C.c_float * 3), ("position", C.c_float * 3),
+                ("direction", C.c_float * 3), ("range", C.c_float),
+                ("falloff", C.c_float), ("attenuation", C.c_float * 3),
+                ("theta", C.c_float), ("phi", C.c_float)]
+
+
+class LightRig(C.Structure):
+    _fields_ = [("count", C.c_uint32),
+                ("lights", LightEntry * 8),
+                ("global_ambient", C.c_float * 3),
+                ("camera_eye", C.c_float * 3),
+                ("view_matrix", Matrix),
+                ("shading_mode", C.c_uint32),
+                ("enable_specular", C.c_uint32),
+                ("sheen_tci", C.c_uint32)]
+
+
 class EyeNeckSpan(C.Structure):
     _fields_ = [("offset", C.c_size_t), ("length", C.c_uint32)]
 
@@ -177,6 +215,32 @@ class EyeNeckInfo(C.Structure):
     _fields_ = [("kind", C.c_uint32), ("targets", C.c_uint32),
                 ("records", C.c_uint32), ("body_offset", C.c_size_t),
                 ("parsed_bytes", C.c_size_t)]
+
+
+class EyeNeckSlot(C.Structure):
+    _fields_ = [("slot_index", C.c_uint32), ("label", EyeNeckSpan),
+                ("behavior_mode", C.c_uint32), ("max_yaw_rad", C.c_float),
+                ("max_pitch_rad", C.c_float), ("interp_ms", C.c_uint32),
+                ("reserved", C.c_uint32), ("weight", C.c_float),
+                ("param_a", C.c_float), ("param_b", C.c_float),
+                ("timers_ms", C.c_uint32 * 4)]
+
+
+class EyeNeckController(C.Structure):
+    _fields_ = [("active", EyeNeckSlot), ("q_start", C.c_float * 4),
+                ("q_current", C.c_float * 4), ("blend_elapsed_ms", C.c_uint32),
+                ("saccade_timer_ms", C.c_uint32), ("saccade_limit_ms", C.c_uint32),
+                ("avert_sign", C.c_float)]
+
+
+class EyeNeckTremorState(C.Structure):
+    _fields_ = [("accum_ms", C.c_uint32), ("sign", C.c_float)]
+
+
+class SpringNodeState(C.Structure):
+    _fields_ = [("initialized", C.c_uint8), ("prev_world_pos", C.c_float * 3),
+                ("prev_world_vel", C.c_float * 3), ("offset", C.c_float * 3),
+                ("velocity", C.c_float * 3)]
 
 class GamePlayer(C.Structure):
     _fields_=[(n,C.c_float) for n in ("x","z","min_x","max_x","min_z","max_z","speed")]+[(n,C.c_uint32) for n in ("interaction_count","map_selector")]
@@ -456,6 +520,323 @@ class SpritePlan(C.Structure):
                 for command in self.commands[:self.count]]
 
 
+class Type7Assets(C.Structure):
+    _fields_ = [
+        ("body_archive", C.c_char * 32),
+        ("body_count", C.c_uint8),
+        ("body_xx", (C.c_char * 32) * 4),
+        ("body_plst", (C.c_char * 32) * 4),
+        ("body_xa", (C.c_char * 32) * 4),
+        ("head_count", C.c_uint8),
+        ("head_heroine", C.c_uint8 * 3),
+        ("head_body_index", C.c_uint8 * 3),
+        ("head_xx", (C.c_char * 32) * 3),
+        ("head_xa", (C.c_char * 32) * 3),
+        ("head_eyes", (C.c_char * 32) * 3),
+        ("head_neck", (C.c_char * 32) * 3),
+        ("char_light_xl", C.c_char * 32),
+        ("cam_file", C.c_char * 32),
+        ("anchor_primary", C.c_char * 32),
+        ("anchor_fallback", C.c_char * 32),
+        ("bgm_name", C.c_char * 32),
+    ]
+
+
+class Type7MenuItem(C.Structure):
+    _fields_ = [
+        ("stem", C.c_char * 16),
+        ("radial_pos", C.c_uint8),
+        ("selected", C.c_uint8),
+        ("action_id", C.c_uint8),
+        ("aux", C.c_uint8),
+    ]
+
+
+class Type7Menu(C.Structure):
+    _fields_ = [
+        ("hub", C.c_uint8),
+        ("count", C.c_uint8),
+        ("target_heroine", C.c_uint8),
+        ("page", C.c_uint8),
+        ("items", Type7MenuItem * 7),
+    ]
+
+
+class Type7HeroineMetrics(C.Structure):
+    _fields_ = [
+        ("vaginal_in_ejac", C.c_uint16),
+        ("anal_in_ejac", C.c_uint16),
+        ("out_ejac", C.c_uint16),
+        ("oral_in_ejac", C.c_uint16),
+        ("oral_out_ejac", C.c_uint16),
+        ("anal_penetrations", C.c_uint16),
+        ("heroine_climaxes", C.c_uint16),
+        ("posture_a_used", C.c_uint8),
+        ("posture_b_used", C.c_uint8),
+        ("caress_used", C.c_uint8),
+        ("stripped_flags", C.c_uint8),
+        ("swallowed", C.c_uint8),
+        ("anal_used", C.c_uint8),
+        ("special_event", C.c_uint8),
+        ("reserved", C.c_uint8),
+    ]
+
+
+class Type7State(C.Structure):
+    _fields_ = [
+        ("sub_mode", C.c_uint8),
+        ("initial_sub_mode", C.c_uint8),
+        ("rig_mode", C.c_uint8),
+        ("map_id", C.c_uint8),
+        ("heroine_count", C.c_uint8),
+        ("slots", C.c_uint8 * 3),
+        ("conquered_mask", C.c_uint8),
+        ("active_slot", C.c_int8),
+        ("primary_heroine", C.c_uint8),
+        ("hole", C.c_uint8),
+        ("phase", C.c_uint8),
+        ("oral_pos", C.c_uint8),
+        ("oral_fast", C.c_uint8),
+        ("chara_page", C.c_uint8),
+        ("fuku_slot_cursor", C.c_uint8),
+        ("cam_slot_cursor", C.c_uint8),
+        ("gaze_mode", C.c_uint8 * 3),
+        ("cam_pivot_mode", C.c_uint8),
+        ("cam_target_heroine", C.c_uint8),
+        ("vibe_mask", C.c_uint8),
+        ("vibe_fast", C.c_uint8),
+        ("fuku_state", (C.c_uint8 * 6) * 3),
+        ("fade_pending", C.c_uint8),
+        ("fade_kind", C.c_uint8),
+        ("pending_sub_mode", C.c_uint8),
+        ("pending_rig_mode", C.c_uint8),
+        ("pending_slot", C.c_int8),
+        ("pending_hole", C.c_uint8),
+        ("sub_style", C.c_uint8),
+        ("cummed_piston", C.c_uint8),
+        ("edge_resumed", C.c_uint8),
+        ("breath_tier", C.c_uint8),
+        ("oral_afterglow_irrumatio", C.c_uint8),
+        ("hold_timer_ms", C.c_uint32),
+        ("moan_timer_ms", C.c_uint32),
+        ("se_cycle_clip", C.c_uint32),
+        ("se_fired_in_stroke", C.c_uint8),
+        ("idle_anim_speed", C.c_float),
+        ("speed", C.c_float),
+        ("arousal", C.c_float * 3),
+        ("voice_serial", C.c_uint32),
+        ("metrics", Type7HeroineMetrics * 3),
+    ]
+
+
+class Type7Plan(C.Structure):
+    _fields_ = [
+        ("body_count", C.c_uint8),
+        ("body_clip", C.c_int32 * 4),
+        ("body_next_clip", C.c_int32 * 4),
+        ("chain_count", C.c_uint8),
+        ("chain_body", C.c_uint8 * 16),
+        ("chain_from", C.c_uint16 * 16),
+        ("chain_to", C.c_int16 * 16),
+        ("loop_count", C.c_uint8),
+        ("loop_body", C.c_uint8 * 8),
+        ("loop_clip", C.c_uint16 * 8),
+        ("loop_limit", C.c_int16 * 8),
+        ("reset_cam_preset", C.c_uint8),
+        ("update_cam_pivot", C.c_uint8),
+        ("start_fade", C.c_uint8),
+        ("fade_kind", C.c_uint8),
+        ("voice_heroine", C.c_uint8),
+        ("voice_stem", C.c_char * 32),
+        ("se_name", C.c_char * 32),
+    ]
+
+
+class Type7ExitOutcome(C.Structure):
+    _fields_ = [
+        ("destination_type", C.c_uint8),
+        ("destination_chapter", C.c_uint8),
+        ("destination_stage", C.c_uint8),
+        ("badge_awarded", C.c_uint8),
+        ("badge_heroine", C.c_uint8),
+        ("badge_index", C.c_uint8),
+        ("promoted_conquest_mask", C.c_uint8),
+        ("exit_voice", C.c_char * 32),
+    ]
+
+
+class EditStep(C.Structure):
+    _fields_ = [
+        ("cat_idx", C.c_int32),
+        ("motion_id", C.c_int32),
+        ("param1", C.c_int32),
+        ("param2", C.c_int32),
+    ]
+
+
+class EditCharaUI(C.Structure):
+    _fields_ = [
+        ("active_mask", C.c_uint8),
+        ("edit_mode", C.c_uint8),
+        ("chara_heroine", C.c_uint8),
+        ("map_enabled_mask", C.c_uint8),
+        ("pers_enabled_mask", C.c_uint8),
+        ("preg_enabled_mask", C.c_uint8),
+        ("virgin_enabled_mask", C.c_uint8),
+        ("pubic_enabled", C.c_uint8),
+        ("badges_enabled_mask", C.c_uint16),
+        ("badges_locked_mask", C.c_uint16),
+    ]
+
+
+class EditMotionUI(C.Structure):
+    _fields_ = [
+        ("cand_count", C.c_uint8),
+        ("cand_page", C.c_uint8),
+        ("cand_page_count", C.c_uint8),
+        ("cand_cat_idx", C.c_int32 * 57),
+        ("cand_motion_id", C.c_int32 * 57),
+        ("p1_kind", C.c_int8),
+        ("p2_kind", C.c_int8),
+        ("speed_enabled_mask", C.c_uint8),
+        ("keypad_enabled", C.c_uint8),
+        ("heroine_enabled_mask", C.c_uint8),
+        ("hole_enabled_mask", C.c_uint8),
+        ("strip_enabled_mask", C.c_uint8),
+        ("can_play_or_save", C.c_uint8),
+    ]
+
+
+class EditState(C.Structure):
+    _fields_ = [
+        ("combo_idx", C.c_int32),
+        ("map_idx", C.c_int32),
+        ("personality", C.c_int32 * 3),
+        ("pregnancy", C.c_int32 * 3),
+        ("init_cloth", (C.c_int32 * 6) * 3),
+        ("non_virgin", C.c_uint8 * 3),
+        ("pubic_hair", C.c_uint8 * 3),
+        ("badges", (C.c_uint8 * 9) * 3),
+        ("step_count", C.c_int32),
+        ("steps", EditStep * 999),
+        ("tab", C.c_uint8),
+        ("edit_mode", C.c_uint8),
+        ("active_mask", C.c_uint8),
+        ("chara_heroine", C.c_uint8),
+        ("selected_step", C.c_int32),
+        ("list_scroll", C.c_int32),
+        ("cand_page", C.c_uint8),
+        ("keypad_overwrite", C.c_uint8),
+        ("cur_cloth", (C.c_int32 * 6) * 3),
+        ("cur_acc", (C.c_uint8 * 2) * 3),
+        ("hole_occ", (C.c_uint8 * 2) * 3),
+        ("vibe_fast", C.c_uint8),
+        ("pose_state", C.c_uint8),
+        ("last_pos_motion", C.c_int32),
+        ("caution_pending", C.c_uint8),
+        ("caution_kind", C.c_uint8),
+        ("caution_arg1", C.c_int32),
+        ("caution_arg2", C.c_int32),
+        ("current_filename", C.c_char * 64),
+    ]
+
+
+class EditAssets(C.Structure):
+    _fields_ = [
+        ("map_id", C.c_uint8),
+        ("edit_mode", C.c_uint8),
+        ("map_archive", C.c_char * 32),
+        ("map_xx", C.c_char * 32),
+        ("map_xl", C.c_char * 32),
+        ("map_xa", C.c_char * 32),
+        ("map_glare", C.c_char * 32),
+        ("bgm_name", C.c_char * 32),
+        ("body_archive", C.c_char * 32),
+        ("body_count", C.c_uint8),
+        ("body_xx", (C.c_char * 32) * 4),
+        ("body_plst", (C.c_char * 32) * 4),
+        ("body_xa", (C.c_char * 32) * 4),
+        ("body_oral_xa", C.c_char * 32),
+        ("body_oral_xa_multi", (C.c_char * 32) * 4),
+        ("head_count", C.c_uint8),
+        ("head_heroine", C.c_uint8 * 3),
+        ("head_body_index", C.c_uint8 * 3),
+        ("head_preg_belly", C.c_uint8 * 3),
+        ("head_pubic_tex", C.c_uint8 * 3),
+        ("head_xx", (C.c_char * 32) * 3),
+        ("head_xa", (C.c_char * 32) * 3),
+        ("head_eyes", (C.c_char * 32) * 3),
+        ("head_neck", (C.c_char * 32) * 3),
+        ("char_light_xl", C.c_char * 32),
+        ("cam_file", C.c_char * 32),
+        ("oral_cam_file", C.c_char * 32),
+        ("anchor_primary", C.c_char * 32),
+        ("anchor_fallback", C.c_char * 32),
+        ("oral_anchor_primary", C.c_char * 32),
+        ("oral_anchor_fallback", C.c_char * 32),
+    ]
+
+
+class EditStepPlan(C.Structure):
+    _fields_ = [
+        ("finished", C.c_uint8),
+        ("immediate_only", C.c_uint8),
+        ("use_oral_rig", C.c_uint8),
+        ("body_count", C.c_uint8),
+        ("body_clip", C.c_int32 * 4),
+        ("body_next_clip", C.c_int32 * 4),
+        ("chain_count", C.c_uint8),
+        ("chain_body", C.c_uint8 * 16),
+        ("chain_from", C.c_uint16 * 16),
+        ("chain_to", C.c_int16 * 16),
+        ("loop_count", C.c_uint8),
+        ("loop_body", C.c_uint8 * 8),
+        ("loop_clip", C.c_uint16 * 8),
+        ("loop_limit", C.c_int16 * 8),
+        ("is_looping", C.c_uint8),
+        ("loop_target", C.c_uint32),
+        ("base_speed", C.c_float),
+        ("effective_speed", C.c_float),
+        ("cloth_changed", C.c_uint8),
+        ("cur_cloth", (C.c_int32 * 6) * 3),
+        ("cur_acc", (C.c_uint8 * 2) * 3),
+        ("update_cam_pivot", C.c_uint8),
+        ("cam_target_heroine", C.c_uint8),
+        ("voice_heroine", C.c_uint8),
+        ("voice_stem", C.c_char * 32),
+        ("se_name", C.c_char * 32),
+    ]
+
+
+class EditPlayer(C.Structure):
+    _fields_ = [
+        ("cur_step", C.c_int32),
+        ("edit_mode", C.c_uint8),
+        ("map_id", C.c_uint8),
+        ("pose_state", C.c_uint8),
+        ("active_heroine", C.c_uint8),
+        ("active_slot", C.c_int8),
+        ("hole", C.c_uint8),
+        ("vibe_mask", C.c_uint8),
+        ("vibe_fast", C.c_uint8),
+        ("use_oral_rig", C.c_uint8),
+        ("afterglow", C.c_uint8),
+        ("oral_pos", C.c_uint8),
+        ("paused", C.c_uint8),
+        ("ff_mode", C.c_uint8),
+        ("hud_hidden", C.c_uint8),
+        ("finished", C.c_uint8),
+        ("in_loop_clip", C.c_uint8),
+        ("is_looping", C.c_uint8),
+        ("loop_target", C.c_uint32),
+        ("loops_done", C.c_uint32),
+        ("base_speed", C.c_float),
+        ("cur_cloth", (C.c_int32 * 6) * 3),
+        ("cur_acc", (C.c_uint8 * 2) * 3),
+        ("voice_serial", C.c_uint32),
+    ]
+
+
 def compiler_command():
     explicit = os.environ.get("DC_NATIVE_COMPILER")
     if explicit:
@@ -484,7 +865,9 @@ def library():
     sources.append(ROOT / "native/game/dc_config.c")
     sources.append(ROOT / "native/game/dc_flow.c")
     sources.append(ROOT / "native/game/dc_morph.c")
-    inputs = sources + [ROOT / "native/include/dc_config.h", ROOT / "native/include/dc_flow.h", ROOT / "native/include/dc_morph.h", ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
+    sources.append(ROOT / "native/game/dc_type7.c")
+    sources.append(ROOT / "native/game/dc_edit.c")
+    inputs = sources + [ROOT / "native/include/dc_config.h", ROOT / "native/include/dc_flow.h", ROOT / "native/include/dc_morph.h", ROOT / "native/include/dc_type7.h", ROOT / "native/include/dc_edit.h", ROOT / "native/include/dc_pc_input.h", ROOT / "native/include/dc_pp.h", ROOT / "native/include/dc_image.h",
                         ROOT / "native/include/dc_sprite.h", ROOT / "native/include/dc_startup.h",
                         ROOT / "native/include/dc_animation.h", ROOT / "native/include/dc_xa.h", ROOT / "native/include/dc_material.h", ROOT / "native/include/dc_xx.h", ROOT / "native/include/dc_pose.h", ROOT / "native/include/dc_scene.h", ROOT / "native/include/dc_mesh.h", ROOT / "native/include/dc_model.h", ROOT / "native/include/dc_menu.h", ROOT / "native/include/dc_save.h", ROOT / "native/include/dc_script.h", ROOT / "native/include/dc_text.h", ROOT / "native/include/dc_skin.h", ROOT / "native/include/dc_camera.h", ROOT / "native/include/dc_gameplay.h", ROOT / "native/include/dc_xl.h", ROOT / "native/include/dc_eyeneck.h", ROOT / "native/include/dc_gamepad.h", ROOT / "native/include/dc_story.h", ROOT / "native/include/dc_scene_motion.h"]
     digest = hashlib.sha256("\0".join(command).encode())
@@ -532,10 +915,40 @@ def library():
     lib.dc_xl_probe.restype = C.c_int
     lib.dc_xl_light_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XLLight)]
     lib.dc_xl_light_at.restype = C.c_int
+    lib.dc_xl_d3d_light_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(XLD3DLight)]
+    lib.dc_xl_d3d_light_at.restype = C.c_int
+    lib.dc_xl_ambient.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(C.c_float)]
+    lib.dc_xl_ambient.restype = C.c_int
+    lib.dc_glare_probe.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(GlareInfo)]
+    lib.dc_glare_probe.restype = C.c_int
+    lib.dc_glare_apply_rgba.argtypes = [C.POINTER(GlareInfo), C.c_void_p, C.c_uint32, C.c_uint32]
+    lib.dc_glare_apply_rgba.restype = C.c_int
     lib.dc_eyeneck_probe.argtypes = [C.c_void_p, C.c_size_t, C.POINTER(EyeNeckInfo)]
     lib.dc_eyeneck_probe.restype = C.c_int
     lib.dc_eyeneck_target_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(EyeNeckSpan)]
     lib.dc_eyeneck_target_at.restype = C.c_int
+    lib.dc_eyeneck_slot_at.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(EyeNeckSlot)]
+    lib.dc_eyeneck_slot_at.restype = C.c_int
+    lib.dc_eyeneck_controller_init.argtypes = [C.POINTER(EyeNeckController)]
+    lib.dc_eyeneck_controller_init.restype = None
+    lib.dc_eyeneck_controller_set_slot.argtypes = [C.POINTER(EyeNeckController), C.POINTER(EyeNeckSlot)]
+    lib.dc_eyeneck_controller_set_slot.restype = None
+    lib.dc_eyeneck_controller_step.argtypes = [C.POINTER(EyeNeckController), C.POINTER(Matrix),
+                                               C.POINTER(C.c_float), C.c_float, C.c_uint32, C.POINTER(Matrix)]
+    lib.dc_eyeneck_controller_step.restype = C.c_int
+    lib.dc_eyeneck_tremor_init.argtypes = [C.POINTER(EyeNeckTremorState)]
+    lib.dc_eyeneck_tremor_init.restype = None
+    lib.dc_eyeneck_tremor_step.argtypes = [C.POINTER(EyeNeckTremorState), C.c_uint32, C.c_float,
+                                           C.c_uint32, C.POINTER(Matrix)]
+    lib.dc_eyeneck_tremor_step.restype = C.c_int
+    lib.dc_spring_node_init.argtypes = [C.POINTER(SpringNodeState)]
+    lib.dc_spring_node_init.restype = None
+    lib.dc_spring_breast_step.argtypes = [C.POINTER(SpringNodeState), C.POINTER(Matrix),
+                                          C.c_uint32, C.c_uint32, C.c_uint32, C.POINTER(Matrix)]
+    lib.dc_spring_breast_step.restype = C.c_int
+    lib.dc_spring_hair_step.argtypes = [C.POINTER(SpringNodeState), C.POINTER(Matrix),
+                                        C.c_uint32, C.POINTER(Matrix)]
+    lib.dc_spring_hair_step.restype = C.c_int
     lib.dc_image_probe.argtypes = [C.c_void_p, C.c_size_t, C.c_int, C.POINTER(ImageInfo)]
     lib.dc_image_probe.restype = C.c_int
     lib.dc_image_decode.argtypes = [C.c_void_p, C.c_size_t, C.c_int, C.c_void_p,
@@ -599,8 +1012,16 @@ def library():
     lib.dc_model_load_vertices.restype=C.c_int
     lib.dc_model_mesh_visible.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(C.c_uint32)]
     lib.dc_model_mesh_visible.restype=C.c_int
+    lib.dc_model_node_visible.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(C.c_uint32)]
+    lib.dc_model_node_visible.restype=C.c_int
     lib.dc_model_hide_node.argtypes=[C.c_void_p,C.c_uint32,C.c_uint32]
     lib.dc_model_hide_node.restype=C.c_int
+    lib.dc_model_set_node_extra.argtypes=[C.c_void_p,C.c_uint32,C.c_uint32,C.POINTER(Matrix)]
+    lib.dc_model_set_node_extra.restype=C.c_int
+    lib.dc_model_refresh_pose.argtypes=[C.c_void_p,C.POINTER(Matrix)]
+    lib.dc_model_refresh_pose.restype=C.c_int
+    lib.dc_model_scrub_clip.argtypes=[C.c_void_p,C.c_uint32,C.c_float,C.c_float,C.POINTER(Matrix)]
+    lib.dc_model_scrub_clip.restype=C.c_int
     lib.dc_matrix_inverse_affine.argtypes=[C.POINTER(Matrix),C.POINTER(Matrix)]
     lib.dc_matrix_inverse_affine.restype=C.c_int
     lib.dc_model_get_animation.argtypes=[C.c_void_p,C.POINTER(AnimationState)]
@@ -625,6 +1046,15 @@ def library():
     lib.dc_model_project_vertices_clipped.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t,
         C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t,C.POINTER(C.c_size_t)]
     lib.dc_model_project_vertices_clipped.restype=C.c_int
+    lib.dc_model_project_lit_clipped.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(Matrix),C.POINTER(Viewport),
+        C.POINTER(MaterialValue),C.POINTER(LightRig),C.POINTER(SpriteVertex),C.POINTER(SpriteVertex),
+        C.POINTER(SpriteVertex),C.c_size_t,C.POINTER(C.c_size_t),C.POINTER(C.c_uint32)]
+    lib.dc_model_project_lit_clipped.restype = C.c_int
+    lib.dc_model_project_vertices_lit_clipped.argtypes = [C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t,
+        C.POINTER(Matrix),C.POINTER(Viewport),C.POINTER(MaterialValue),C.POINTER(LightRig),
+        C.POINTER(SpriteVertex),C.POINTER(SpriteVertex),C.POINTER(SpriteVertex),C.c_size_t,
+        C.POINTER(C.c_size_t),C.POINTER(C.c_uint32)]
+    lib.dc_model_project_vertices_lit_clipped.restype = C.c_int
     lib.dc_model_project.restype = C.c_int
     lib.dc_model_load_source_vertices.argtypes=[C.c_void_p,C.c_uint32,C.POINTER(MeshVertex),C.c_size_t]
     lib.dc_model_load_source_vertices.restype=C.c_int
@@ -663,6 +1093,11 @@ def library():
     lib.dc_matrix_multiply.restype = C.c_int
     lib.dc_mesh_clip_project.argtypes=[C.POINTER(MeshVertex),C.c_size_t,C.POINTER(C.c_uint16),C.c_size_t,C.POINTER(Matrix),C.POINTER(Viewport),C.c_uint32,C.POINTER(SpriteVertex),C.c_size_t,C.POINTER(C.c_size_t)]
     lib.dc_mesh_clip_project.restype=C.c_int
+    lib.dc_mesh_clip_project_lit.argtypes=[C.POINTER(MeshVertex),C.c_size_t,C.POINTER(C.c_uint16),C.c_size_t,
+        C.POINTER(Matrix),C.POINTER(Matrix),C.POINTER(Viewport),C.POINTER(MaterialValue),C.POINTER(LightRig),
+        C.POINTER(SpriteVertex),C.POINTER(SpriteVertex),C.POINTER(SpriteVertex),C.c_size_t,
+        C.POINTER(C.c_size_t),C.POINTER(C.c_uint32)]
+    lib.dc_mesh_clip_project_lit.restype=C.c_int
     lib.dc_camera_build.argtypes = [C.POINTER(CameraOrbit), C.POINTER(CameraLens), C.POINTER(CameraMatrices)]
     lib.dc_camera_build.restype = C.c_int
     lib.dc_camera_read_preset.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.POINTER(CameraOrbit)]
@@ -674,6 +1109,8 @@ def library():
     lib.dc_camera_look_at.argtypes=[C.POINTER(Matrix),C.POINTER(Matrix),C.POINTER(Matrix)]
     lib.dc_camera_secondary_viewport.argtypes=[C.POINTER(Viewport),C.POINTER(Viewport)]
     lib.dc_camera_secondary_pointer.argtypes=[C.POINTER(CameraOrbit),C.POINTER(CameraPointerLimits),C.POINTER(CameraPointerInput),C.POINTER(CameraOrbit)]
+    lib.dc_camera_primary_pointer.argtypes=[C.POINTER(CameraOrbit),C.POINTER(C.c_float),C.POINTER(CameraPointerLimits),C.POINTER(CameraPointerInput),C.POINTER(CameraOrbit)]
+    lib.dc_camera_primary_pointer.restype=C.c_int
     lib.dc_scene_action_build.argtypes = [C.c_uint32]*5+[C.POINTER(SceneActionPlan)]
     lib.dc_scene_action_build.restype = C.c_int
     lib.dc_scene_motion_init.argtypes=[C.POINTER(SceneMotionState),C.c_uint32,C.c_uint32,C.c_uint32,C.c_uint32]
@@ -773,10 +1210,129 @@ def library():
     lib.dc_xx_node_matrix.restype = C.c_int
     lib.dc_xx_material_baseline.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(MaterialValue)]
     lib.dc_xx_material_baseline.restype = C.c_int
+    lib.dc_xx_material_stage_tci.argtypes = [C.c_void_p, C.c_uint32, C.c_uint32,
+                                             C.POINTER(C.c_uint8), C.POINTER(C.c_uint8)]
+    lib.dc_xx_material_stage_tci.restype = C.c_int
     lib.dc_xx_image_probe.argtypes = [C.c_void_p, C.c_uint32, C.POINTER(ImageInfo)]
     lib.dc_xx_image_probe.restype = C.c_int
     lib.dc_xx_image_decode.argtypes = [C.c_void_p, C.c_uint32, C.c_void_p, C.c_size_t, C.POINTER(ImageInfo)]
     lib.dc_xx_image_decode.restype = C.c_int
+    lib.dc_type7_heroine_prefix.argtypes = [C.c_uint8]
+    lib.dc_type7_heroine_prefix.restype = C.c_char
+    for fn in ("dc_type7_clip_2p_sex", "dc_type7_clip_2p_oral", "dc_type7_clip_3p_sex",
+               "dc_type7_clip_3p_vibe", "dc_type7_clip_3p_oral", "dc_type7_clip_4p_sex",
+               "dc_type7_clip_4p_switch", "dc_type7_clip_4p_oral"):
+        getattr(lib, fn).argtypes = [C.c_uint32, C.c_uint32]
+        getattr(lib, fn).restype = C.c_int32
+    lib.dc_type7_init.argtypes = [C.POINTER(Type7State), C.c_uint8, C.c_uint8,
+                                  C.c_uint8, C.c_uint8, C.c_uint8, C.c_uint8, C.POINTER(Type7Plan)]
+    lib.dc_type7_init.restype = C.c_int
+    lib.dc_type7_resolve_assets.argtypes = [C.POINTER(Type7State), C.POINTER(Type7Assets)]
+    lib.dc_type7_resolve_assets.restype = C.c_int
+    lib.dc_type7_observe_clip.argtypes = [C.POINTER(Type7State), C.c_uint32]
+    lib.dc_type7_observe_clip.restype = C.c_int
+    lib.dc_type7_tick.argtypes = [C.POINTER(Type7State), C.c_uint32, C.c_uint32, C.c_float, C.POINTER(Type7Plan)]
+    lib.dc_type7_tick.restype = C.c_int
+    lib.dc_type7_adjust_speed.argtypes = [C.POINTER(Type7State), C.c_float]
+    lib.dc_type7_adjust_speed.restype = C.c_int
+    lib.dc_type7_build_menu.argtypes = [C.POINTER(Type7State), C.c_uint8, C.POINTER(Type7Menu)]
+    lib.dc_type7_build_menu.restype = C.c_int
+    lib.dc_type7_right_click_menu.argtypes = [C.POINTER(Type7State), C.c_uint8, C.POINTER(C.c_uint8)]
+    lib.dc_type7_right_click_menu.restype = C.c_int
+    lib.dc_type7_select_menu_item.argtypes = [C.POINTER(Type7State), C.c_uint8, C.c_uint8, C.POINTER(Type7Plan)]
+    lib.dc_type7_select_menu_item.restype = C.c_int
+    lib.dc_type7_complete_fade.argtypes = [C.POINTER(Type7State), C.POINTER(Type7Plan)]
+    lib.dc_type7_complete_fade.restype = C.c_int
+    lib.dc_type7_voice_stem.argtypes = [C.POINTER(Type7State), C.POINTER(C.c_uint8), C.c_char_p]
+    lib.dc_type7_voice_stem.restype = C.c_int
+    lib.dc_type7_commit_exit.argtypes = [C.POINTER(Type7State), C.c_void_p, C.POINTER(Type7ExitOutcome)]
+    lib.dc_type7_commit_exit.restype = C.c_int
+    lib.dc_edit_heroine_prefix.argtypes = [C.c_uint8]
+    lib.dc_edit_heroine_prefix.restype = C.c_char
+    lib.dc_edit_map_id_from_index.argtypes = [C.c_int32]
+    lib.dc_edit_map_id_from_index.restype = C.c_uint8
+    lib.dc_edit_map_index_from_id.argtypes = [C.c_uint8]
+    lib.dc_edit_map_index_from_id.restype = C.c_int32
+    lib.dc_edit_motion_sprite_name.argtypes = [C.c_int32, C.c_uint8, C.c_char_p]
+    lib.dc_edit_motion_sprite_name.restype = C.c_int
+    lib.dc_edit_motion_param_kinds.argtypes = [C.c_int32, C.POINTER(C.c_int8), C.POINTER(C.c_int8)]
+    lib.dc_edit_motion_param_kinds.restype = C.c_int
+    lib.dc_edit_catalog_count.argtypes = [C.c_uint8]
+    lib.dc_edit_catalog_count.restype = C.c_uint8
+    lib.dc_edit_catalog_motion.argtypes = [C.c_uint8, C.c_int32]
+    lib.dc_edit_catalog_motion.restype = C.c_int32
+    lib.dc_edit_catalog_index_of.argtypes = [C.c_uint8, C.c_int32]
+    lib.dc_edit_catalog_index_of.restype = C.c_int32
+    lib.dc_edit_format_autoname.argtypes = [C.c_int32, C.c_int32, C.c_uint32, C.c_char_p]
+    lib.dc_edit_format_autoname.restype = C.c_int
+    lib.dc_edit_init.argtypes = [C.POINTER(EditState)]
+    lib.dc_edit_init.restype = C.c_int
+    lib.dc_edit_serialized_size.argtypes = [C.POINTER(EditState)]
+    lib.dc_edit_serialized_size.restype = C.c_size_t
+    lib.dc_edit_serialize.argtypes = [C.POINTER(EditState), C.c_void_p, C.c_size_t, C.POINTER(C.c_size_t)]
+    lib.dc_edit_serialize.restype = C.c_int
+    lib.dc_edit_deserialize.argtypes = [C.POINTER(EditState), C.c_void_p, C.c_size_t, C.c_char_p]
+    lib.dc_edit_deserialize.restype = C.c_int
+    lib.dc_edit_build_chara_ui.argtypes = [C.POINTER(EditState), C.POINTER(EditCharaUI)]
+    lib.dc_edit_build_chara_ui.restype = C.c_int
+    lib.dc_edit_select_chara_heroine.argtypes = [C.POINTER(EditState), C.c_uint8]
+    lib.dc_edit_select_chara_heroine.restype = C.c_int
+    lib.dc_edit_set_combo.argtypes = [C.POINTER(EditState), C.c_int32]
+    lib.dc_edit_set_combo.restype = C.c_int
+    lib.dc_edit_set_map.argtypes = [C.POINTER(EditState), C.c_int32]
+    lib.dc_edit_set_map.restype = C.c_int
+    lib.dc_edit_set_personality.argtypes = [C.POINTER(EditState), C.c_uint8, C.c_int32]
+    lib.dc_edit_set_personality.restype = C.c_int
+    lib.dc_edit_set_pregnancy.argtypes = [C.POINTER(EditState), C.c_uint8, C.c_int32]
+    lib.dc_edit_set_pregnancy.restype = C.c_int
+    lib.dc_edit_set_virgin.argtypes = [C.POINTER(EditState), C.c_uint8, C.c_uint8]
+    lib.dc_edit_set_virgin.restype = C.c_int
+    lib.dc_edit_set_pubic_hair.argtypes = [C.POINTER(EditState), C.c_uint8, C.c_uint8]
+    lib.dc_edit_set_pubic_hair.restype = C.c_int
+    lib.dc_edit_toggle_badge.argtypes = [C.POINTER(EditState), C.c_uint8, C.c_uint8]
+    lib.dc_edit_toggle_badge.restype = C.c_int
+    lib.dc_edit_resolve_caution.argtypes = [C.POINTER(EditState), C.c_uint8]
+    lib.dc_edit_resolve_caution.restype = C.c_int
+    lib.dc_edit_replay_state.argtypes = [C.POINTER(EditState)]
+    lib.dc_edit_replay_state.restype = C.c_int
+    lib.dc_edit_build_motion_ui.argtypes = [C.POINTER(EditState), C.POINTER(EditMotionUI)]
+    lib.dc_edit_build_motion_ui.restype = C.c_int
+    lib.dc_edit_set_cand_page.argtypes = [C.POINTER(EditState), C.c_uint8]
+    lib.dc_edit_set_cand_page.restype = C.c_int
+    lib.dc_edit_append_candidate.argtypes = [C.POINTER(EditState), C.c_int32]
+    lib.dc_edit_append_candidate.restype = C.c_int
+    lib.dc_edit_pop_last_step.argtypes = [C.POINTER(EditState)]
+    lib.dc_edit_pop_last_step.restype = C.c_int
+    lib.dc_edit_select_step.argtypes = [C.POINTER(EditState), C.c_int32]
+    lib.dc_edit_select_step.restype = C.c_int
+    lib.dc_edit_scroll_list.argtypes = [C.POINTER(EditState), C.c_int32]
+    lib.dc_edit_scroll_list.restype = C.c_int
+    lib.dc_edit_set_speed_param.argtypes = [C.POINTER(EditState), C.c_int32]
+    lib.dc_edit_set_speed_param.restype = C.c_int
+    lib.dc_edit_keypad_press.argtypes = [C.POINTER(EditState), C.c_int32]
+    lib.dc_edit_keypad_press.restype = C.c_int
+    lib.dc_edit_set_heroine_param.argtypes = [C.POINTER(EditState), C.c_uint8]
+    lib.dc_edit_set_heroine_param.restype = C.c_int
+    lib.dc_edit_set_hole_param.argtypes = [C.POINTER(EditState), C.c_uint8]
+    lib.dc_edit_set_hole_param.restype = C.c_int
+    lib.dc_edit_set_strip_param.argtypes = [C.POINTER(EditState), C.c_uint8]
+    lib.dc_edit_set_strip_param.restype = C.c_int
+    lib.dc_edit_resolve_assets.argtypes = [C.POINTER(EditState), C.POINTER(EditAssets)]
+    lib.dc_edit_resolve_assets.restype = C.c_int
+    lib.dc_edit_ff_multiplier.argtypes = [C.c_uint8]
+    lib.dc_edit_ff_multiplier.restype = C.c_float
+    lib.dc_edit_player_init.argtypes = [C.POINTER(EditPlayer), C.POINTER(EditState), C.POINTER(EditStepPlan)]
+    lib.dc_edit_player_init.restype = C.c_int
+    lib.dc_edit_player_on_clip_end.argtypes = [C.POINTER(EditPlayer), C.POINTER(EditState), C.POINTER(EditStepPlan), C.POINTER(C.c_uint8)]
+    lib.dc_edit_player_on_clip_end.restype = C.c_int
+    lib.dc_edit_player_skip_step.argtypes = [C.POINTER(EditPlayer), C.POINTER(EditState), C.POINTER(EditStepPlan)]
+    lib.dc_edit_player_skip_step.restype = C.c_int
+    lib.dc_edit_player_toggle_pause.argtypes = [C.POINTER(EditPlayer)]
+    lib.dc_edit_player_toggle_pause.restype = C.c_int
+    lib.dc_edit_player_set_ff.argtypes = [C.POINTER(EditPlayer), C.c_uint8]
+    lib.dc_edit_player_set_ff.restype = C.c_int
+    lib.dc_edit_player_cycle_ff.argtypes = [C.POINTER(EditPlayer)]
+    lib.dc_edit_player_cycle_ff.restype = C.c_int
     return lib
 
 

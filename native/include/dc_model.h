@@ -59,10 +59,20 @@ DC_API dc_status dc_model_load_source_vertices(const dc_model *model,uint32_t me
  * +0x1f8 suppresses traversal. Material alpha/effects are separate admission.
  * Projection itself remains a low-level operation without culling. */
 DC_API dc_status dc_model_mesh_visible(const dc_model *model,uint32_t mesh,uint32_t *out);
+DC_API dc_status dc_model_node_visible(const dc_model *model,uint32_t node,uint32_t *out);
 /* Original 0x412450: recursively set the render-hidden byte (+0x1f0) for
  * this node and descendants. A later child call may reveal that subtree.
  * Render hiding does not suppress transforms (+0x1f8) or animation. */
 DC_API dc_status dc_model_hide_node(dc_model *model,uint32_t node,uint32_t hidden);
+/* Original 0x415620 node modifier (0=none, 1=world-orientation post-multiply
+ * preserving pivot translation, 2=local-space pre-multiply) and extra matrix. */
+DC_API dc_status dc_model_set_node_extra(dc_model *model,uint32_t node,uint32_t modifier,const dc_matrix *extra);
+/* Re-evaluates scene globals, skin palettes, and deformed vertices from the
+ * current local poses and node modifiers without advancing animation time. */
+DC_API dc_status dc_model_refresh_pose(dc_model *model,const dc_matrix *world);
+/* Scrubs an animated clip directly to normalized_t in [0,1] plus frame_offset
+ * (clamped to [first_frame,last_frame]) and locks fixed_frame=1. */
+DC_API dc_status dc_model_scrub_clip(dc_model *model,uint32_t clip,float normalized_t,float frame_offset,const dc_matrix *world);
 DC_API dc_status dc_model_project(const dc_model *model,uint32_t mesh,const dc_matrix *view_projection,
     const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity);
 /* Same world/local vertex-space selection with six-plane clipping and a
@@ -77,6 +87,16 @@ DC_API dc_status dc_model_project_clipped(const dc_model *model,uint32_t mesh,co
 DC_API dc_status dc_model_project_vertices_clipped(const dc_model *model,uint32_t mesh,
     const dc_mesh_vertex *vertices,size_t vertex_count,const dc_matrix *view_projection,
     const dc_viewport *viewport,uint32_t diffuse,dc_sprite_vertex *out,size_t capacity,size_t *written);
+DC_API dc_status dc_model_project_lit_clipped(const dc_model *model,uint32_t mesh,
+    const dc_matrix *view_projection,const dc_viewport *viewport,
+    const dc_material_value *material,const dc_light_rig *rig,
+    dc_sprite_vertex *out,dc_sprite_vertex *spec_out,dc_sprite_vertex *sheen_out,
+    size_t capacity,size_t *written,uint32_t *out_has_specular);
+DC_API dc_status dc_model_project_vertices_lit_clipped(const dc_model *model,uint32_t mesh,
+    const dc_mesh_vertex *vertices,size_t vertex_count,const dc_matrix *view_projection,
+    const dc_viewport *viewport,const dc_material_value *material,const dc_light_rig *rig,
+    dc_sprite_vertex *out,dc_sprite_vertex *spec_out,dc_sprite_vertex *sheen_out,
+    size_t capacity,size_t *written,uint32_t *out_has_specular);
 #ifdef __cplusplus
 }
 #endif

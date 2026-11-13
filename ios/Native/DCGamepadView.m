@@ -10,6 +10,7 @@
 #include <math.h>
 #include <string.h>
 
+NSString *const DCGamepadOverlayLayoutDidChangeNotification=@"DCGamepadOverlayLayoutDidChangeNotification";
 static pthread_mutex_t inputMutex=PTHREAD_MUTEX_INITIALIZER;
 static dc_pad_latch inputState;
 static dc_pad_raw virtualState,physicalState;
@@ -75,13 +76,17 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
 @implementation DCGamepadView {
     dc_pc_touch _touch;
     NSMutableSet<UITouch *> *_fingers;
-    CAShapeLayer *_keys[DC_PC_TOUCH_COUNT],*_cursorLayer;
-    CATextLayer *_labels[DC_PC_TOUCH_COUNT];
+    NSMapTable<UITouch *, NSNumber *> *_extraFingers;
+    CAShapeLayer *_keys[DC_PC_TOUCH_COUNT],*_extraKeys[4],*_cursorLayer,*_modeLayer;
+    CATextLayer *_labels[DC_PC_TOUCH_COUNT],*_extraLabels[4],*_modeLabel;
+    CGPoint _extraCenters[4];
     CALayer *_controls;
     DCPCInputView *_pcInput;
     CGSize _lastSize;
     UIEdgeInsets _lastInsets;
-    BOOL _pcMode;
+    CGPoint _modeCenter;
+    CGFloat _modeDiameter;
+    BOOL _pcMode,_controllerAutoHidden;
     uint32_t _scene;
 #if DEBUG
     NSMutableDictionary<NSNumber *,DCTouchProbe *> *_testFingers;
@@ -92,6 +97,7 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
         currentView=self;self.multipleTouchEnabled=YES;self.backgroundColor=UIColor.clearColor;
         self.accessibilityIdentifier=@"touchControls";_scene=2;
         _touch.cursor_x=_touch.cursor_y=.5f;_fingers=[NSMutableSet set];
+        _extraFingers=[NSMapTable weakToStrongObjectsMapTable];
         _controls=[CALayer layer];[self.layer addSublayer:_controls];
         for(uint32_t i=0;i<DC_PC_TOUCH_COUNT;++i) {
             _keys[i]=[CAShapeLayer layer];_keys[i].lineWidth=1;
@@ -101,11 +107,30 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
             _labels[i].alignmentMode=kCAAlignmentCenter;_labels[i].contentsScale=UIScreen.mainScreen.scale;
             _labels[i].foregroundColor=UIColor.whiteColor.CGColor;[_controls addSublayer:_labels[i]];
         }
+        static NSString *const extraTitles[4]={@"Ctrl",@"Space",@"5",@"F2"};
+        for(unsigned i=0;i<4;++i) {
+            _extraKeys[i]=[CAShapeLayer layer];_extraKeys[i].lineWidth=1;
+            _extraKeys[i].strokeColor=[UIColor colorWithWhite:1 alpha:.45].CGColor;
+            [_controls addSublayer:_extraKeys[i]];
+            _extraLabels[i]=[CATextLayer layer];_extraLabels[i].string=extraTitles[i];
+            _extraLabels[i].alignmentMode=kCAAlignmentCenter;_extraLabels[i].contentsScale=UIScreen.mainScreen.scale;
+            _extraLabels[i].foregroundColor=UIColor.whiteColor.CGColor;[_controls addSublayer:_extraLabels[i]];
+        }
+        _modeLayer=[CAShapeLayer layer];_modeLayer.lineWidth=1;
+        _modeLayer.strokeColor=[UIColor colorWithWhite:1 alpha:.55].CGColor;
+        _modeLayer.fillColor=[UIColor colorWithRed:.18 green:.32 blue:.48 alpha:.62].CGColor;
+        [_controls addSublayer:_modeLayer];
+        _modeLabel=[CATextLayer layer];_modeLabel.string=@"键鼠";
+        _modeLabel.alignmentMode=kCAAlignmentCenter;_modeLabel.contentsScale=UIScreen.mainScreen.scale;
+        _modeLabel.foregroundColor=UIColor.whiteColor.CGColor;[_controls addSublayer:_modeLabel];
         _cursorLayer=[CAShapeLayer layer];_cursorLayer.fillColor=UIColor.whiteColor.CGColor;
         _cursorLayer.strokeColor=UIColor.blackColor.CGColor;_cursorLayer.lineWidth=1.5;
         _cursorLayer.hidden=YES;
         [_controls addSublayer:_cursorLayer];
-        _pcInput=[[DCPCInputView alloc] initWithFrame:self.bounds];[self addSubview:_pcInput];
+        _pcInput=[[DCPCInputView alloc] initWithFrame:self.bounds];
+        __weak DCGamepadView *weakSelf=self;
+        _pcInput.onSwitchToGamepad=^{[weakSelf setPCMode:NO];};
+        [self addSubview:_pcInput];
 #if DEBUG
         _pcMode=getenv("PORTLAB_TEST_PC_INPUT")!=NULL;_testFingers=[NSMutableDictionary dictionary];
 #endif
@@ -136,14 +161,49 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
         _labels[i].font=font;_labels[i].fontSize=size;CFRelease(font);
         _labels[i].frame=CGRectMake(r.x-d*.5,r.y-size*.7,d,size*1.8);
     }
+    CGFloat ah=self.bounds.size.height-insets.top-insets.bottom;
+    CGFloat md=fmin(46.0,ah*.095);
+    _modeDiameter=md;
+    _modeCenter=CGPointMake(self.bounds.size.width-insets.right-2.1*md,insets.top+0.56*ah);
+    CGPathRef mpath=CGPathCreateWithEllipseInRect(CGRectMake(_modeCenter.x-md*.5,_modeCenter.y-md*.5,md,md),NULL);
+    _modeLayer.path=mpath;CGPathRelease(mpath);
+    CGFloat msize=md<40?10:12;
+    CTFontRef mfont=CTFontCreateUIFontForLanguage(kCTFontUIFontSystem,msize,NULL);
+    _modeLabel.font=mfont;_modeLabel.fontSize=msize;
+    _modeLabel.frame=CGRectMake(_modeCenter.x-md*.5,_modeCenter.y-msize*.7,md,msize*1.8);
+    _extraCenters[0]=CGPointMake(insets.left+0.5*md,insets.top+0.915*ah);
+    _extraCenters[1]=CGPointMake(insets.left+2.5*md,insets.top+0.915*ah);
+    _extraCenters[2]=CGPointMake(self.bounds.size.width-insets.right-2.5*md,insets.top+0.88*ah);
+    _extraCenters[3]=CGPointMake(self.bounds.size.width-insets.right-0.5*md,insets.top+0.61*ah);
+    for(unsigned i=0;i<4;++i) {
+        CGPathRef epath=CGPathCreateWithEllipseInRect(CGRectMake(_extraCenters[i].x-md*.5,_extraCenters[i].y-md*.5,md,md),NULL);
+        _extraKeys[i].path=epath;CGPathRelease(epath);
+        _extraLabels[i].font=mfont;_extraLabels[i].fontSize=(i==1&&md<44)?9:msize;
+        _extraLabels[i].frame=CGRectMake(_extraCenters[i].x-md*.5,_extraCenters[i].y-msize*.7,md,msize*1.8);
+    }
+    CFRelease(mfont);
     [CATransaction commit];[self refresh];
 }
+- (void)setPCMode:(BOOL)pcMode {
+    if(_pcMode==pcMode&&!_controllerAutoHidden)return;
+    [self reset];
+    _pcMode=pcMode;_controllerAutoHidden=NO;
+    [_pcInput setInputEnabled:_pcMode];
+    _controls.hidden=_pcMode;
+    [NSNotificationCenter.defaultCenter postNotificationName:DCGamepadOverlayLayoutDidChangeNotification object:self];
+}
+- (BOOL)reservesGutters { return !_pcMode && !_controllerAutoHidden; }
 - (void)safeAreaInsetsDidChange { [super safeAreaInsetsDidChange];[self setNeedsLayout]; }
 - (void)refresh {
     [CATransaction begin];[CATransaction setDisableActions:YES];
     for(uint32_t i=0;i<DC_PC_TOUCH_COUNT;++i) {
         BOOL held=NO;for(unsigned j=0;j<16;++j)if(_touch.contacts[j].id&&_touch.contacts[j].control==i)held=YES;
         _keys[i].fillColor=(held?[UIColor colorWithRed:.1 green:.6 blue:.8 alpha:.88]:[UIColor colorWithWhite:.3 alpha:.48]).CGColor;
+    }
+    for(unsigned i=0;i<4;++i) {
+        BOOL held=NO;
+        for(UITouch *f in _extraFingers)if([_extraFingers objectForKey:f].unsignedIntValue==i){held=YES;break;}
+        _extraKeys[i].fillColor=(held?[UIColor colorWithRed:.1 green:.6 blue:.8 alpha:.88]:[UIColor colorWithWhite:.3 alpha:.48]).CGColor;
     }
     CGPoint p=CGPointMake(_touch.cursor_x*self.bounds.size.width,_touch.cursor_y*self.bounds.size.height);
     CGMutablePathRef path=CGPathCreateMutable();CGPathMoveToPoint(path,NULL,p.x,p.y);
@@ -159,8 +219,26 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
 }
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     (void)event;if(_pcMode||!inputActive)return;
+    if(_controllerAutoHidden) {
+        _controllerAutoHidden=NO;_controls.hidden=NO;
+        [NSNotificationCenter.defaultCenter postNotificationName:DCGamepadOverlayLayoutDidChangeNotification object:self];
+    }
+    static const uint32_t kExtraCodes[4]={0x1d,0x39,0x06,0x3c};
     for(UITouch *finger in touches) {
         CGPoint p=[finger locationInView:self];
+        if(_modeDiameter>0&&hypot(p.x-_modeCenter.x,p.y-_modeCenter.y)<=_modeDiameter*.5) {
+            [self setPCMode:YES];
+            return;
+        }
+        BOOL hitExtra=NO;
+        if(_modeDiameter>0) {
+            for(unsigned i=0;i<4;++i)if(hypot(p.x-_extraCenters[i].x,p.y-_extraCenters[i].y)<=_modeDiameter*.5) {
+                [_extraFingers setObject:@(i) forKey:finger];
+                [DCPCInputView setVirtualKey:kExtraCodes[i] down:YES];
+                hitExtra=YES;break;
+            }
+        }
+        if(hitExtra)continue;
         if(dc_pc_touch_input_begin(&_touch,(uint64_t)(uintptr_t)(__bridge void *)finger,p.x,p.y)==DC_OK)[_fingers addObject:finger];
     }
     [self refresh];
@@ -173,8 +251,19 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
     [self refresh];
 }
 - (void)endTouches:(NSSet<UITouch *> *)touches {
-    for(UITouch *finger in touches)if([_fingers containsObject:finger]) {
-        dc_pc_touch_input_end(&_touch,(uint64_t)(uintptr_t)(__bridge void *)finger);[_fingers removeObject:finger];
+    static const uint32_t kExtraCodes[4]={0x1d,0x39,0x06,0x3c};
+    for(UITouch *finger in touches) {
+        NSNumber *extra=[_extraFingers objectForKey:finger];
+        if(extra) {
+            unsigned idx=extra.unsignedIntValue;
+            [_extraFingers removeObjectForKey:finger];
+            BOOL stillHeld=NO;
+            for(UITouch *other in _extraFingers)if([_extraFingers objectForKey:other].unsignedIntValue==idx){stillHeld=YES;break;}
+            if(!stillHeld&&idx<4)[DCPCInputView setVirtualKey:kExtraCodes[idx] down:NO];
+        }
+        if([_fingers containsObject:finger]) {
+            dc_pc_touch_input_end(&_touch,(uint64_t)(uintptr_t)(__bridge void *)finger);[_fingers removeObject:finger];
+        }
     }
     [self refresh];
 }
@@ -183,6 +272,11 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
 }
 - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event { (void)event;[self endTouches:touches]; }
 - (void)reset {
+    static const uint32_t kExtraCodes[4]={0x1d,0x39,0x06,0x3c};
+    if(_extraFingers.count>0) {
+        for(unsigned i=0;i<4;++i)[DCPCInputView setVirtualKey:kExtraCodes[i] down:NO];
+        [_extraFingers removeAllObjects];
+    }
     dc_pc_touch_input_reset(&_touch);[_fingers removeAllObjects];
 #if DEBUG
     [_testFingers removeAllObjects];
@@ -201,6 +295,13 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
     pthread_mutex_lock(&inputMutex);inputState.connected=connected;
     if(!connected){memset(&physicalState,0,sizeof(physicalState));publishLocked();}
     pthread_mutex_unlock(&inputMutex);
+    BOOL allowAutoHide=(!testVirtualControls() && getenv("PORTLAB_EXERCISE_TOUCH_CONTROLS")==NULL && getenv("PORTLAB_TEST_PC_INPUT")==NULL);
+    BOOL nextAutoHidden=(connected && allowAutoHide && !_pcMode);
+    if(_controllerAutoHidden!=nextAutoHidden) {
+        _controllerAutoHidden=nextAutoHidden;
+        _controls.hidden=_pcMode || _controllerAutoHidden;
+        [NSNotificationCenter.defaultCenter postNotificationName:DCGamepadOverlayLayoutDidChangeNotification object:self];
+    }
 }
 - (void)resignActive { dc_gamepad_set_active(NO); }
 - (void)becomeActive { dc_gamepad_set_active(YES); }
@@ -287,6 +388,7 @@ static NSString *const dcKeyLabels[DC_PC_TOUCH_COUNT]={@"Esc",@"V",@"F1",@"A",@"
 }
 @end
 BOOL dc_gamepad_pointer_contact_active(void) { return currentView?[currentView pointerContactActive]:NO; }
+BOOL dc_gamepad_overlay_reserves_gutters(void) { return currentView?[currentView reservesGutters]:YES; }
 NSString *dc_gamepad_presentation(void) { return currentView?[currentView presentationState]:@"not-created"; }
 void dc_gamepad_set_context(uint32_t scene,BOOL completed,BOOL busy) { [currentView setScene:scene completed:completed busy:busy]; }
 void dc_gamepad_set_active(BOOL active) {

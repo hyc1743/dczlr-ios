@@ -104,7 +104,7 @@ dc_status dc_flow_scene_exit(dc_flow_state *state,const dc_flow_exit_metrics *me
     if(type==4) {
         if(metrics->flag_b&&p[1]==0)p[1]=1;
         if(progress==0)++next.meta.chapter;
-        else {write16(p+0x1e,(uint16_t)(read16(p+0x1e)+metrics->count));next.meta.chapter=24;}
+        else {add_cap16(p+0x1e,metrics->count);next.meta.chapter=24;}
     } else if(type==5) {
         if(metrics->count)add_cap16(p+0x12,1);
         if(metrics->flag_b&&p[1]==0)p[1]=1;

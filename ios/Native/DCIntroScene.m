@@ -17,9 +17,29 @@ static const dc_intro_descriptor dcIntroChapters[DC_INTRO_CHAPTERS]={
     {4,31},{5,5},{-1,-1},{16,2},{-1,-1},{6,42},{-1,-1},{7,43},
     {8,4},{-1,-1},{9,4},{-1,-1},{10,51},{-1,-1},{11,74},{13,4},{-1,-1},{12,13},{14,4},{17,1},{18,2}
 };
-static NSString *dcIntroDecode(const void *bytes,size_t length) {
-    NSStringEncoding encoding=CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingDOSChineseSimplif);
-    return [[NSString alloc] initWithBytes:bytes length:length encoding:encoding];
+static BOOL dcIntroLooksLikeShiftJIS(const uint8_t *bytes,size_t length) {
+    size_t dbcsPairs=0,kanaPairs=0;
+    for(size_t i=0;i<length;++i) {
+        uint8_t c=bytes[i];
+        if(c<0x80)continue;
+        if(!((c>=0x81&&c<=0x9f)||(c>=0xe0&&c<=0xef)))return NO;
+        if(i+1>=length)return NO;
+        uint8_t t=bytes[++i];
+        if(!((t>=0x40&&t<=0x7e)||(t>=0x80&&t<=0xfc)))return NO;
+        ++dbcsPairs;
+        if((c==0x82&&t>=0x9f&&t<=0xf1)||(c==0x83&&t>=0x40&&t<=0x96))++kanaPairs;
+    }
+    return dbcsPairs>0 && kanaPairs*5>=dbcsPairs;
+}
+static NSString *dcIntroDecodeWithFlag(const void *bytes,size_t length,BOOL preferShiftJIS) {
+    NSStringEncoding primary=CFStringConvertEncodingToNSStringEncoding(
+        preferShiftJIS ? kCFStringEncodingDOSJapanese : kCFStringEncodingDOSChineseSimplif);
+    NSStringEncoding fallback=CFStringConvertEncodingToNSStringEncoding(
+        preferShiftJIS ? kCFStringEncodingDOSChineseSimplif : kCFStringEncodingDOSJapanese);
+    NSString *decoded=[[NSString alloc] initWithBytes:bytes length:length encoding:primary];
+    if(decoded)return decoded;
+    decoded=[[NSString alloc] initWithBytes:bytes length:length encoding:fallback];
+    return decoded ?: [[NSString alloc] initWithBytes:bytes length:length encoding:NSISOLatin1StringEncoding];
 }
 static CGFloat dcIntroWidthScale(NSString *label,UIFont *font,size_t byteCount) {
     CGFloat width=[label sizeWithAttributes:@{NSFontAttributeName:font}].width;
@@ -48,10 +68,12 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     dc_intro_state _flow;
     uint32_t _lastTick,_pendingChapter;
     uint32_t _entryFrame,_targetEntryFrame,_auxiliaryDestination;
+    uint32_t _fastForwardAccumMs;
+    int32_t _liveFrame;
     uint8_t _finishFlags[3];
     size_t _cursor;
     BOOL _touching,_completed,_dirty,_tickInitialized,_needsResumeAtNextTick,_textStarted,_initialUpdateSkipped,_hasTextPlan;
-    BOOL _windowHidden,_fastForward;
+    BOOL _windowHidden,_fastForward,_backlogMode,_backlogReplayedVoice,_voiceSkippedByFastForward,_scriptIsShiftJIS;
     AVAudioPlayer *_music,*_sound,*_voice,*_selection;
     float _musicVolume,_soundVolume,_voiceVolume;
     BOOL _pausedMusic,_pausedVoice,_pausedSound;
@@ -64,6 +86,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
 - (uint32_t)pendingChapter { return _pendingChapter; }
 - (uint32_t)auxiliaryDestination {return _auxiliaryDestination;}
 - (NSData *)numericState {return _gameState;}
+- (BOOL)backlogMode {return _backlogMode;}
 - (void)consumeAuxiliaryDestination {_auxiliaryDestination=0;}
 - (void)resumeAtTick:(uint32_t)tick {
     _needsResumeAtNextTick=NO;
@@ -71,6 +94,10 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     _lastTick=tick;_tickInitialized=YES;_touching=NO;
 }
 - (void)resumeFromAuxiliaryAtTick:(uint32_t)tick {
+    if(_flow.action==5 && _music) {
+        _music.currentTime=0;
+        _pausedMusic=YES;
+    }
     _flow.action=0;_flow.waiting=0;
     _auxiliaryDestination=0;
     [self resumeAtTick:tick];
@@ -92,7 +119,29 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(_selection)_selection.volume=_soundVolume;
 }
 - (void)toggleWindowHidden { _windowHidden=!_windowHidden; }
-- (void)setFastForward:(BOOL)fastForward { _fastForward=fastForward; }
+- (void)setFastForward:(BOOL)fastForward {
+    if(!fastForward)_fastForwardAccumMs=100;
+    _fastForward=fastForward;
+}
+- (NSString *)replayCurrentVoice {
+    if(!_decoded.controls[1][0])return nil;
+    NSString *audioError=nil;
+    AVAudioPlayer *voice=[self playerForName:_decoded.controls[1] archive:@"RPP_00.pp" loop:NO error:&audioError];
+    if(!voice)return audioError;
+    voice.volume=_voiceVolume;
+    [_voice stop];_voice=voice;_pausedVoice=NO;_voiceSkippedByFastForward=NO;
+    if(![_voice play]){[_voice prepareToPlay];if(![_voice play])_pausedVoice=YES;}
+    return nil;
+}
+- (NSString *)handleSpaceOrMiddleClick {
+    if(!_text.active||_flow.waiting)return nil;
+    _windowHidden=NO;
+    if(_decoded.controls[1][0]) {
+        if(_backlogMode)_backlogReplayedVoice=YES;
+        return [self replayCurrentVoice];
+    }
+    return nil;
+}
 - (NSString *)requestAuxiliary:(uint32_t)destination transition:(DCStartupScene *)transition tick:(uint32_t)tick {
     if(_flow.waiting||_auxiliaryDestination)return nil;
     if(destination!=2&&destination!=5&&destination!=7)return @"Unknown original script system destination";
@@ -132,7 +181,10 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(startChapter>=DC_INTRO_CHAPTERS) { if(error)*error=@"Story chapter is outside the script table";return nil; }
     _directory=[directory copy];
     _musicVolume=_soundVolume=_voiceVolume=1.0f;
-    NSData *cfgData=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"gcd.cfg"]];
+    NSString *docsRoot = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    NSString *docsCfg = docsRoot.length ? [[docsRoot stringByAppendingPathComponent:@"game/Data"] stringByAppendingPathComponent:@"gcd.cfg"] : @"";
+    NSString *cfgPath = (docsCfg.length && [NSFileManager.defaultManager fileExistsAtPath:docsCfg]) ? docsCfg : [directory stringByAppendingPathComponent:@"gcd.cfg"];
+    NSData *cfgData=[NSData dataWithContentsOfFile:cfgPath];
     if(cfgData)[self applyConfiguration:cfgData];
     _captureEnabled=[NSProcessInfo.processInfo.environment[@"PORTLAB_CAPTURE_STARTUP"] isEqualToString:@"1"];
     if(state.length!=DC_GAME_STATE_BYTES){if(error)*error=@"Original numeric state size rejected";return nil;}
@@ -173,17 +225,17 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         }
     }
     if(!script)return reason.localizedDescription ?: @"Numbered intro script is unavailable";
-    _script=script;_cursor=0;
+    _script=script;_scriptIsShiftJIS=dcIntroLooksLikeShiftJIS(script.bytes,script.length);
+    _cursor=0;_backlogMode=NO;_backlogReplayedVoice=NO;_liveFrame=0;_fastForwardAccumMs=100;_voiceSkippedByFastForward=NO;
     _text=(dc_text_state){.columns=30,.max_lines=3,.visible_lines=1,.current_line=-1,
         .wait_state=-1,.wait_glyph=-1,.frame=-1,.last_frame=dcIntroChapters[chapter].last_frame,
         .wait_line=255,.active=1,.x=135,.y=652,.font_size=29,.scale=1,.rgb=0xffffff};
     _textStarted=NO;_hasTextPlan=NO;
-    uint32_t entryFrame=_entryFrame;_entryFrame=0;_targetEntryFrame=entryFrame;_seeking=entryFrame!=0;
-    NSString *failure=nil;
-    for(uint32_t frame=0;frame<=entryFrame;++frame){
-        _text.frame=frame;failure=[self loadRecord];if(failure){_seeking=NO;_targetEntryFrame=0;return failure;}
-    }
-    _text.frame=(int32_t)entryFrame-1;_seeking=NO;_targetEntryFrame=0;
+    uint32_t entryFrame=_entryFrame;_entryFrame=0;_targetEntryFrame=entryFrame;
+    NSString *failure=[self seekToFrame:entryFrame updateAudio:YES];
+    if(failure){_targetEntryFrame=0;return failure;}
+    _liveFrame=(int32_t)entryFrame;
+    _text.frame=(int32_t)entryFrame-1;_targetEntryFrame=0;
     if(entryFrame){
         [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
         [AVAudioSession.sharedInstance setActive:YES error:nil];
@@ -191,6 +243,119 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         if(_voice&&![_voice play]){[_voice prepareToPlay];if(![_voice play])_pausedVoice=YES;}
         if(_sound&&![_sound play]){[_sound prepareToPlay];if(![_sound play])_pausedSound=YES;}
     }
+    return nil;
+}
+- (NSString *)seekToFrame:(uint32_t)targetFrame updateAudio:(BOOL)updateAudio {
+    if(!_script)return @"Intro script is unavailable";
+    dc_script_control controls[2]={{{'#','C',0},2},{{'#','P',0},5}};
+    dc_script_decoded next={0};
+    size_t cursor=0;
+    uint8_t lastMusic[sizeof(next.music)]={0};
+    uint8_t lastBackground[sizeof(next.background)]={0};
+    for(uint32_t f=0;f<=targetFrame;++f) {
+        dc_status status=dc_script_decode(_script.bytes,_script.length,cursor,f,controls,2,&next);
+        if(status!=DC_OK)return [NSString stringWithFormat:@"Intro record %u rejected: %d",f,status];
+        if(next.music[0])memcpy(lastMusic,next.music,sizeof(lastMusic));
+        if(next.background[0])memcpy(lastBackground,next.background,sizeof(lastBackground));
+        cursor=next.record.next_offset;
+    }
+    const uint8_t *source=_script.bytes;
+    NSString *speaker=dcIntroDecodeWithFlag(source+next.record.speaker.offset,next.record.speaker.length,_scriptIsShiftJIS);
+    NSString *body=dcIntroDecodeWithFlag(source+next.record.body.offset,next.record.body.length,_scriptIsShiftJIS);
+    if(!speaker || !body)return @"Intro text encoding is unsupported";
+    if(next.message[0])return @"This intro record needs a pending message adapter";
+    if(lastBackground[0]) {
+        NSString *name=[NSString stringWithFormat:@"%s.ema",(const char *)lastBackground];
+        DCDecodedImage *image=nil;NSError *reason=nil;
+        for(uint32_t i=0;i<_images.entryCount;++i) {
+            if([[_images asciiNameAtIndex:i] caseInsensitiveCompare:name]==NSOrderedSame) {
+                image=[_images decodeImageAtIndex:i inputLimit:8*1024*1024 outputLimit:64*1024*1024 error:&reason];break;
+            }
+        }
+        if(!image)return reason.localizedDescription ?: @"Intro background resource is unavailable";
+        if(_backgroundTexture&&_renderer)dc_vk_sprite_remove_texture(_renderer,_backgroundTexture);
+        _backgroundTexture=0;_background=image;
+    }
+    if(updateAudio) {
+        NSString *audioError=nil;
+        if(lastMusic[0]) {
+            BOOL musicOff=!strcmp((const char *)lastMusic,"BGMOFF");
+            AVAudioPlayer *music=nil;
+            if(!musicOff) {
+                music=[self playerForName:lastMusic archive:@"RPP_01.pp" loop:YES error:&audioError];
+                if(!music)return audioError;
+                music.volume=_musicVolume;
+            }
+            [_music stop];_music=music;_pausedMusic=NO;
+            if(_music&&targetFrame==0&&![_music play]){[_music prepareToPlay];if(![_music play])_pausedMusic=YES;}
+        }
+        if(next.sound[0]) {
+            AVAudioPlayer *sound=[self playerForName:next.sound archive:@"RPP_14.pp" loop:NO error:&audioError];
+            if(!sound)return audioError;
+            sound.volume=_soundVolume;
+            [_sound stop];_sound=sound;_pausedSound=NO;
+            if(_sound&&targetFrame==0&&![_sound play]){[_sound prepareToPlay];if(![_sound play])_pausedSound=YES;}
+        }
+        if(next.controls[1][0]) {
+            AVAudioPlayer *voice=[self playerForName:next.controls[1] archive:@"RPP_00.pp" loop:NO error:&audioError];
+            if(!voice)return audioError;
+            voice.volume=_voiceVolume;
+            [_voice stop];_voice=voice;_pausedVoice=NO;
+            if(_voice&&targetFrame==0&&![_voice play]){[_voice prepareToPlay];if(![_voice play])_pausedVoice=YES;}
+        }
+    }
+    _decoded=next;_cursor=cursor;_speaker=speaker;_voiceSkippedByFastForward=NO;
+    _bodyBytes=[_script subdataWithRange:NSMakeRange(next.record.body.offset,next.record.body.length)];
+    if(_bodyBytes.length>=DC_TEXT_BYTE_LIMIT || _bodyBytes.length<2)return @"Intro text exceeds the native controller profile";
+    _text.body_bytes=(uint32_t)_bodyBytes.length;_text.visible_lines=1;_hasTextPlan=NO;_dirty=YES;
+    return nil;
+}
+- (void)revealCurrentRecordAtFrame:(uint32_t)targetFrame tick:(uint32_t)tick {
+    _text.frame=(int32_t)targetFrame;
+    _text.current_line=2;
+    _text.visible_lines=1;
+    _text.wait_state=-2;
+    _text.wait_line=255;
+    _text.wait_glyph=-1;
+    _text.last_fade_row=0;
+    _text.rgb=_backlogMode?0xffc8c8u:0xffffffu;
+    memset(_text.alpha,0,sizeof(_text.alpha));
+    uint32_t end=_text.body_bytes/2;
+    for(uint32_t i=0;i<=end&&i<DC_TEXT_GLYPH_LIMIT;++i)_text.alpha[i]=255;
+    _text.fade_index=MIN(end+1u,DC_TEXT_GLYPH_LIMIT);
+    _textStarted=YES;
+    dc_text_plan plan;
+    if(dc_text_build_plan(&_text,_bodyBytes.bytes,_bodyBytes.length,0,tick,0,&plan)==DC_OK){
+        _textPlan=plan;_text=plan.next;_hasTextPlan=YES;
+    }
+    _dirty=YES;
+}
+- (NSString *)stepHistory:(int32_t)step tick:(uint32_t)tick {
+    if(!_text.active||_flow.waiting||!_textStarted||step==0)return nil;
+    _windowHidden=NO;
+    uint32_t target=self.frame;
+    if(step<0) {
+        if(!_backlogMode) {
+            BOOL midTypewriter=(_text.body_bytes>=2 && _text.fade_index<=_text.body_bytes/2);
+            _liveFrame=(int32_t)self.frame;
+            _backlogMode=YES;
+            _backlogReplayedVoice=NO;
+            target=midTypewriter?(uint32_t)_liveFrame:(_liveFrame>0?(uint32_t)(_liveFrame-1):0u);
+        } else {
+            target=self.frame>0?(self.frame-1u):0u;
+        }
+    } else {
+        if(!_backlogMode)return nil;
+        target=self.frame+1u;
+        if(target>=(uint32_t)_liveFrame) {
+            target=(uint32_t)_liveFrame;
+            _backlogMode=NO;
+            if(_backlogReplayedVoice){[_voice stop];_voice=nil;_pausedVoice=NO;_backlogReplayedVoice=NO;}
+        }
+    }
+    NSString *failure=[self seekToFrame:target updateAudio:NO];
+    if(failure)return failure;
+    [self revealCurrentRecordAtFrame:target tick:tick];
     return nil;
 }
 - (AVAudioPlayer *)playerForName:(const uint8_t *)name archive:(NSString *)archiveName loop:(BOOL)loop error:(NSString **)error {
@@ -224,8 +389,8 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     dc_status status=dc_script_decode(_script.bytes,_script.length,_cursor,frame,controls,2,&next);
     if(status!=DC_OK)return [NSString stringWithFormat:@"Intro record %u rejected: %d",frame,status];
     const uint8_t *source=_script.bytes;
-    NSString *speaker=dcIntroDecode(source+next.record.speaker.offset,next.record.speaker.length);
-    NSString *body=dcIntroDecode(source+next.record.body.offset,next.record.body.length);
+    NSString *speaker=dcIntroDecodeWithFlag(source+next.record.speaker.offset,next.record.speaker.length,_scriptIsShiftJIS);
+    NSString *body=dcIntroDecodeWithFlag(source+next.record.body.offset,next.record.body.length,_scriptIsShiftJIS);
     if(!speaker || !body)return @"Intro text encoding is unsupported";
     if(next.message[0])return @"This intro record needs a pending message adapter";
     AVAudioPlayer *music=nil,*sound=nil,*voice=nil;NSString *audioError=nil;
@@ -241,7 +406,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
             if(!sound)return audioError;
             sound.volume=_soundVolume;
         }
-        if(next.controls[1][0]) {
+        if(next.controls[1][0] && !_fastForward) {
             voice=[self playerForName:next.controls[1] archive:@"RPP_00.pp" loop:NO error:&audioError];
             if(!voice)return audioError;
             voice.volume=_voiceVolume;
@@ -264,15 +429,22 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         if(_music&&!_seeking&&![_music play]){[_music prepareToPlay];if(![_music play])_pausedMusic=YES;}
     }
     if(!_seeking || frame==_targetEntryFrame) {
-        [_sound stop];_sound=sound;_pausedSound=NO;
-        if(_sound&&!_seeking&&![_sound play]){[_sound prepareToPlay];if(![_sound play])_pausedSound=YES;}
-        [_voice stop];_voice=voice;_pausedVoice=NO;
-        if(_voice&&!_seeking&&![_voice play]){[_voice prepareToPlay];if(![_voice play])_pausedVoice=YES;}
+        if(next.sound[0]) {
+            [_sound stop];_sound=sound;_pausedSound=NO;
+            if(_sound&&!_seeking&&![_sound play]){[_sound prepareToPlay];if(![_sound play])_pausedSound=YES;}
+        }
+        if(next.controls[1][0]) {
+            [_voice stop];_voice=voice;_pausedVoice=NO;
+            _voiceSkippedByFastForward=(_fastForward && voice==nil);
+            if(_voice&&!_seeking&&![_voice play]){[_voice prepareToPlay];if(![_voice play])_pausedVoice=YES;}
+        } else {
+            _voiceSkippedByFastForward=NO;
+        }
     }
     _decoded=next;_cursor=next.record.next_offset;_speaker=speaker;
     _bodyBytes=[_script subdataWithRange:NSMakeRange(next.record.body.offset,next.record.body.length)];
     if(_bodyBytes.length>=DC_TEXT_BYTE_LIMIT || _bodyBytes.length<2)return @"Intro text exceeds the native controller profile";
-    _text.body_bytes=(uint32_t)_bodyBytes.length;_text.visible_lines=1;_hasTextPlan=NO;_dirty=YES;
+    _text.body_bytes=(uint32_t)_bodyBytes.length;_text.visible_lines=1;_text.rgb=0xffffffu;_backlogMode=NO;_liveFrame=(int32_t)frame;_hasTextPlan=NO;_dirty=YES;
     return nil;
 }
 - (void)detachRenderer {
@@ -304,8 +476,9 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     UIGraphicsPushContext(context);
     UIFont *font=[UIFont monospacedSystemFontOfSize:29 weight:UIFontWeightHeavy];
     const int shadowX[4]={-1,1,-1,1},shadowY[4]={-1,1,1,-1};
+    UIColor *speakerColor=_backlogMode?[UIColor colorWithRed:1.0 green:200.0/255.0 blue:200.0/255.0 alpha:1.0]:UIColor.whiteColor;
     NSDictionary *speakerBlack=@{NSFontAttributeName:font,NSForegroundColorAttributeName:UIColor.blackColor};
-    NSDictionary *speakerWhite=@{NSFontAttributeName:font,NSForegroundColorAttributeName:UIColor.whiteColor};
+    NSDictionary *speakerWhite=@{NSFontAttributeName:font,NSForegroundColorAttributeName:speakerColor};
     CGFloat speakerScale=dcIntroWidthScale(_speaker,font,_decoded.record.speaker.length);
     for(unsigned j=0;j<4;++j)dcIntroDraw(context,_speaker,CGPointMake(58+shadowX[j],652+shadowY[j]),speakerBlack,speakerScale);
     dcIntroDraw(context,_speaker,CGPointMake(58,652),speakerWhite,speakerScale);
@@ -314,7 +487,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         size_t length=glyph->bytes[0] ? (glyph->bytes[1] ? 2 : 1) : 0;
         uint32_t alpha=glyph->color>>24;
         if(!length || !alpha)continue;
-        NSString *label=dcIntroDecode(glyph->bytes,length);
+        NSString *label=dcIntroDecodeWithFlag(glyph->bytes,length,_scriptIsShiftJIS);
         if(!label) {UIGraphicsPopContext();CGContextRelease(context);return @"Intro cell encoding is unsupported";}
         UIColor *color=[UIColor colorWithRed:((glyph->color>>16)&255)/255.0 green:((glyph->color>>8)&255)/255.0
             blue:(glyph->color&255)/255.0 alpha:alpha/255.0];
@@ -411,17 +584,28 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
     if(dc_intro_transition(&_flow,dcIntroChapters,DC_INTRO_CHAPTERS,ready,&flowPlan)!=DC_OK)return @"Intro transition planning failed";
     NSString *flowError=[self applyFlow:&flowPlan transition:transition tick:tick];if(flowError)return flowError;
     if(_text.active && _initialUpdateSkipped) {
-        BOOL requestAdvance=!_textStarted || (!_flow.waiting && ((!touching && _touching) || _fastForward));
+        BOOL fastAdvanceReady=(_fastForward && !_flow.waiting);
+        BOOL clickAdvance=(!_flow.waiting && (!touching && _touching));
+        BOOL requestAdvance=!_textStarted || clickAdvance || fastAdvanceReady;
         if(requestAdvance && _windowHidden && _textStarted && !_fastForward) {
             _windowHidden=NO;
+        } else if(requestAdvance && _backlogMode) {
+            _windowHidden=NO;
+            _backlogMode=NO;
+            if(_backlogReplayedVoice){[_voice stop];_voice=nil;_pausedVoice=NO;_backlogReplayedVoice=NO;}
+            NSString *failure=[self seekToFrame:(uint32_t)_liveFrame updateAudio:NO];
+            if(failure)return failure;
+            [self revealCurrentRecordAtFrame:(uint32_t)_liveFrame tick:tick];
         } else if(requestAdvance) {
             _windowHidden=NO;
+            _backlogReplayedVoice=NO;
             dc_text_advance_plan advance;
             if(dc_text_advance(&_text,_fastForward?1:0,&advance)!=DC_OK)return @"Intro text advance failed";
             _text=advance.next;_textStarted=YES;
             if(advance.load_record) {NSString *failure=[self loadRecord];if(failure)return failure;}
+            else if(_text.frame>=0)_liveFrame=_text.frame;
         }
-        if(_text.active) {
+        if(_text.active && !_backlogMode) {
             dc_text_plan plan;
             if(dc_text_build_plan(&_text,_bodyBytes.bytes,_bodyBytes.length,(int32_t)delta,tick,_fastForward?1:0,&plan)!=DC_OK)return @"Intro text layout/fade failed";
             if(!_hasTextPlan || plan.count!=_textPlan.count || memcmp(plan.glyphs,_textPlan.glyphs,plan.count*sizeof(dc_text_glyph)))_dirty=YES;
@@ -455,7 +639,7 @@ static void dcIntroDraw(CGContextRef context,NSString *label,CGPoint point,NSDic
         items[count++]=(dc_vk_sprite_item){.pose=windowPose,.texture=_windowFrameTexture,.blend_mode=3};
     }
     if((_captureEnabled || !_windowHidden) && _textTexture)items[count++]=(dc_vk_sprite_item){.pose=pose,.texture=_textTexture,.blend_mode=3};
-    if(!_captureEnabled && !_windowHidden && _text.active && _nextPromptTexture && _hasTextPlan &&
+    if(!_captureEnabled && !_windowHidden && !_backlogMode && _text.active && _nextPromptTexture && _hasTextPlan &&
        _text.body_bytes>=2 && _text.alpha[_text.body_bytes/2-1]==255 && ((tick/500u)%2u)==0) {
         dc_sprite_pose promptPose=pose;
         promptPose.x=pose.x+954.0f*scale;

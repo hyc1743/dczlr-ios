@@ -128,6 +128,11 @@ DC_API dc_status dc_xx_node_matrix(const dc_xx *model, uint32_t index, dc_matrix
  * component 16. Finite inputs admitted; failure leaves out unchanged. This
  * does not perform checksum validation, effect setup or model target updates. */
 DC_API dc_status dc_xx_material_baseline(const dc_xx *model, uint32_t index, dc_material_value *out);
+/* Serialized 16-byte texture stage descriptor right after texture_names[stage]:
+ * byte[0] stage color op (0=disabled, 2=env, 5=add), byte[3] D3DTSS_TCI mode
+ * (0=passthru, 1=CAMERASPACENORMAL, 3=CAMERASPACEREFLECTIONVECTOR). */
+DC_API dc_status dc_xx_material_stage_tci(const dc_xx *model, uint32_t material_index,
+    uint32_t stage, uint8_t *out_op, uint8_t *out_tci);
 
 /* Uses encoded texture-name suffix .bmp/.tga to select the existing bounded
  * image decoder. BMP permits the zero signature restored by the original XX

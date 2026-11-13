@@ -62,7 +62,7 @@ void dc_pc_touch_input_reset(dc_pc_touch *state) {
     CGPoint _lastTouch, _cursor;
     double _wheelRemainder;
     double _motionRemainderX, _motionRemainderY;
-    UIButton *_pointerMode, *_keyboardToggle, *_help;
+    UIButton *_modeToggle, *_pointerMode, *_keyboardToggle, *_help;
     UILabel *_hint;
     CAShapeLayer *_cursorLayer;
     GCKeyboard *_keyboardDevice;
@@ -124,8 +124,8 @@ void dc_pc_touch_input_reset(dc_pc_touch *state) {
         _quick = [NSMutableArray array]; _mouseButtons = [NSMutableArray array];
         _keyboard = [NSMutableArray array]; _cursor = CGPointMake(.5, .5);
         _relative = [NSUserDefaults.standardUserDefaults boolForKey:@"DCZLRMouseRelative"];
-        NSArray *quickNames = @[@"Z", @"X", @"A", @"S", @"Esc", @"Space", @"Shift", @"Ctrl"];
-        const uint32_t quickCodes[] = {0x2c,0x2d,0x1e,0x1f,1,0x39,0x2a,0x1d};
+        NSArray *quickNames = @[@"Z", @"X", @"A", @"S", @"Esc", @"Space", @"Shift", @"Ctrl", @"F1", @"F2"];
+        const uint32_t quickCodes[] = {0x2c,0x2d,0x1e,0x1f,1,0x39,0x2a,0x1d,0x3b,0x3c};
         for (NSUInteger i=0;i<quickNames.count;++i) [_quick addObject:[self inputButton:quickNames[i] code:quickCodes[i]]];
         NSArray *mouseNames = @[@"左键", @"右键", @"中键", @"滚轮＋", @"滚轮－"];
         for (NSUInteger i=0;i<mouseNames.count;++i) [_mouseButtons addObject:[self inputButton:mouseNames[i] code:256+i]];
@@ -147,6 +147,7 @@ void dc_pc_touch_input_reset(dc_pc_touch *state) {
             UIButton *key=[self inputButton:rows[row][col] code:codes[row][col]];
             key.hidden=YES; [_keyboard addObject:key];
         }
+        _modeToggle=[self actionButton:@"手柄" selector:@selector(switchToGamepad)];
         _pointerMode=[self actionButton:@"" selector:@selector(togglePointer)];
         _keyboardToggle=[self actionButton:@"键盘" selector:@selector(toggleKeyboard)];
         _help=[self actionButton:@"说明" selector:@selector(toggleHelp)];
@@ -223,15 +224,18 @@ void dc_pc_touch_input_reset(dc_pc_touch *state) {
     [self setNeedsLayout];
 }
 - (void)toggleHelp { _hint.hidden=!_hint.hidden; }
+- (void)switchToGamepad { if(self.onSwitchToGamepad)self.onSwitchToGamepad(); }
 - (void)layoutSubviews {
     [super layoutSubviews]; CGRect safe=UIEdgeInsetsInsetRect(self.bounds,self.safeAreaInsets);
     CGFloat width=safe.size.width,height=safe.size.height,gap=6;
-    CGFloat keyW=MAX(44,MIN(68,(width-28)/14)),keyH=44;
+    CGFloat keyW=MAX(44,MIN(68,(width-28)/14)),keyH=MIN(44,MAX(34,(height-58-5*gap)/5));
     CGFloat left=CGRectGetMinX(safe)+8,right=CGRectGetMaxX(safe)-8;
+    NSUInteger quickRows=(_quick.count+1)/2;
     for (NSUInteger i=0;i<_quick.count;++i)
-        _quick[i].frame=CGRectMake(left+(i%2)*(keyW+gap),CGRectGetMaxY(safe)-8-(4-i/2)*(keyH+gap),keyW,keyH);
+        _quick[i].frame=CGRectMake(left+(i%2)*(keyW+gap),CGRectGetMaxY(safe)-8-(quickRows-i/2)*(keyH+gap),keyW,keyH);
     for (NSUInteger i=0;i<_mouseButtons.count;++i)
         _mouseButtons[i].frame=CGRectMake(right-keyW,CGRectGetMaxY(safe)-8-(5-i)*(keyH+gap),keyW,keyH);
+    _modeToggle.frame=CGRectMake(left,CGRectGetMinY(safe)+6,76,38);
     _pointerMode.frame=CGRectMake(left+82,CGRectGetMinY(safe)+6,80,38);
     _keyboardToggle.frame=CGRectMake(left+168,CGRectGetMinY(safe)+6,88,38);
     _help.frame=CGRectMake(left+262,CGRectGetMinY(safe)+6,64,38);

@@ -3,6 +3,7 @@
 #import "DCArchive.h"
 #import "DCStartupScene.h"
 #include "dc_flow.h"
+#include "dc_config.h"
 #include "dc_menu.h"
 #include "dc_save.h"
 #include <math.h>
@@ -98,6 +99,21 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     }
     return nil;
 }
+- (NSString *)readableStatePath:(NSString *)relativePath {
+    NSFileManager *fm = NSFileManager.defaultManager;
+    NSString *docsRoot = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    if (docsRoot.length) {
+        NSString *inDocsGame = [[docsRoot stringByAppendingPathComponent:@"game/Data"] stringByAppendingPathComponent:relativePath];
+        if ([fm fileExistsAtPath:inDocsGame]) return inDocsGame;
+    }
+    NSString *direct = [_directory stringByAppendingPathComponent:relativePath];
+    if (direct.length && [fm fileExistsAtPath:direct]) return direct;
+    if (docsRoot.length) {
+        NSString *inDocs = [docsRoot stringByAppendingPathComponent:relativePath];
+        if ([fm fileExistsAtPath:inDocs]) return inDocs;
+    }
+    return direct ?: @"";
+}
 - (instancetype)initWithDirectory:(NSString *)directory renderer:(dc_vk_sprite *)renderer
     transition:(DCStartupScene *)transition story:(const dc_story_state *)story error:(NSString **)error {
     if(!(self=[super init]))return nil;
@@ -105,7 +121,7 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     if(story)_story=*story;
     dc_flow_state flowState;memset(&flowState,0,sizeof(flowState));
     dc_game_state_init(flowState.raw,sizeof(flowState.raw));
-    NSData *savedFlow=[NSData dataWithContentsOfFile:[[directory stringByAppendingPathComponent:@"save"] stringByAppendingPathComponent:@"flow.state"]];
+    NSData *savedFlow=[NSData dataWithContentsOfFile:[self readableStatePath:@"save/flow.state"]];
     if(savedFlow.length>=13+DC_GAME_STATE_BYTES&&memcmp(savedFlow.bytes,"PLFL",4)==0&&((const uint8_t *)savedFlow.bytes)[4]==1) {
         memcpy(flowState.raw,(const uint8_t *)savedFlow.bytes+13,DC_GAME_STATE_BYTES);
     }
@@ -133,9 +149,11 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     _music=[self audio:@"bgm016.wav" archive:@"RPP_01.pp"];
     _select=[self audio:@"se100.wav" archive:@"RPP_14.pp"];
     _toggle=[self audio:@"se101.wav" archive:@"RPP_14.pp"];
-    NSData *configuration=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"gcd.cfg"]];
-    int32_t se=-1200,bgm=-1200;
-    if(configuration.length>=12){const uint8_t *p=configuration.bytes;se=(int32_t)endingDword(p+4);bgm=(int32_t)endingDword(p+8);}
+    NSData *configuration=[NSData dataWithContentsOfFile:[self readableStatePath:@"gcd.cfg"]];
+    float se=-1200.f,bgm=-1200.f;dc_config cfg;
+    if(configuration&&dc_config_decode(configuration.bytes,configuration.length,&cfg)==DC_OK){
+        dc_config_slider_value(&cfg,1,&bgm);dc_config_slider_value(&cfg,2,&se);
+    }
     float bgmVol=powf(10,bgm/2000.f),seVol=powf(10,se/2000.f);
     if(_music){_music.volume=bgmVol;_music.numberOfLoops=-1;_pausedMusic=!([_music play]||([_music prepareToPlay]&&[_music play]));}
     if(_select)_select.volume=seVol;
@@ -156,16 +174,13 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     NSString *archiveName=[NSString stringWithUTF8String:stageVoiceArchives[_badgeVoiceStage]];
     _badgeVoice=[self audio:voiceName archive:archiveName];
     if(!_badgeVoice){_badgeVoiceStage=-1;_badgeVoiceIndex=-1;return;}
-    NSData *configuration=[NSData dataWithContentsOfFile:[_directory stringByAppendingPathComponent:@"gcd.cfg"]];
-    int32_t voiceDb=-1200;
-    BOOL voiceEnabled=YES;
-    unsigned voiceSlot=(unsigned)(2-_badgeVoiceStage);
-    if(configuration.length>=36){
-        const uint8_t *p=configuration.bytes;
-        voiceDb=(int32_t)endingDword(p+12+voiceSlot*4);
-        voiceEnabled=p[32+voiceSlot]!=0;
+    NSData *configuration=[NSData dataWithContentsOfFile:[self readableStatePath:@"gcd.cfg"]];
+    float voiceDb=-1200.f;
+    dc_config cfg;
+    if(configuration&&dc_config_decode(configuration.bytes,configuration.length,&cfg)==DC_OK){
+        dc_config_slider_value(&cfg,0,&voiceDb);
     }
-    _badgeVoice.volume=voiceEnabled?powf(10,voiceDb/2000.f):0.f;
+    _badgeVoice.volume=powf(10,voiceDb/2000.f);
     _pausedBadgeVoice=!([_badgeVoice play]||([_badgeVoice prepareToPlay]&&[_badgeVoice play]));
 }
 - (NSString *)attachRenderer:(dc_vk_sprite *)renderer {
@@ -233,16 +248,16 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
     }
     if(_bank==3&&[self hit:x y:y item:(ending_item){"Hscene_PLAY.ema",NULL,800,624,200,48}])_hover=0;
     if(input.keys[0x3b]==3)return [self depart:3 tick:tick];
-    if(input.keys[0x3c]==3||input.keys[0x1f]==3)return [self depart:5 tick:tick];
+    if(input.keys[0x3c]==3)return [self depart:5 tick:tick];
     if(input.mouse[0]==3&&_hoverBottom>=0){
         static const uint32_t bottomActions[4]={4,2,3,5};
         return [self depart:bottomActions[_hoverBottom] tick:tick];
     }
-    if(input.mouse[1]==2||input.mouse[1]==3){
-        if(_bank==3){_bank=1;}
-        else if(_bank==1){_stageMask=0;_firstStage=3;_secondStage=3;_bank=2;}
-        else if(_bank==2){_mapIndex=7;_bank=0;}
-        else if(_bank==0){_category=6;}
+    if(input.mouse[1]==2){
+        if(_bank==3){_bank=1;[self playToggle];}
+        else if(_bank==1){_stageMask=0;_firstStage=3;_secondStage=3;_bank=2;[self playToggle];}
+        else if(_bank==2){_mapIndex=7;_bank=0;[self playToggle];}
+        else if(_bank==0&&_category<6){_category=6;[self playToggle];}
         return nil;
     }
     if(input.mouse[0]!=3)return nil;
@@ -317,7 +332,8 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
         }
     }
     float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
-    float x=input.x*1024,y=input.y*768;
+    float x=scale>0.f?(input.x*width-ox)/scale:input.x*1024.f;
+    float y=scale>0.f?(input.y*height-oy)/scale:input.y*768.f;
     NSString *inputFailure=[self chooseFromInput:input x:x y:y tick:tick];
     if(inputFailure)return inputFailure;
     dc_vk_sprite_item spriteItems[256]={0};size_t spriteCount=0;
@@ -416,13 +432,22 @@ static void endingAddSprite(dc_vk_sprite_item *items,size_t *count,uintptr_t tex
 }
 - (void)resumeFromTemporaryScreen {
     _pendingAction=_action=0;_entered=_ready=NO;_pausedBadgeVoice=NO;
-    NSData *configuration=[NSData dataWithContentsOfFile:[_directory stringByAppendingPathComponent:@"gcd.cfg"]];
-    int32_t se=-1200,bgm=-1200;
-    if(configuration.length>=12){const uint8_t *p=configuration.bytes;se=(int32_t)endingDword(p+4);bgm=(int32_t)endingDword(p+8);}
+    NSData *configuration=[NSData dataWithContentsOfFile:[self readableStatePath:@"gcd.cfg"]];
+    float se=-1200.f,bgm=-1200.f;dc_config cfg;
+    if(configuration&&dc_config_decode(configuration.bytes,configuration.length,&cfg)==DC_OK){
+        dc_config_slider_value(&cfg,1,&bgm);dc_config_slider_value(&cfg,2,&se);
+    }
     float bgmVol=powf(10,bgm/2000.f),seVol=powf(10,se/2000.f);
     if(_music)_music.volume=bgmVol;
     if(_select)_select.volume=seVol;
     if(_toggle)_toggle.volume=seVol;
+    if(_badgeVoice&&_badgeVoiceStage>=0&&_badgeVoiceStage<3){
+        float voiceDb=-1200.f;
+        if(configuration&&dc_config_decode(configuration.bytes,configuration.length,&cfg)==DC_OK){
+            dc_config_slider_value(&cfg,0,&voiceDb);
+        }
+        _badgeVoice.volume=powf(10,voiceDb/2000.f);
+    }
     [AVAudioSession.sharedInstance setCategory:AVAudioSessionCategoryPlayback withOptions:AVAudioSessionCategoryOptionMixWithOthers error:nil];
     [AVAudioSession.sharedInstance setActive:YES error:nil];
     _pausedMusic=(_music&&!([_music play]||([_music prepareToPlay]&&[_music play])));

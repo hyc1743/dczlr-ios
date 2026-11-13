@@ -88,6 +88,11 @@ DC_API dc_status dc_camera_secondary_viewport(const dc_viewport *main,dc_viewpor
  * are retained. Invalid input leaves output unchanged; aliasing is allowed. */
 DC_API dc_status dc_camera_secondary_pointer(const dc_camera_orbit *source,
     const dc_camera_pointer_limits *limits,const dc_camera_pointer_input *input,dc_camera_orbit *out);
+/* Numeric 00465cc0 primary orbit pointer controller: identical rotation,
+ * distance/height and wheel/pan motion, clamping base XYZ to [anchor-50, anchor+50]. */
+DC_API dc_status dc_camera_primary_pointer(const dc_camera_orbit *source,
+    const float anchor[3],const dc_camera_pointer_limits *limits,
+    const dc_camera_pointer_input *input,dc_camera_orbit *out);
 
 #ifdef __cplusplus
 }

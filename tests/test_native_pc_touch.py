@@ -103,5 +103,23 @@ class PCTouchTests(unittest.TestCase):
         self.assertEqual((f.keys[0x4d],f.mouse[0],f.pointer_active),(0,0,0))
         self.begin(3,22);self.lib.dc_pc_input_key(C.byref(self.input),30,0x4d,1)
         self.call('reset');self.assertEqual(self.poll().keys[0x4d],3)
+    def test_subpixel_drag_accumulates_without_rounding_loss_and_button_hold_can_drag(self):
+        self.assertEqual(self.call('begin',1,400,190),0)
+        for step in range(1,16):
+            self.assertEqual(self.call('move',1,400+step*0.2,190+step*0.2),0)
+        f=self.poll()
+        self.assertGreater(f.dx,0)
+        self.assertGreater(f.dy,0)
+        self.call('end',1);self.poll()
+        r=self.s.targets[26]
+        self.assertEqual(self.call('begin',2,r.x,r.y),0)
+        self.assertEqual(self.call('move',2,r.x+r.diameter*0.25,r.y-r.diameter*0.2),0)
+        jitter=self.poll()
+        self.assertEqual((jitter.mouse[0],jitter.dx,jitter.dy),(3,0,0))
+        self.assertEqual(self.call('move',2,r.x-40,r.y-30),0)
+        f=self.poll()
+        self.assertEqual(f.mouse[0],1)
+        self.assertLess(f.dx,0)
+        self.assertLess(f.dy,0)
 
 if __name__=='__main__':unittest.main()

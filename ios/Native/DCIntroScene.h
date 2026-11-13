@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly) BOOL audioAdvanced;
 @property(nonatomic,readonly) uint32_t auxiliaryDestination;
 @property(nonatomic,readonly) NSData *numericState;
+@property(nonatomic,readonly) BOOL backlogMode;
 - (nullable instancetype)initWithDirectory:(NSString *)directory error:(NSString **)error;
 /* Mid-story entry: start directly at a numbered script chapter without the
  * new-game transition sequence. */
@@ -26,6 +27,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)resumeFromAuxiliaryAtTick:(uint32_t)tick;
 - (void)applyConfiguration:(NSData *)configuration;
 - (void)toggleWindowHidden;
+- (nullable NSString *)handleSpaceOrMiddleClick;
+- (nullable NSString *)stepHistory:(int32_t)step tick:(uint32_t)tick;
 - (void)setFastForward:(BOOL)fastForward;
 - (void)detachRenderer;
 - (void)pause;

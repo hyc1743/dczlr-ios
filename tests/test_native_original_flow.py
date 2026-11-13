@@ -48,4 +48,11 @@ class OriginalFlowTests(unittest.TestCase):
             s=state(2,chapter,3,255);r=Result();self.assertEqual(self.lib.dc_flow_script_finish(C.byref(s),C.byref(r)),0)
             self.assertEqual((r.callback,r.destination_type),(0x512370,10))
 
+    def test_type4_roshutu_counter_caps_at_10000_without_u16_overflow(self):
+        s=state(4,24,4,0);s.raw[0x23]=1
+        s.raw[0x1e]=0x0f;s.raw[0x1f]=0x27  # 9999
+        r=Result()
+        self.assertEqual(self.lib.dc_flow_scene_exit(C.byref(s),C.byref(ExitMetrics(2,1,60000,0,0)),C.byref(r)),0)
+        self.assertEqual(int.from_bytes(s.raw[0x1e:0x20],'little'),10000)
+
 if __name__=='__main__':unittest.main()

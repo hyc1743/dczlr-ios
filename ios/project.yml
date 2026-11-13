@@ -29,8 +29,8 @@ targets:
         CFBundleName: DCZL R
         CFBundlePackageType: APPL
         CFBundleDisplayName: DCZL R
-        CFBundleShortVersionString: "0.1.33"
-        CFBundleVersion: "34"
+        CFBundleShortVersionString: "0.1.34"
+        CFBundleVersion: "35"
         UILaunchScreen: {}
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

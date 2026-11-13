@@ -18,6 +18,7 @@
 #import "DCSaveScene.h"
 #import "DCDummyScene.h"
 #import "DCEndingScene.h"
+#import "DCEditScene.h"
 #import "DCGamepadView.h"
 #include "dc_menu.h"
 #include "dc_save.h"
@@ -88,8 +89,82 @@ static void dc_flow_update_stage_badges(uint8_t *p, uint8_t stage, int32_t *outN
         if (p[3 + i] != 0) ++count;
     }
     p[2] = count;
-    if (count == 9 && p[0x23] == 1) p[0x23] = 2;
     if (outNewBadge) *outNewBadge = firstNew;
+}
+
+static BOOL dc_has_game_archives(NSFileManager *fm, NSString *dir) {
+    if (dir.length == 0) return NO;
+    return [fm fileExistsAtPath:[dir stringByAppendingPathComponent:@"RPP_02.pp"]] &&
+           [fm fileExistsAtPath:[dir stringByAppendingPathComponent:@"RPP_17.pp"]];
+}
+
+static NSString *dc_resolve_game_data_directory(NSString *preferred) {
+    NSFileManager *fm = NSFileManager.defaultManager;
+    if (dc_has_game_archives(fm, preferred)) return preferred;
+    NSMutableArray<NSString *> *candidates = [NSMutableArray array];
+    NSString *docsRoot = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    if (docsRoot.length) {
+        [candidates addObjectsFromArray:@[
+            [docsRoot stringByAppendingPathComponent:@"game/Data"],
+            [docsRoot stringByAppendingPathComponent:@"Data"],
+            [docsRoot stringByAppendingPathComponent:@"data"],
+            [docsRoot stringByAppendingPathComponent:@"game"],
+            docsRoot
+        ]];
+        NSArray<NSString *> *items = [fm contentsOfDirectoryAtPath:docsRoot error:nil];
+        for (NSString *item in [items sortedArrayUsingSelector:@selector(compare:)]) {
+            if ([item hasPrefix:@"."]) continue;
+            NSString *sub = [docsRoot stringByAppendingPathComponent:item];
+            BOOL isDir = NO;
+            if ([fm fileExistsAtPath:sub isDirectory:&isDir] && isDir) {
+                [candidates addObject:[sub stringByAppendingPathComponent:@"Data"]];
+                [candidates addObject:[sub stringByAppendingPathComponent:@"data"]];
+                [candidates addObject:[sub stringByAppendingPathComponent:@"game/Data"]];
+                [candidates addObject:sub];
+            }
+        }
+    }
+    for (NSString *bundleBase in @[NSBundle.mainBundle.resourcePath ?: @"", NSBundle.mainBundle.bundlePath ?: @""]) {
+        if (!bundleBase.length) continue;
+        [candidates addObject:[bundleBase stringByAppendingPathComponent:@"game/Data"]];
+        [candidates addObject:[bundleBase stringByAppendingPathComponent:@"Data"]];
+        [candidates addObject:[bundleBase stringByAppendingPathComponent:@"data"]];
+        [candidates addObject:bundleBase];
+    }
+    for (NSString *candidate in candidates) {
+        if (dc_has_game_archives(fm, candidate)) return candidate;
+    }
+    return preferred ?: @"";
+}
+
+static NSString *dc_writable_state_directory(NSString *directory) {
+    NSString *bundlePath = NSBundle.mainBundle.bundlePath.stringByStandardizingPath;
+    NSString *stdDir = directory.stringByStandardizingPath;
+    NSFileManager *fm = NSFileManager.defaultManager;
+    if (stdDir.length && (!bundlePath.length || ![stdDir hasPrefix:bundlePath]) && [fm isWritableFileAtPath:stdDir]) {
+        return directory;
+    }
+    NSString *docsRoot = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    if (docsRoot.length) {
+        NSString *writable = [docsRoot stringByAppendingPathComponent:@"game/Data"];
+        [fm createDirectoryAtPath:writable withIntermediateDirectories:YES attributes:nil error:nil];
+        return writable;
+    }
+    return directory ?: @"";
+}
+
+static NSString *dc_readable_state_path(NSString *directory, NSString *relativePath) {
+    NSFileManager *fm = NSFileManager.defaultManager;
+    NSString *writable = [dc_writable_state_directory(directory) stringByAppendingPathComponent:relativePath];
+    if (writable.length && [fm fileExistsAtPath:writable]) return writable;
+    NSString *direct = [directory stringByAppendingPathComponent:relativePath];
+    if (direct.length && [fm fileExistsAtPath:direct]) return direct;
+    NSString *docsRoot = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    if (docsRoot.length) {
+        NSString *inDocs = [docsRoot stringByAppendingPathComponent:relativePath];
+        if ([fm fileExistsAtPath:inDocs]) return inDocs;
+    }
+    return writable.length ? writable : direct;
 }
 
 static BOOL dc_pc_key_held(const dc_pc_frame *input, uint32_t scan) {
@@ -110,6 +185,44 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
      * click over a game button must not become a global pad Cancel command. */
 }
 
+static dc_pc_frame dc_merge_pad_for_system_scene(dc_pc_frame pc, dc_pad_frame pad, float *cursorX, float *cursorY) {
+    int32_t sx = abs(pad.lx) >= abs(pad.rx) ? pad.lx : pad.rx;
+    int32_t sy = abs(pad.ly) >= abs(pad.ry) ? pad.ly : pad.ry;
+    if (abs(sx) > 4096 || abs(sy) > 4096) {
+        *cursorX = fmaxf(0.0f, fminf(1.0f, *cursorX + ((float)sx / 32767.0f) * 0.016f));
+        *cursorY = fmaxf(0.0f, fminf(1.0f, *cursorY - ((float)sy / 32767.0f) * 0.016f));
+        pc.x = *cursorX;
+        pc.y = *cursorY;
+        pc.active = 1;
+        pc.pointer_active = 1;
+    } else if (pc.pointer_active || pc.active) {
+        *cursorX = pc.x;
+        *cursorY = pc.y;
+    } else if (pad.buttons || pad.pressed || pad.released) {
+        pc.x = *cursorX;
+        pc.y = *cursorY;
+        pc.active = 1;
+    }
+    if (!pc.mouse[0]) {
+        if (pad.pressed & DC_PAD_A) pc.mouse[0] = 3;
+        else if (pad.released & DC_PAD_A) pc.mouse[0] = 2;
+        else if (pad.buttons & DC_PAD_A) pc.mouse[0] = 1;
+    }
+    if (!pc.mouse[1]) {
+        if (pad.pressed & DC_PAD_B) pc.mouse[1] = 3;
+        else if (pad.released & DC_PAD_B) pc.mouse[1] = 2;
+        else if (pad.buttons & DC_PAD_B) pc.mouse[1] = 1;
+    }
+    if ((pad.pressed & DC_PAD_UP) && !pc.keys[0xc8]) pc.keys[0xc8] = 3;
+    if ((pad.pressed & DC_PAD_DOWN) && !pc.keys[0xd0]) pc.keys[0xd0] = 3;
+    if ((pad.pressed & DC_PAD_LEFT) && !pc.keys[0xcb]) pc.keys[0xcb] = 3;
+    if ((pad.pressed & DC_PAD_RIGHT) && !pc.keys[0xcd]) pc.keys[0xcd] = 3;
+    if ((pad.pressed & DC_PAD_L) && !pc.keys[0xc9]) pc.keys[0xc9] = 3;
+    if ((pad.pressed & DC_PAD_R) && !pc.keys[0xd1]) pc.keys[0xd1] = 3;
+    if ((pad.pressed & DC_PAD_Y) && !pc.keys[1]) pc.keys[1] = 3;
+    return pc;
+}
+
 @implementation DCVulkanSpriteView {
     dc_vk_sprite *_renderer;
     uintptr_t _texture;
@@ -122,6 +235,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     DCDummyScene *_dummyScene;
     uint32_t _dummyOwner;
     DCEndingScene *_endingScene;
+    DCEditScene *_editScene;
     uint32_t _endingSceneTypeOverride;
     int32_t _pendingBadgeStage,_pendingBadgeIndex;
     NSMutableData *_numericState;
@@ -165,6 +279,10 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     DCVulkanSpriteScene _presentedScene;
     NSInteger _selectedTitleOption;
     int32_t _controllerTitleRow;
+    float _padCursorX,_padCursorY;
+    float _lastTitlePtrX,_lastTitlePtrY;
+    BOOL _titlePtrInitialized;
+    uint32_t _lastSceneTick;
     CFTimeInterval _lastStartupScan;
     NSString *_deviceName;
     uint64_t _presentedFrames;
@@ -200,6 +318,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         self.opaque = YES;
         _deviceName = @"";
         _selectedTitleOption = -1;
+        _padCursorX = 0.5f;
+        _padCursorY = 0.5f;
         _pendingBadgeStage = -1;
         _pendingBadgeIndex = -1;
         atomic_init(&_suspended, false);
@@ -232,6 +352,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     [_saveScene pause];
     [_dummyScene pause];
     [_endingScene pause];
+    [_editScene pause];
     [_startupScene pause];
     [_gameScene pause];
     _previousTitleTouch = NO;
@@ -378,19 +499,23 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 }
 - (NSString *)startGameSceneFromDirectory:(NSString *)directory {
     if(_gameScene)return nil;
+    BOOL renderProbe=[NSProcessInfo.processInfo.environment[@"PORTLAB_RENDER_PROBE"] isEqualToString:@"1"];
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:0 width:_width height:_height];
     if(_gameAudio){
         [_gameAudio stopGameplayAudio];
         NSString *audioError=[_gameAudio prepareGameplayAudio];
         if(audioError)return audioError;
     }
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:1 width:_width height:_height];
     NSString *gameError=nil;
     BOOL resume=_resumeNextScene;_resumeNextScene=NO;
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:2 width:_width height:_height];
     _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer chapter:_story.chapter
         mapSelector:_story.map stage:_story.stage stageProgress:_story.stage<DC_STORY_STAGES?_story.stages[_story.stage].progress:0
         sceneTypeOverride:_endingSceneTypeOverride resumeSavedPlayer:resume error:&gameError];
     if(!_gameScene)return gameError ?: @"Story scene initialization failed";
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:3 width:_width height:_height];
     _gameScene.transitionScene=_startupScene;
-    if(_startupScene&&[_startupScene requestTransition:1 tick:0]!=DC_OK)return @"Story scene transition reset failed";
     [self ensureFlowState];
     if(_flowInitialized) {
         _flowState.meta.previous_type=_flowState.meta.scene_type;
@@ -405,13 +530,120 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         uint32_t bgmSceneType=(_story.chapter==24&&_gameScene.sceneType==6)?7u:_gameScene.sceneType;
         [_gameAudio startGameplayMusicForSceneType:bgmSceneType map:_story.map];
     }
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:4 width:_width height:_height];
+    if(_startupScene&&[_startupScene requestTransition:renderProbe?1:4 tick:_lastSceneTick]!=DC_OK)return @"Story scene transition reset failed";
+    _gameScene.secondaryViewVisible=!_secondaryViewDisabledSetting;
+    _previousGameplayTouch=NO;
+    _suppressGameplayTouch=YES;
+    return nil;
+}
+- (NSString *)startType7GameSceneFromDirectory:(NSString *)directory {
+    if(_gameScene)return nil;
+    BOOL renderProbe=[NSProcessInfo.processInfo.environment[@"PORTLAB_RENDER_PROBE"] isEqualToString:@"1"];
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:0 width:_width height:_height];
+    if(_gameAudio){
+        [_gameAudio stopGameplayAudio];
+        NSString *audioError=[_gameAudio prepareGameplayAudio];
+        if(audioError)return audioError;
+    }
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:1 width:_width height:_height];
+    [self ensureFlowState];
+    [self syncFlowFlagsFromStory];
+    uint8_t conqueredMask=0u;
+    for(unsigned h=0;h<3u;++h) {
+        BOOL conq=(_flowInitialized&&_flowState.raw[(size_t)h*DC_FLOW_STAGE_BYTES+0x23]==2u)||(_story.stages[h].progress>=2u);
+        if(conq)conqueredMask|=(uint8_t)(1u<<h);
+    }
+    uint8_t subMode=_flowInitialized?_flowState.meta.script_frame:0u;
+    if(subMode>6u) {
+        if(_flowInitialized&&_flowState.meta.selector1<3u)subMode=4u;
+        else if(_flowInitialized&&_flowState.meta.selector0<3u)subMode=2u;
+        else subMode=0u;
+    }
+    uint32_t mapSel=_flowInitialized?_flowState.meta.map:_story.map;
+    uint8_t s0=(_flowInitialized&&_flowState.meta.stage<3u)?_flowState.meta.stage:
+        ((_story.stage<3u)?(uint8_t)_story.stage:0u);
+    uint8_t s1=(_flowInitialized&&_flowState.meta.selector0<3u)?_flowState.meta.selector0:255u;
+    uint8_t s2=(_flowInitialized&&_flowState.meta.selector1<3u)?_flowState.meta.selector1:255u;
+    NSString *gameError=nil;
+    _resumeNextScene=NO;
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:2 width:_width height:_height];
+    _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer type7SubMode:subMode
+        mapSelector:mapSel slot0:s0 slot1:s1 slot2:s2 conqueredMask:conqueredMask error:&gameError];
+    if(!_gameScene)return gameError ?: @"Type 7 scene initialization failed";
+    uint8_t pregCycles[3]={0,0,0},pubicMask=0u,nonVirginMask=0u;
+    for(unsigned h=0;h<3u;++h) {
+        if(_flowInitialized) {
+            const uint8_t *hp=_flowState.raw+(size_t)h*DC_FLOW_STAGE_BYTES;
+            pregCycles[h]=hp[0x22];
+            if(hp[1]!=0u)pubicMask|=(uint8_t)(1u<<h);
+            if(hp[0]!=0u)nonVirginMask|=(uint8_t)(1u<<h);
+        } else {
+            if(_story.stages[h].flag_b!=0u)pubicMask|=(uint8_t)(1u<<h);
+            if(_story.stages[h].flag_a!=0u)nonVirginMask|=(uint8_t)(1u<<h);
+        }
+    }
+    [_gameScene applyType7PregnancyCycles:pregCycles];
+    [_gameScene applyType7PubicMask:pubicMask nonVirginMask:nonVirginMask];
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:3 width:_width height:_height];
+    _gameScene.transitionScene=_startupScene;
+    if(_flowInitialized) {
+        _flowState.meta.previous_type=2u;
+        _flowState.meta.scene_type=7u;
+        _flowState.meta.chapter=24u;
+        _flowState.meta.map=(uint8_t)_gameScene.mapSelector;
+        _flowState.meta.stage=_gameScene.type7Slot0;
+        _flowState.meta.selector0=_gameScene.type7Slot1;
+        _flowState.meta.selector1=_gameScene.type7Slot2;
+        _flowState.meta.script_frame=_gameScene.type7LiveSubMode;
+    }
+    if(!_configuration)[self loadConfigurationFromDirectory:directory];
+    if(_configuration)[_gameScene applyConfiguration:(const dc_config *)_configuration.bytes];
+    if(_gameAudio) {
+        if(_gameScene.bgmTrackName.length)[_gameAudio startGameplayMusicNamed:_gameScene.bgmTrackName];
+        else [_gameAudio startGameplayMusicForSceneType:7u map:_gameScene.mapSelector];
+    }
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:4 width:_width height:_height];
+    if(_startupScene&&[_startupScene requestTransition:renderProbe?1:4 tick:_lastSceneTick]!=DC_OK)
+        return @"Type 7 scene transition reset failed";
+    _gameScene.secondaryViewVisible=!_secondaryViewDisabledSetting;
+    _previousGameplayTouch=NO;
+    _suppressGameplayTouch=YES;
+    return nil;
+}
+- (NSString *)startEditPlaybackFromDirectory:(NSString *)directory {
+    if(_gameScene || !_editScene)return nil;
+    BOOL renderProbe=[NSProcessInfo.processInfo.environment[@"PORTLAB_RENDER_PROBE"] isEqualToString:@"1"];
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:0 width:_width height:_height];
+    if(_gameAudio){
+        [_gameAudio stopGameplayAudio];
+        NSString *audioError=[_gameAudio prepareGameplayAudio];
+        if(audioError)return audioError;
+    }
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:1 width:_width height:_height];
+    NSString *gameError=nil;
+    _resumeNextScene=NO;
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:2 width:_width height:_height];
+    _gameScene=[[DCGameScene alloc] initWithDirectory:directory renderer:_renderer editState:[_editScene editState] error:&gameError];
+    if(!_gameScene)return gameError ?: @"Edit 3D playback initialization failed";
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:3 width:_width height:_height];
+    _gameScene.transitionScene=_startupScene;
+    if(!_configuration)[self loadConfigurationFromDirectory:directory];
+    if(_configuration)[_gameScene applyConfiguration:(const dc_config *)_configuration.bytes];
+    if(_gameAudio) {
+        if(_gameScene.bgmTrackName.length)[_gameAudio startGameplayMusicNamed:_gameScene.bgmTrackName];
+        else [_gameAudio startGameplayMusicForSceneType:12u map:_gameScene.mapSelector];
+    }
+    if(!renderProbe && _startupScene)[_startupScene presentLoadingStep:4 width:_width height:_height];
+    if(_startupScene&&[_startupScene requestTransition:renderProbe?1:4 tick:_lastSceneTick]!=DC_OK)
+        return @"Edit 3D playback transition reset failed";
     _gameScene.secondaryViewVisible=!_secondaryViewDisabledSetting;
     _previousGameplayTouch=NO;
     _suppressGameplayTouch=YES;
     return nil;
 }
 - (NSString *)loadConfigurationFromDirectory:(NSString *)directory {
-    NSString *path=[directory stringByAppendingPathComponent:@"gcd.cfg"];
+    NSString *path=dc_readable_state_path(directory, @"gcd.cfg");
     NSData *data=[NSData dataWithContentsOfFile:path];
     dc_config state;
     if(data.length>=DC_CONFIG_BYTES && dc_config_decode(data.bytes,data.length,&state)==DC_OK)
@@ -425,6 +657,12 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 }
 - (NSString *)enterConfigSceneFromDirectory:(NSString *)directory {
     if(!_configuration)[self loadConfigurationFromDirectory:directory];
+    if(_gameScene&&_configuration.length>=sizeof(dc_config)){
+        dc_config synced=*(const dc_config *)_configuration.bytes;
+        [_gameScene syncConfiguration:&synced];
+        if(memcmp(&synced,_configuration.bytes,sizeof(synced))!=0)
+            _configuration=[NSData dataWithBytes:&synced length:sizeof(synced)];
+    }
     uint32_t ownerType=_gameScene?(_gameScene.editMode?12:_gameScene.sceneType):(_introScene?3:(_endingScene?2:(_systemOwnerType?_systemOwnerType:1)));
     uint32_t ownerChapter=_introScene?_introScene.chapter:(_endingScene?24:(_systemOwnerType?_systemOwnerChapter:_story.chapter));
     NSString *error=nil;
@@ -461,6 +699,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     [_gameScene detachRenderer];_gameScene=nil;
     [_introScene detachRenderer];_introScene=nil;
     [_endingScene detachRenderer];_endingScene=nil;_endingSceneTypeOverride=0;
+    [_editScene detachRenderer];_editScene=nil;
     _pendingBadgeStage=-1;_pendingBadgeIndex=-1;
     _systemOwnerType=0;_systemOwnerChapter=0;
     _titleStateInitialized=NO;_titleMenuInitialized=NO;_titleUnlocksLoaded=NO;
@@ -489,21 +728,32 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 }
 - (NSString *)writeOriginalSaveSlot:(uint32_t)slot directory:(NSString *)directory {
     [self ensureFlowState];
-    [self syncNumericState];
+    [self syncFlowFlagsFromStory];
+    if(!_numericState){_numericState=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];dc_game_state_init(_numericState.mutableBytes,_numericState.length);}
     if(_flowInitialized)memcpy(_numericState.mutableBytes,_flowState.raw,MIN(_numericState.length,sizeof(_flowState.raw)));
+    else [self syncNumericState];
     dc_save_slot_meta meta=_flowInitialized?_flowState.meta:(dc_save_slot_meta){(uint8_t)_story.chapter,(uint8_t)(_gameScene?_gameScene.sceneType:1),
         (uint8_t)(_gameScene?_gameScene.sceneType:1),(uint8_t)_story.map,(uint8_t)_story.stage,0,0,0};
     meta.chapter=(uint8_t)(_introScene?_introScene.chapter:_story.chapter);meta.map=(uint8_t)_story.map;meta.stage=(uint8_t)_story.stage;
     if(_gameScene){
-        meta.scene_type=(uint8_t)((_story.chapter==24&&_gameScene.sceneType==6)?7u:_gameScene.sceneType);
-        if(_story.chapter!=24||_gameScene.sceneType!=6)meta.script_frame=254;
+        if(_gameScene.sceneType==7) {
+            meta.scene_type=7u;
+            meta.map=(uint8_t)_gameScene.mapSelector;
+            meta.stage=_gameScene.type7Slot0;
+            meta.selector0=_gameScene.type7Slot1;
+            meta.selector1=_gameScene.type7Slot2;
+            meta.script_frame=_gameScene.type7LiveSubMode;
+        } else {
+            meta.scene_type=(uint8_t)((_story.chapter==24&&_gameScene.sceneType==6)?7u:_gameScene.sceneType);
+            if(_story.chapter!=24||_gameScene.sceneType!=6)meta.script_frame=254;
+        }
     }
     else if(_introScene){meta.scene_type=3;meta.script_frame=(uint8_t)MIN(_introScene.frame,253u);}
     else if(_systemOwnerType==2){meta.chapter=24;meta.scene_type=2;meta.script_frame=254;}
     char name[16];if(dc_save_slot_name(slot,name,sizeof(name))!=DC_OK)return @"Original save slot number rejected";
     NSMutableData *encoded=[NSMutableData dataWithLength:DC_SAVE_SLOT_BYTES];
     if(dc_save_slot_encode(_numericState.bytes,_numericState.length,&meta,encoded.mutableBytes,encoded.length)!=DC_OK)return @"Original save state encoding failed";
-    NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
+    NSString *saveDirectory=[dc_writable_state_directory(directory) stringByAppendingPathComponent:@"save"];
     [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
     if(![encoded writeToFile:[saveDirectory stringByAppendingPathComponent:[NSString stringWithUTF8String:name]] options:NSDataWritingAtomic error:nil])return @"Original save slot write failed";
     [self saveStoryToDirectory:directory];
@@ -513,9 +763,11 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 - (NSString *)resumeSystemOwnerAtTick:(uint32_t)tick directory:(NSString *)directory {
     uint32_t ownerType=_systemOwnerType;
     _systemOwnerType=0;
-    if(_startupScene&&[_startupScene requestTransition:1 tick:tick]!=DC_OK)return @"System owner transition reset failed";
+    if(_startupScene&&[_startupScene requestTransition:(_gameScene||_introScene)?4:1 tick:tick]!=DC_OK)return @"System owner transition reset failed";
     if(_gameScene){[_gameScene resumeAtTick:tick];}
-    else if(_introScene){[_introScene resumeFromAuxiliaryAtTick:tick];}
+    else if(_introScene){
+        [_introScene resumeFromAuxiliaryAtTick:tick];
+    }
     else if(_endingScene){[_endingScene resumeFromTemporaryScreen];}
     else if(ownerType==2&&directory.length){
         NSString *endingError=[self enterStoryChapter:24 directory:directory];
@@ -541,22 +793,28 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     [_introScene detachRenderer];_introScene=nil;
     [_gameScene detachRenderer];_gameScene=nil;
     [_endingScene detachRenderer];_endingScene=nil;
+    [_editScene detachRenderer];_editScene=nil;
     _pendingBadgeStage=-1;_pendingBadgeIndex=-1;
     _pregnancyChoiceActive=NO;_pregnancyChoiceWaiting=NO;_pregnancyChoiceTransitionRequested=NO;_pregnancyChoiceAction=0;
     [_gameAudio stopTitleMusic];
     [_gameAudio stopGameplayAudio];
+    NSString *playerPath=[dc_writable_state_directory(directory) stringByAppendingPathComponent:@"save/player.state"];
+    [[NSFileManager defaultManager] removeItemAtPath:playerPath error:nil];
+    _resumeNextScene=NO;
     if(meta.scene_type==13) {
         [self saveStoryToDirectory:directory];
         return [self enterPregnancyChoiceFromDirectory:directory];
     }
     BOOL isGameplaySave=(meta.scene_type>=4 && meta.scene_type<=7);
-    if(!isGameplaySave) {
-        NSString *playerPath=[directory stringByAppendingPathComponent:@"save/player.state"];
-        [[NSFileManager defaultManager] removeItemAtPath:playerPath error:nil];
+    if(meta.chapter==24 && meta.scene_type==7 && meta.map<=8 && meta.stage<=2) {
+        [self saveStoryToDirectory:directory];
+        NSString *gameError=[self startType7GameSceneFromDirectory:directory];
+        if(gameError)return gameError;
+        if(_gameScene)[_gameScene resumeAtTick:tick];
+        return nil;
     }
     if(meta.chapter==24 && isGameplaySave && meta.map<=8 && meta.stage<=2) {
         _endingSceneTypeOverride=(meta.scene_type==7)?6:meta.scene_type;
-        _resumeNextScene=YES;
         [self saveStoryToDirectory:directory];
         NSString *gameError=[self startGameSceneFromDirectory:directory];
         _endingSceneTypeOverride=0;
@@ -564,22 +822,11 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         if(_gameScene)[_gameScene resumeAtTick:tick];
         return nil;
     }
-    _resumeNextScene=isGameplaySave;
-    NSString *error=[self enterStoryChapter:_story.chapter directory:directory];
+    uint32_t savedScriptFrame=(meta.scene_type==3 && meta.script_frame<254)?meta.script_frame:0;
+    NSString *error=[self enterStoryChapter:_story.chapter savedScriptFrame:savedScriptFrame directory:directory];
     if(error)return error;
-    if(_introScene&&meta.scene_type==3&&meta.script_frame>0&&meta.script_frame<254){
-        [_introScene pause];
-        [_introScene detachRenderer];
-        NSString *introError=nil;
-        DCIntroScene *resumed=[[DCIntroScene alloc] initWithDirectory:directory startChapter:_story.chapter
-            numericState:_numericState savedFrame:meta.script_frame error:&introError];
-        if(resumed){
-            if(_configuration)[resumed applyConfiguration:_configuration];
-            _introScene=resumed;
-            _flowState.meta.script_frame=meta.script_frame;
-        }
-        [_introScene resumeAtTick:tick];
-    } else if(_introScene) {
+    if(_introScene) {
+        _flowState.meta.script_frame=meta.script_frame;
         [_introScene resumeAtTick:tick];
     }
     if(_gameScene)[_gameScene resumeAtTick:tick];
@@ -589,6 +836,30 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if(!_gameScene || !_gameScene.chapterEndAction)return nil;
     uint32_t action=_gameScene.chapterEndAction;
     if(action==2) {
+        if(_gameScene.sceneType==7) {
+            [self ensureFlowState];
+            _pendingBadgeStage=-1;_pendingBadgeIndex=-1;
+            dc_type7_exit_outcome outcome={0};
+            [_gameScene commitType7ExitIntoFlow:&_flowState outcome:&outcome];
+            if(outcome.badge_awarded && outcome.badge_heroine<DC_FLOW_STAGES) {
+                _pendingBadgeStage=(int32_t)outcome.badge_heroine;
+                _pendingBadgeIndex=(int32_t)outcome.badge_index;
+            }
+            NSString *exitVoice=(outcome.exit_voice[0]!='\0')?[NSString stringWithUTF8String:outcome.exit_voice]:nil;
+            _titleUnlocksLoaded=NO;
+            [self syncStoryFromFlow];
+            if(!_numericState)_numericState=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
+            memcpy(_numericState.mutableBytes,_flowState.raw,MIN(_numericState.length,sizeof(_flowState.raw)));
+            [self saveStoryToDirectory:directory];
+            NSString *routeErr=nil;
+            if(outcome.destination_type==13u) {
+                routeErr=[self enterPregnancyChoiceFromDirectory:directory];
+            } else {
+                routeErr=[self enterStoryChapter:_flowState.meta.chapter directory:directory];
+            }
+            if(!routeErr&&exitVoice&&_gameAudio)[_gameAudio playGameplayVoiceNamed:exitVoice];
+            return routeErr;
+        }
         uint32_t wasChapter=_story.chapter;
         [self ensureFlowState];
         uint8_t aoiProgressBefore=_flowInitialized?_flowState.raw[0x23]:(uint8_t)_story.stages[0].progress;
@@ -603,8 +874,10 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             if(stagePtr[0x23]!=2) {
                 if(_gameScene.vibeNekoUsed)dc_flow_add16(stagePtr+0x16,1);
                 if(_gameScene.vibeToriUsed)dc_flow_add16(stagePtr+0x18,1);
-                if(_gameScene.accessoryToggled)dc_flow_add16(stagePtr+0x1c,1);
-                if(_gameScene.outfitVariant==3)dc_flow_add16(stagePtr+0x2c,1);
+                BOOL anyClimax=(_gameScene.sceneType==6)?_gameScene.nightAnyClimax:
+                    (_gameScene.stageOutcomeA>0||_gameScene.stageOutcomeB>0||(_gameScene.sceneType==5&&_gameScene.watchClimaxElapsedMs>0));
+                if(anyClimax && (_gameScene.strippedCountAtClimax>=6 || _gameScene.outfitVariant==3))
+                    dc_flow_add16(stagePtr+0x2c,1);
             }
         }
         if(_story.chapter==24 && _gameScene.storyStage<DC_STORY_STAGES) {
@@ -615,7 +888,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                 _flowInitialized?_flowState.meta.selector1:255u};
             for(unsigned idx=0;idx<3;++idx) {
                 uint32_t s=stagesToUpdate[idx];
-                if(s>=DC_STORY_STAGES)continue;
+                if(s>=DC_FLOW_STAGES)continue;
                 if(idx==0) {
                     if(_gameScene.stageOutcomeA>0)_story.stages[s].flag_a=1;
                     if(_gameScene.stageOutcomeB>0)_story.stages[s].flag_b=1;
@@ -628,27 +901,35 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         if(wasChapter==24 && _flowInitialized && _gameScene.sceneType==6) {
             uint8_t savedStage=_flowState.meta.stage;
             uint32_t nightStages[3]={_gameScene.storyStage,_flowState.meta.selector0,_flowState.meta.selector1};
-            uint32_t pos2Inc=MAX((uint32_t)_gameScene.stageOutcomeB,_gameScene.pos2SelectedCount);
-            BOOL climaxed=(_gameScene.stageOutcomeA>0||_gameScene.stageOutcomeB>0);
+            BOOL climaxed=_gameScene.nightAnyClimax;
             for(unsigned idx=0;idx<3;++idx) {
                 uint32_t s=nightStages[idx];
                 if(s>=DC_FLOW_STAGES)continue;
                 _flowState.meta.stage=(uint8_t)s;
-                dc_flow_night_commit(&_flowState,(uint32_t)MAX(0,_gameScene.stageOutcomeA),(uint32_t)MAX(0,_gameScene.stageOutcomeB));
+                dc_flow_night_commit(&_flowState,_gameScene.nightInternalVagCount,_gameScene.nightInternalAnalCount);
                 uint8_t *p=_flowState.raw+(size_t)s*DC_FLOW_STAGE_BYTES;
+                BOOL hadAllNineBefore=(p[2]==9 && p[0x23]==1);
                 if(p[0x23]!=2) {
                     if(s==0 && p[0x2a]==0 && p[0x22]<4 &&
                        (_flowState.raw[DC_FLOW_STAGE_BYTES+0x22]>3 || _flowState.raw[2*DC_FLOW_STAGE_BYTES+0x22]>3)) {
                         p[0x2a]=1;
                     }
                     if(_flowState.meta.script_frame==6 && p[0x29]==0)p[0x29]=1;
-                    if(pos2Inc>0)dc_flow_add16(p+0x14,pos2Inc);
-                    if(climaxed)dc_flow_add16(p+0x1a,1);
+                    if(_gameScene.stageOutcomeB>0)dc_flow_add16(p+0x14,1);
+                    if(_gameScene.oralClimaxCount>0)dc_flow_add16(p+0x1a,_gameScene.oralClimaxCount);
+                    if(_gameScene.oralSwallowCount>0)dc_flow_add16(p+0x1c,_gameScene.oralSwallowCount);
                     if(climaxed && _flowState.meta.map!=4 && _flowState.meta.map!=8 && _flowState.meta.map!=255)
                         dc_flow_add16(p+0x20,1);
                     int32_t newBadge=-1;
                     dc_flow_update_stage_badges(p,(uint8_t)s,&newBadge);
                     if(newBadge>=0 && _pendingBadgeIndex<0){_pendingBadgeStage=(int32_t)s;_pendingBadgeIndex=newBadge;}
+                    /* 0047d220 / 00552e5d: earning all 9 badges sets p[2]=9; a
+                     * subsequent 2P Free-Mode Night climax promotes progress 1->2. */
+                    if(hadAllNineBefore && climaxed && _flowState.meta.script_frame==0) {
+                        p[0x23]=2;
+                        _story.stages[s].progress=2;
+                        _titleUnlocksLoaded=NO;
+                    }
                 }
                 if(p[0x22]==4 && (p[0x38]==0 || p[0x38]==1))p[0x38]=2;
                 else if(p[0x22]==3 && p[0x38]==0)p[0x38]=1;
@@ -671,8 +952,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                     uint8_t *p=_flowState.raw+(size_t)_gameScene.storyStage*DC_FLOW_STAGE_BYTES;
                     if(p[0x34]==0){p[0x34]=1;p[0x35]=5;p[0x36]=10;p[0x37]=6;}
                 }
-                BOOL aoiClimaxed=(_gameScene.stageOutcomeA>0||_gameScene.stageOutcomeB>0);
-                BOOL isSingleAoi=(_gameScene.storyStage==0 && _flowState.meta.selector0>=DC_FLOW_STAGES);
+                BOOL aoiClimaxed=(_gameScene.nightInternalVagCount>0u);
+                BOOL isSingleAoi=(_gameScene.storyStage==0 && _flowState.meta.selector0>=DC_FLOW_STAGES && _flowState.meta.script_frame==0);
                 uint8_t aoiCycle=_flowState.raw[0x22];
                 uint8_t manakaCycle=_flowState.raw[DC_FLOW_STAGE_BYTES+0x22];
                 uint8_t yukoCycle=_flowState.raw[2*DC_FLOW_STAGE_BYTES+0x22];
@@ -748,7 +1029,16 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         [_gameAudio suspendForSystemPage];
         return [self enterDummySceneFromDirectory:directory owner:6];
     } else if(action==6) {
-        /* Edit presentation finished: return to the title. */
+        if(_editScene) {
+            [_gameScene consumeChapterEndAction];
+            [_gameAudio stopGameplayAudio];
+            [_gameScene detachRenderer];
+            _gameScene=nil;
+            [_editScene resumeFromPlaybackAtTick:_lastSceneTick];
+            _previousGameplayTouch=NO;
+            _suppressGameplayTouch=YES;
+            return nil;
+        }
         [self returnToTitleScene];
         return nil;
     }
@@ -764,9 +1054,15 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 }
 - (NSString *)playPendingGameplayEffect {
     uint32_t slot=[_gameScene takePendingEffectSlot];
-    if(slot==UINT32_MAX)return nil;
-    if(!_gameAudio||![_gameAudio playGameplaySlot:slot])
-        return [NSString stringWithFormat:@"Original gameplay effect slot %u did not start",slot];
+    if(slot!=UINT32_MAX) {
+        if(!_gameAudio||![_gameAudio playGameplaySlot:slot])
+            return [NSString stringWithFormat:@"Original gameplay effect slot %u did not start",slot];
+    }
+    NSString *named=[_gameScene takePendingEffectName];
+    if(named.length) {
+        if(!_gameAudio||![_gameAudio playGameplayEffectNamed:named])
+            return [NSString stringWithFormat:@"Gameplay effect %@ did not start",named];
+    }
     return nil;
 }
 - (void)resetStory {
@@ -801,16 +1097,17 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 }
 - (void)saveFlowStateToDirectory:(NSString *)directory {
     if(!_flowInitialized)return;
+    if(_flowState.meta.chapter==25||_flowState.meta.chapter==26)return;
     NSMutableData *record=[NSMutableData dataWithLength:dcFlowPersistHeaderBytes+DC_GAME_STATE_BYTES];
     memcpy(record.mutableBytes,"PLFL",4);((uint8_t *)record.mutableBytes)[4]=1;
     memcpy((uint8_t *)record.mutableBytes+5,&_flowState.meta,sizeof(_flowState.meta));
     memcpy((uint8_t *)record.mutableBytes+dcFlowPersistHeaderBytes,_flowState.raw,DC_GAME_STATE_BYTES);
-    NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
+    NSString *saveDirectory=[dc_writable_state_directory(directory) stringByAppendingPathComponent:@"save"];
     [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
     [record writeToFile:[saveDirectory stringByAppendingPathComponent:@"flow.state"] options:NSDataWritingAtomic error:nil];
 }
 - (void)loadFlowStateFromDirectory:(NSString *)directory {
-    NSData *record=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"save/flow.state"]];
+    NSData *record=[NSData dataWithContentsOfFile:dc_readable_state_path(directory, @"save/flow.state")];
     if(record.length<dcFlowPersistHeaderBytes+DC_GAME_STATE_BYTES||memcmp(record.bytes,"PLFL",4)!=0||((const uint8_t *)record.bytes)[4]!=1)return;
     memcpy(&_flowState.meta,(const uint8_t *)record.bytes+5,sizeof(_flowState.meta));
     memcpy(_flowState.raw,(const uint8_t *)record.bytes+dcFlowPersistHeaderBytes,DC_GAME_STATE_BYTES);_flowInitialized=YES;
@@ -833,7 +1130,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     [self syncFlowFlagsFromStory];
 }
 - (void)loadStoryFromDirectory:(NSString *)directory {
-    NSString *path=[directory stringByAppendingPathComponent:@"save/player.state"];
+    NSString *path=dc_readable_state_path(directory, @"save/player.state");
     NSData *data=[NSData dataWithContentsOfFile:path];
     if(data.length>=DC_GAME_PLAYER_SAVE_BYTES+DC_STORY_SAVE_BYTES) {
         dc_story_state loaded;
@@ -851,20 +1148,25 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
 }
 - (void)saveStoryToDirectory:(NSString *)directory {
     if(!_storyInitialized)return;
-    NSString *path=[directory stringByAppendingPathComponent:@"save/player.state"];
-    NSData *player=[NSData dataWithContentsOfFile:path];
+    if(_story.chapter==25||_story.chapter==26)return;
+    NSString *writableDir=dc_writable_state_directory(directory);
+    NSString *path=[writableDir stringByAppendingPathComponent:@"save/player.state"];
+    NSData *player=[NSData dataWithContentsOfFile:dc_readable_state_path(directory, @"save/player.state")];
     NSMutableData *record=[NSMutableData dataWithLength:DC_STORY_SAVE_BYTES];
     if(dc_story_save(&_story,record.mutableBytes,record.length)!=DC_OK)return;
     NSMutableData *combined=[NSMutableData dataWithLength:DC_GAME_PLAYER_SAVE_BYTES];
     if(player.length>=DC_GAME_PLAYER_SAVE_BYTES)
         memcpy(combined.mutableBytes,player.bytes,DC_GAME_PLAYER_SAVE_BYTES);
     [combined appendData:record];
-    NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
+    NSString *saveDirectory=[writableDir stringByAppendingPathComponent:@"save"];
     [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
     [combined writeToFile:path options:NSDataWritingAtomic error:nil];
     [self saveFlowStateToDirectory:directory];
 }
 - (NSString *)enterStoryChapter:(uint32_t)chapter directory:(NSString *)directory {
+    return [self enterStoryChapter:chapter savedScriptFrame:0 directory:directory];
+}
+- (NSString *)enterStoryChapter:(uint32_t)chapter savedScriptFrame:(uint32_t)savedScriptFrame directory:(NSString *)directory {
     dc_story_chapter profile;
     if(dc_story_chapter_profile(chapter,&profile)!=DC_OK)return @"Story chapter profile rejected";
     _story.chapter=chapter;
@@ -878,6 +1180,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     }
     _storyInitialized=YES;
     [self updateFlowMetaForChapter:chapter profile:&profile];
+    if(profile.script>=0 && savedScriptFrame<254)_flowState.meta.script_frame=(uint8_t)savedScriptFrame;
     [self saveStoryToDirectory:directory];
     /* Consume the completed script before installing its destination. Keeping
      * it here would re-enter this chapter on every subsequent draw. */
@@ -895,11 +1198,11 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         if(_flowInitialized)memcpy(_numericState.mutableBytes,_flowState.raw,MIN(_numericState.length,sizeof(_flowState.raw)));
         NSString *introError=nil;
         _introScene=[[DCIntroScene alloc] initWithDirectory:directory startChapter:chapter
-            numericState:_numericState savedFrame:0 error:&introError];
+            numericState:_numericState savedFrame:savedScriptFrame error:&introError];
         if(!_introScene)return introError ?: @"Mid-story script entry failed";
         if(!_configuration)[self loadConfigurationFromDirectory:directory];
         if(_configuration)[_introScene applyConfiguration:_configuration];
-        if(_startupScene&&[_startupScene requestTransition:1 tick:0]!=DC_OK)return @"Mid-story script transition reset failed";
+        if(_startupScene&&[_startupScene requestTransition:4 tick:_lastSceneTick]!=DC_OK)return @"Mid-story script transition reset failed";
     } else if(profile.scene==DC_STORY_SCENE_ENDING) {
         NSString *endingError=nil;
         _endingScene=[[DCEndingScene alloc] initWithDirectory:directory renderer:_renderer transition:_startupScene
@@ -994,6 +1297,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     [_saveScene detachRenderer];
     [_dummyScene detachRenderer];
     [_endingScene detachRenderer];
+    [_editScene detachRenderer];
     [_startupScene detachRenderer];
     dc_vk_sprite_destroy(_renderer);
     _renderer = NULL;
@@ -1015,7 +1319,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     _pregnancyChoiceActive=NO;_pregnancyChoiceWaiting=NO;_pregnancyChoiceTransitionRequested=NO;_pregnancyChoiceAction=0;
     _gameScene = nil;
     _configScene=nil;_saveScene=nil;_numericState=nil;_configuration=nil;
-    _dummyScene=nil;_dummyOwner=0;_endingScene=nil;_endingSceneTypeOverride=0;
+    _dummyScene=nil;_dummyOwner=0;_endingScene=nil;_editScene=nil;_endingSceneTypeOverride=0;
     _previousGameplayTouch = NO;
     _suppressGameplayTouch = NO;
     _presentedScene = DCVulkanSpriteSceneDiagnostic;
@@ -1157,12 +1461,20 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             NSString *endingError = [_endingScene attachRenderer:_renderer];
             if (endingError) return endingError;
         }
+        if (_editScene) {
+            NSString *editError = [_editScene attachRenderer:_renderer];
+            if (editError) return editError;
+        }
     }
-    if (!_startupScene && directory.length && CACurrentMediaTime() - _lastStartupScan >= 1) {
+    if (directory.length && !dc_has_game_archives(NSFileManager.defaultManager, directory)) {
+        directory = dc_resolve_game_data_directory(directory);
+    }
+    if (!_startupScene && CACurrentMediaTime() - _lastStartupScan >= 1) {
         _lastStartupScan = CACurrentMediaTime();
-        NSFileManager *files = NSFileManager.defaultManager;
-        if ([files fileExistsAtPath:[directory stringByAppendingPathComponent:@"RPP_02.pp"]] &&
-            [files fileExistsAtPath:[directory stringByAppendingPathComponent:@"RPP_17.pp"]]) {
+        NSString *resolved = dc_resolve_game_data_directory(directory);
+        if (dc_has_game_archives(NSFileManager.defaultManager, resolved)) {
+            directory = resolved;
+            self.startupDataDirectory = resolved;
             NSString *error = nil;
             _startupScene = [[DCStartupScene alloc] initWithDirectory:directory renderer:_renderer error:&error];
             if (!_startupScene) return error ?: @"Startup resources could not be loaded";
@@ -1188,13 +1500,15 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         return nil;
     }
     BOOL titleReady = _startupScene.finished && [self tryLoadTitleSceneFromDirectory:directory];
-    BOOL showTitle = titleReady && !_gameScene;
+    BOOL showTitle = titleReady && !_gameScene && !_editScene;
     if (_startupScene.finished && !titleReady) return @"Startup completed but title resources are unavailable";
     double sceneMilliseconds=time*1000.0;
     if(!isfinite(sceneMilliseconds) || sceneMilliseconds<0)return @"Invalid scene animation time";
     uint32_t sceneTick=(uint32_t)fmod(sceneMilliseconds,4294967296.0);
+    _lastSceneTick=sceneTick;
+    dc_pc_frame sysInput=dc_merge_pad_for_system_scene(pcInput,controller,&_padCursorX,&_padCursorY);
     if(_dummyScene) {
-        NSString *failure=[_dummyScene drawAtTick:sceneTick pcInput:pcInput width:_width height:_height];
+        NSString *failure=[_dummyScene drawAtTick:sceneTick pcInput:sysInput width:_width height:_height];
         if(failure)return failure;
         _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;
         if(_dummyScene.action){
@@ -1211,7 +1525,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             }
             else if(_dummyOwner==5){[_endingScene resumeFromTemporaryScreen];}
             else if(_dummyOwner==6){
-                if(_startupScene)[_startupScene requestTransition:1 tick:sceneTick];
+                if(_startupScene)[_startupScene requestTransition:4 tick:sceneTick];
                 [_gameScene resumeAtTick:sceneTick];
                 [_gameAudio resumeAfterSystemPage];
             } else if(_dummyOwner==7){
@@ -1221,6 +1535,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                 if(_startupScene)[_startupScene requestTransition:4 tick:sceneTick];
                 [_gameAudio resumeAfterSystemPage];
                 _galleryWaiting=YES;_galleryAction=0;_previousTitleTouch=NO;
+            } else if(_dummyOwner==9){
+                [_editScene resumeFromTemporaryScreen];
             }
             _dummyOwner=0;
         }
@@ -1348,7 +1664,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         return nil;
     }
     if(_configScene) {
-        NSString *failure=[_configScene drawAtTick:sceneTick pcInput:pcInput width:_width height:_height];
+        NSString *failure=[_configScene drawAtTick:sceneTick pcInput:sysInput width:_width height:_height];
         if(failure)return failure;
         _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;
         uint32_t action=_configScene.action;
@@ -1357,7 +1673,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                 NSData *settings=_configScene.configuration;
                 if(settings) {
                     _configuration=settings;
-                    [settings writeToFile:[directory stringByAppendingPathComponent:@"gcd.cfg"] options:NSDataWritingAtomic error:nil];
+                    [settings writeToFile:[dc_writable_state_directory(directory) stringByAppendingPathComponent:@"gcd.cfg"] options:NSDataWritingAtomic error:nil];
                     uint32_t secondary=1;
                     if(settings.length>=sizeof(dc_config)&&dc_config_switch_value((const dc_config *)settings.bytes,4,&secondary)==DC_OK)
                         _secondaryViewDisabledSetting=(secondary==0);
@@ -1374,7 +1690,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         return nil;
     }
     if(_saveScene) {
-        NSString *failure=[_saveScene drawAtTick:sceneTick pcInput:pcInput width:_width height:_height];
+        NSString *failure=[_saveScene drawAtTick:sceneTick pcInput:sysInput width:_width height:_height];
         if(failure)return failure;
         _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;
         if(_saveScene.saveRequested) {
@@ -1392,7 +1708,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         return nil;
     }
     if(_endingScene) {
-        NSString *failure=[_endingScene drawAtTick:sceneTick pcInput:pcInput width:_width height:_height];
+        NSString *failure=[_endingScene drawAtTick:sceneTick pcInput:sysInput width:_width height:_height];
         if(failure)return failure;
         _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;
         if(_endingScene.action==2||_endingScene.action==4){
@@ -1427,17 +1743,50 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                     _story.stage=_flowState.meta.stage;
                 }
             }
-            _endingSceneTypeOverride=category==0?4:(category==1?5:6);
             [_endingScene detachRenderer];_endingScene=nil;
             [self saveStoryToDirectory:directory];
-            NSString *gameError=[self startGameSceneFromDirectory:directory];
+            NSString *gameError=nil;
+            if(category>=2u) {
+                _endingSceneTypeOverride=0;
+                gameError=[self startType7GameSceneFromDirectory:directory];
+            } else {
+                _endingSceneTypeOverride=category==0?4:5;
+                gameError=[self startGameSceneFromDirectory:directory];
+                _endingSceneTypeOverride=0;
+            }
             if(gameError)return gameError;
-            _endingSceneTypeOverride=0;
             _suppressGameplayTouch=YES;
         }
         return nil;
     }
+    if(_editScene && !_gameScene) {
+        NSString *failure=[_editScene drawAtTick:sceneTick pcInput:sysInput width:_width height:_height];
+        if(failure)return failure;
+        _presentedScene=DCVulkanSpriteSceneGameplay;++_presentedFrames;
+        uint32_t editAction=_editScene.action;
+        if(editAction==1u) {
+            [_editScene consumeAction];
+            [_editScene pause];
+            return [self startEditPlaybackFromDirectory:directory];
+        } else if(editAction==2u) {
+            [self returnToTitleScene];
+            return nil;
+        } else if(editAction==3u) {
+            [_editScene consumeAction];
+            return [self enterDummySceneFromDirectory:directory owner:9];
+        }
+        return nil;
+    }
     if(_gameScene && (controller.pressed&DC_PAD_MINUS)) {
+        if(_editScene) {
+            [_gameAudio stopGameplayAudio];
+            [_gameScene detachRenderer];
+            _gameScene=nil;
+            [_editScene resumeFromPlaybackAtTick:sceneTick];
+            _previousGameplayTouch=NO;
+            _suppressGameplayTouch=YES;
+            return nil;
+        }
         [self returnToTitleScene];
         showTitle=titleReady;
     }
@@ -1482,25 +1831,38 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             }
         }
         if(_introScene) {
-        if(pcInput.keys[0x3b]==3)[_introScene requestAuxiliary:2 transition:_startupScene tick:sceneTick];
-        else if(pcInput.keys[0x3c]==3||pcInput.keys[0x1f]==3)[_introScene requestAuxiliary:7 transition:_startupScene tick:sceneTick];
-        else if(pcInput.keys[1]==3)[_introScene requestAuxiliary:5 transition:_startupScene tick:sceneTick];
-        if(pcInput.keys[0x2f]==3||pcInput.keys[0x39]==3||pcInput.mouse[1]==3)[_introScene toggleWindowHidden];
-        [_introScene setFastForward:((pcInput.keys[0x1d]&1)!=0 || (pcInput.keys[0x9d]&1)!=0)];
-        BOOL introTouch = touching || dc_gamepad_pointer_contact_active() ||
-            (controller.pressed&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS)) ||
-            pcInput.keys[0x1c]==1 || pcInput.keys[0x1c]==3 || pcInput.keys[0xd0]==1 || pcInput.keys[0xd0]==3;
-        NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
-            touching:introTouch width:_width height:_height];
-        if(failure)return failure;
-        NSString *auxiliaryFailure=[self handleIntroAuxiliaryFromDirectory:directory];
-        if(auxiliaryFailure)return auxiliaryFailure;
-        if(!_introScene||_configScene||_saveScene||_dummyScene)return nil;
-        _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
+            if(pcInput.keys[0x3b]==3)[_introScene requestAuxiliary:2 transition:_startupScene tick:sceneTick];
+            else if(pcInput.keys[0x3c]==3)[_introScene requestAuxiliary:7 transition:_startupScene tick:sceneTick];
+            else if(pcInput.keys[1]==3)[_introScene requestAuxiliary:5 transition:_startupScene tick:sceneTick];
+            if(pcInput.keys[0xc8]==3 || pcInput.wheel>0 || (controller.pressed&(DC_PAD_UP|DC_PAD_L))) {
+                NSString *histErr=[_introScene stepHistory:-1 tick:sceneTick];
+                if(histErr)return histErr;
+            } else if(_introScene.backlogMode && (pcInput.keys[0xd0]==3 || pcInput.wheel<0 || (controller.pressed&(DC_PAD_DOWN|DC_PAD_R)))) {
+                NSString *histErr=[_introScene stepHistory:1 tick:sceneTick];
+                if(histErr)return histErr;
+            }
+            if(pcInput.keys[0x39]==3 || pcInput.mouse[2]==3 || (controller.pressed&DC_PAD_X)) {
+                NSString *replayErr=[_introScene handleSpaceOrMiddleClick];
+                if(replayErr)return replayErr;
+            } else if(pcInput.keys[0x2f]==3 || pcInput.mouse[1]==3 || (controller.pressed&DC_PAD_Y)) {
+                [_introScene toggleWindowHidden];
+            }
+            [_introScene setFastForward:((pcInput.keys[0x1d]&1)!=0 || (pcInput.keys[0x9d]&1)!=0)];
+            BOOL downAdvances = !_introScene.backlogMode && (pcInput.keys[0xd0]==1 || pcInput.keys[0xd0]==3);
+            BOOL introTouch = touching || dc_gamepad_pointer_contact_active() ||
+                (controller.pressed&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS)) ||
+                pcInput.keys[0x1c]==1 || pcInput.keys[0x1c]==3 || downAdvances;
+            NSString *failure=[_introScene drawWithRenderer:_renderer transition:_startupScene tick:sceneTick
+                touching:introTouch width:_width height:_height];
+            if(failure)return failure;
+            NSString *auxiliaryFailure=[self handleIntroAuxiliaryFromDirectory:directory];
+            if(auxiliaryFailure)return auxiliaryFailure;
+            if(!_introScene||_configScene||_saveScene||_dummyScene)return nil;
+            _presentedScene=DCVulkanSpriteSceneIntro;++_presentedFrames;return nil;
         }
     }
     /* A completed script may have installed a game scene during this draw. */
-    showTitle=titleReady && !_gameScene;
+    showTitle=titleReady && !_gameScene && !_editScene;
     dc_vk_sprite_item draws[8] = {0};
     size_t drawCount = 0;
     BOOL animationMoved = NO;
@@ -1509,16 +1871,23 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
     if (showTitle) {
         if (!_titleUnlocksLoaded) {
             _editUnlocked=NO;_extraUnlocked=NO;
+            NSString *writableDir=dc_writable_state_directory(directory);
+            NSString *realDocsRoot=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
             NSString *gameRoot=[directory stringByDeletingLastPathComponent];
             NSString *docsRoot=[gameRoot stringByDeletingLastPathComponent];
             NSMutableArray<NSString *> *saveDirs=[NSMutableArray array];
             for(NSString *candidate in @[
+                [writableDir stringByAppendingPathComponent:@"save"] ?: @"",
                 [directory stringByAppendingPathComponent:@"save"] ?: @"",
                 [gameRoot stringByAppendingPathComponent:@"save"] ?: @"",
                 [gameRoot stringByAppendingPathComponent:@"saves"] ?: @"",
                 [docsRoot stringByAppendingPathComponent:@"save"] ?: @"",
                 [docsRoot stringByAppendingPathComponent:@"saves"] ?: @"",
-                docsRoot ?: @""
+                docsRoot ?: @"",
+                [realDocsRoot stringByAppendingPathComponent:@"save"] ?: @"",
+                [realDocsRoot stringByAppendingPathComponent:@"saves"] ?: @"",
+                [[realDocsRoot stringByAppendingPathComponent:@"Data"] stringByAppendingPathComponent:@"save"] ?: @"",
+                realDocsRoot ?: @""
             ]) {
                 if(candidate.length && ![saveDirs containsObject:candidate])[saveDirs addObject:candidate];
             }
@@ -1539,21 +1908,6 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                     if(dc_save_get_unlocks(data.bytes,data.length,&unlocked)!=DC_OK) continue;
                     _editUnlocked |= unlocked.edit!=0;_extraUnlocked |= unlocked.extra!=0;
                 }
-            }
-            NSData *flowRecord=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"save/flow.state"]];
-            if(flowRecord.length>=dcFlowPersistHeaderBytes+DC_SAVE_RECORD_BYTES &&
-               memcmp(flowRecord.bytes,"PLFL",4)==0 && ((const uint8_t *)flowRecord.bytes)[4]==1) {
-                const uint8_t *raw=(const uint8_t *)flowRecord.bytes+dcFlowPersistHeaderBytes;
-                uint8_t a=raw[0x23],b=raw[0x21bb],c=raw[0x4353];
-                BOOL allTwo=(a==2&&b==2&&c==2);
-                _editUnlocked |= allTwo;
-                _extraUnlocked |= (allTwo || a!=0 || b!=0 || c!=0);
-            }
-            if(_storyInitialized) {
-                BOOL allTwo=(_story.stages[0].progress==2 && _story.stages[1].progress==2 && _story.stages[2].progress==2);
-                BOOL anyProgress=(_story.unlocked!=0 || _story.stages[0].progress!=0 || _story.stages[1].progress!=0 || _story.stages[2].progress!=0);
-                _editUnlocked |= allTwo;
-                _extraUnlocked |= (allTwo || anyProgress);
             }
             _titleUnlocksLoaded=YES;
         }
@@ -1577,14 +1931,21 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         float scale = fminf((float)_width / 1024.0f, (float)_height / 768.0f);
         float offsetX = ((float)_width - 1024.0f * scale) * 0.5f;
         float offsetY = ((float)_height - 768.0f * scale) * 0.5f;
+        float ptrScreenX = sysInput.active ? (sysInput.x * (float)_width) : ((x + 1.0f) * 0.5f * (float)_width);
+        float ptrScreenY = sysInput.active ? (sysInput.y * (float)_height) : ((1.0f - y) * 0.5f * (float)_height);
+        float ptrGameX = (ptrScreenX - offsetX) / scale;
+        float ptrGameY = (ptrScreenY - offsetY) / scale;
+        BOOL ptrMoved = !_titlePtrInitialized || fabsf(ptrScreenX - _lastTitlePtrX) > 0.5f || fabsf(ptrScreenY - _lastTitlePtrY) > 0.5f;
+        _lastTitlePtrX = ptrScreenX;
+        _lastTitlePtrY = ptrScreenY;
+        _titlePtrInitialized = YES;
         int32_t menuResult=-1,menuRow=-1;
         BOOL acceptsInput=!_titleState.waiting || (_titleState.action==0 && transitionReady);
         BOOL prevTitleTouch=_previousTitleTouch;
-        if (acceptsInput && !_galleryMode && (pcInput.active || touching || prevTitleTouch)) {
-            float screenX = (x + 1.0f) * 0.5f * _width;
-            float screenY = (1.0f - y) * 0.5f * _height;
-            float gameX = (screenX - offsetX) / scale;
-            float gameY = (screenY - offsetY) / scale;
+        BOOL padClickHovered=(sysInput.mouse[0]!=0 && _titleMenuInitialized && _titleMenu.active && _titleMenu.hover>=0);
+        if (acceptsInput && !_galleryMode && ((sysInput.active && (ptrMoved || pcInput.mouse[0]!=0 || padClickHovered)) || touching || prevTitleTouch)) {
+            float gameX = ptrGameX;
+            float gameY = ptrGameY;
             if (!_titleMenuInitialized) {
                 _titleMenu=(dc_menu_state){.hover=-1,.selected=-1};
                 _titleMenuInitialized=YES;
@@ -1592,7 +1953,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             dc_menu_button buttons[5]={0};
             for(uint32_t i=0;i<5;++i)buttons[i]=(dc_menu_button){.x=702,.y=400+72*i,.width=256,.height=48,
                 .disabled=(i==2&&!_editUnlocked)||(i==3&&!_extraUnlocked)};
-            uint8_t input=pcInput.active?pcInput.mouse[0]:(touching ? (prevTitleTouch?1:3) : (prevTitleTouch?2:0));
+            uint8_t input=sysInput.active?sysInput.mouse[0]:(touching ? (prevTitleTouch?1:3) : (prevTitleTouch?2:0));
             // The original menu requires hover before the press. A direct
             // touchscreen press moves and clicks in one event, so establish
             // the same hover at this location before forwarding its press.
@@ -1608,23 +1969,23 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             menuResult=result;menuRow=_titleMenu.hover;
         }
         uint64_t up=DC_PAD_UP|(UINT64_C(1)<<17),down=DC_PAD_DOWN|(UINT64_C(1)<<19);
-        if(acceptsInput && !_galleryMode && (controller.pressed&(up|down|DC_PAD_A|DC_PAD_PLUS))) {
+        if(acceptsInput && !_galleryMode && pcInput.keys[0x3c]==3) {
+            /* 0x0052f67d: F2 directly triggers Load (menu row 1) from Title. */
+            menuRow=1;menuResult=1;_selectedTitleOption=3;
+        } else if(acceptsInput && !_galleryMode && menuResult!=1 && (controller.pressed&(up|down|DC_PAD_A|DC_PAD_PLUS))) {
             int step=(controller.pressed&up)?-1:(controller.pressed&down)?1:0;
             if(step) {
                 do { _controllerTitleRow=(_controllerTitleRow+step+5)%5; }
                 while((_controllerTitleRow==2&&!_editUnlocked)||(_controllerTitleRow==3&&!_extraUnlocked));
             }
+            _titleMenuInitialized=YES;
+            _titleMenu=(dc_menu_state){.active=1,.hover=_controllerTitleRow,.selected=-1};
             menuRow=_controllerTitleRow;
             menuResult=(controller.pressed&(DC_PAD_A|DC_PAD_PLUS))?1:3;
             _selectedTitleOption=menuRow+2;
         }
         BOOL galleryTap=(acceptsInput && _galleryMode && touching && !prevTitleTouch);
         _previousTitleTouch=touching;
-        if(acceptsInput && !_galleryMode && pcInput.keys[0x3b]==3) {
-            NSString *configError=[self enterConfigSceneFromDirectory:directory];
-            if(configError)return configError;
-            return nil;
-        }
         if(_galleryMode) {
             [self tryLoadExtraGalleryFromDirectory:directory];
             uint64_t prevPad=up|DC_PAD_LEFT|(UINT64_C(1)<<20);
@@ -1638,6 +1999,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                         _galleryAction=0;
                         return [self enterDummySceneFromDirectory:directory owner:8];
                     } else if((_galleryAction==2||_galleryAction==3) && transitionReady && !_gameAudio.selectionBusy) {
+                        if(_galleryAction==2){[self returnToTitleScene];return nil;}
                         _galleryMode=NO;_galleryViewingCG=NO;_galleryWaiting=NO;_galleryAction=0;
                         if(_galleryTexture){dc_vk_sprite_remove_texture(_renderer,_galleryTexture);_galleryTexture=0;}
                         [_gameAudio stopExtraMusic];
@@ -1654,7 +2016,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                         _galleryViewingCG=NO;_galleryAction=0;_galleryWaiting=YES;
                         if([_startupScene requestTransition:4 tick:sceneTick]!=DC_OK)return @"Extra CG return transition failed";
                     }
-                } else if(pcInput.keys[1]==3) {
+                } else if(sysInput.keys[1]==3) {
                     if([_startupScene requestTransition:3 tick:sceneTick]!=DC_OK)return @"Extra dummy transition failed";
                     for(unsigned g=0;g<3;++g)_extraMenus[g]=(dc_menu_state){.hover=-1,.selected=-1};
                     _galleryWaiting=YES;_galleryAction=22;
@@ -1666,18 +2028,19 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                         _galleryWaiting=YES;_galleryAction=21;
                     }
                 } else {
-                    float screenX=(x+1.0f)*0.5f*_width;
-                    float screenY=(1.0f-y)*0.5f*_height;
-                    float gameX=(screenX-offsetX)/scale;
-                    float gameY=(screenY-offsetY)/scale;
+                    float gameX=ptrGameX;
+                    float gameY=ptrGameY;
                     BOOL selectedFromMenu=NO;
-                    if(pcInput.active || touching || prevTitleTouch) {
+                    BOOL extraPadHover=(_extraMenus[0].active&&_extraMenus[0].hover>=0)||
+                                       (_extraMenus[1].active&&_extraMenus[1].hover>=0)||
+                                       (_extraMenus[2].active&&_extraMenus[2].hover>=0);
+                    if((sysInput.active && (ptrMoved || pcInput.mouse[0]!=0 || (sysInput.mouse[0]!=0 && extraPadHover))) || touching || prevTitleTouch) {
                         dc_menu_button buttons0[6]={0},buttons1[11]={0},buttons2[2]={0};
                         for(uint32_t i=0;i<6;++i)buttons0[i]=(dc_menu_button){.x=64+152*(int32_t)i,.y=112,.width=144,.height=176,.disabled=0};
                         for(uint32_t i=0;i<11;++i)buttons1[i]=(dc_menu_button){.x=64+152*(int32_t)(i%6),.y=i<6?368:536,.width=144,.height=128,.disabled=0};
                         buttons2[0]=(dc_menu_button){.x=48,.y=704,.width=56,.height=56,.disabled=0};
                         buttons2[1]=(dc_menu_button){.x=128,.y=704,.width=56,.height=56,.disabled=0};
-                        uint8_t input=pcInput.active?pcInput.mouse[0]:(touching?(prevTitleTouch?1:3):(prevTitleTouch?2:0));
+                        uint8_t input=sysInput.active?sysInput.mouse[0]:(touching?(prevTitleTouch?1:3):(prevTitleTouch?2:0));
                         int32_t res0=-1,res1=-1,res2=-1;
                         if(input==3) {
                             int32_t hr=-1;
@@ -1776,25 +2139,17 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                     NSString *saveError=[self enterSaveSceneFromDirectory:directory];
                     if(saveError)return saveError;
                 } else if(command.value==3) {
-                    /* Original Edit destination (FUN_005f1d20): the character
-                     * edit presentation over the first gameplay scene. The
-                     * story save is not modified. */
-                    [self loadStoryFromDirectory:directory];
-                    dc_story_state savedStory=_story;
-                    BOOL savedStoryInit=_storyInitialized;
-                    dc_flow_state savedFlow=_flowState;
-                    BOOL savedFlowInit=_flowInitialized;
-                    _story.chapter=3;_story.map=0;_story.stage=2;
-                    _storyInitialized=YES;
+                    /* Original Edit Studio destination (0x005f1d20, Scene Type 11):
+                     * silent 2D studio over RPP_02.pp that launches Type 12 3D
+                     * playback without modifying story saves. */
+                    [_gameAudio stopTitleMusic];
                     [_gameScene detachRenderer];_gameScene=nil;
-                    NSString *editError=[self startGameSceneFromDirectory:directory];
-                    _story=savedStory;_storyInitialized=savedStoryInit;
-                    _flowState=savedFlow;_flowInitialized=savedFlowInit;
-                    if(editError)return editError;
-                    if(_gameScene){
-                        [_gameScene setEditMode:YES];
-                        [_gameAudio startGameplayMusicForSceneType:12 map:0];
-                    }
+                    [_editScene detachRenderer];_editScene=nil;
+                    NSString *editError=nil;
+                    _editScene=[[DCEditScene alloc] initWithDirectory:directory renderer:_renderer transition:_startupScene error:&editError];
+                    if(!_editScene)return editError ?: @"Edit Studio initialization failed";
+                    _previousGameplayTouch=NO;
+                    _suppressGameplayTouch=YES;
                 } else if(command.value==4) {
                     /* Original Extra destination (0x510a40): CG gallery grid
                      * in RPP_02.pp with bgm012.wav. */
@@ -1817,7 +2172,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                 // New Game must not inherit an old interaction-complete flag
                 // or player position. Reserve the player prefix for the first
                 // actual scene save, then append the fresh chapter state.
-                NSString *saveDirectory=[directory stringByAppendingPathComponent:@"save"];
+                NSString *saveDirectory=[dc_writable_state_directory(directory) stringByAppendingPathComponent:@"save"];
                 [[NSFileManager defaultManager] createDirectoryAtPath:saveDirectory withIntermediateDirectories:YES attributes:nil error:nil];
                 [[NSData dataWithBytes:(uint8_t[DC_GAME_PLAYER_SAVE_BYTES]){0} length:DC_GAME_PLAYER_SAVE_BYTES]
                     writeToFile:[saveDirectory stringByAppendingPathComponent:@"player.state"] options:NSDataWritingAtomic error:nil];
@@ -1834,7 +2189,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             } else return @"Title destination adapter is not implemented";
         }
         _titleState=enteredGallery?(dc_title_state){.waiting=0,.action=0,.hover=255}:titlePlan.next;
-        if(_saveScene||_configScene||_gameScene||_dummyScene)return nil;
+        if(_saveScene||_configScene||_editScene||_gameScene||_dummyScene)return nil;
         if(_introScene) {
             BOOL introTouch = touching || dc_gamepad_pointer_contact_active() ||
                 (controller.pressed&(DC_PAD_A|DC_PAD_B|DC_PAD_PLUS)) ||
@@ -1873,11 +2228,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                 ADD_TITLE_LAYER((uint32_t)_selectedTitleOption, 702, 400 + 72 * (_selectedTitleOption - 2));
             if (!_editUnlocked) ADD_TITLE_LAYER(7, 702, 544);
             if (!_extraUnlocked) ADD_TITLE_LAYER(8, 702, 616);
-            float screenX = (x + 1.0f) * 0.5f * _width;
-            float screenY = (1.0f - y) * 0.5f * _height;
-            float gameX = (screenX - offsetX) / scale;
-            float gameY = (screenY - offsetY) / scale;
-            ADD_TITLE_LAYER(0, gameX - 6.4f, gameY - 6.4f);
+            ADD_TITLE_LAYER(0, ptrGameX - 6.4f, ptrGameY - 6.4f);
         } else if (_extraSceneLoaded) {
             if (_galleryViewingCG && !_galleryTexture) [self loadGalleryImageFromDirectory:directory];
             if (_galleryViewingCG && _galleryTexture) {
@@ -1896,11 +2247,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                 } else if (_extraMenus[2].active && _extraMenus[2].hover == 1) {
                     ADD_EXTRA_LAYER(_extraTextures[4], 128, 704, 56, 56);
                 }
-                float screenX = (x + 1.0f) * 0.5f * _width;
-                float screenY = (1.0f - y) * 0.5f * _height;
-                float gameX = (screenX - offsetX) / scale;
-                float gameY = (screenY - offsetY) / scale;
-                ADD_TITLE_LAYER(0, gameX - 6.4f, gameY - 6.4f);
+                ADD_TITLE_LAYER(0, ptrGameX - 6.4f, ptrGameY - 6.4f);
             }
         } else {
             ADD_TITLE_LAYER(1, 0, 0);
@@ -1913,11 +2260,7 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                     .x=offsetX+(1024*scale-side)*.5f,.y=offsetY+(768*scale-side*.75f)*.5f,
                     .z=.6f,.scale_x=1,.scale_y=1,.alpha=1,.red=1,.green=1,.blue=1,.u1=1,.v1=1};
             }
-            float screenX = (x + 1.0f) * 0.5f * _width;
-            float screenY = (1.0f - y) * 0.5f * _height;
-            float gameX = (screenX - offsetX) / scale;
-            float gameY = (screenY - offsetY) / scale;
-            ADD_TITLE_LAYER(0, gameX - 6.4f, gameY - 6.4f);
+            ADD_TITLE_LAYER(0, ptrGameX - 6.4f, ptrGameY - 6.4f);
         }
 #undef ADD_EXTRA_LAYER
 #undef ADD_TITLE_LAYER
@@ -1939,9 +2282,19 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
             dc_pc_frame gamePC=pcInput;
             if(suppressInput) gamePC=(dc_pc_frame){0};
             _gameScene.voiceMouthPhase=_gameAudio?[_gameAudio gameplayVoiceMouthPhase]:0.0f;
+            for(char pfx='a';pfx<='c';++pfx)
+                [_gameScene setVoiceMouthPhase:(_gameAudio?[_gameAudio gameplayVoiceMouthPhaseForPrefix:pfx]:0.0f) forPrefix:pfx];
             NSString *gameFailure=[_gameScene drawAtTick:sceneTick inputX:x inputY:y touching:gameTouch controller:gameController pcInput:gamePC width:_width height:_height];
             if(gameFailure)return gameFailure;
-            if(_gameScene.interactiveScene)_secondaryViewDisabledSetting=!_gameScene.secondaryViewVisible;
+            if(_gameScene.interactiveScene) {
+                _secondaryViewDisabledSetting=!_gameScene.secondaryViewVisible;
+                if(_configuration.length>=sizeof(dc_config)) {
+                    dc_config synced=*(const dc_config *)_configuration.bytes;
+                    [_gameScene syncConfiguration:&synced];
+                    if(memcmp(&synced,_configuration.bytes,sizeof(synced))!=0)
+                        _configuration=[NSData dataWithBytes:&synced length:sizeof(synced)];
+                }
+            }
             effectFailure=[self playPendingGameplayEffect];if(effectFailure)return effectFailure;
             if([_gameScene takeEditPauseStopRequest])[_gameAudio stopActiveGameplayEffectsAndVoice];
             [_gameAudio setGameplayLoopSlot:13 active:_gameScene.vibratorLoopActive];
@@ -2128,7 +2481,8 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
                 (self->_gameScene.interactionActive||self->_gameAudio.gameplayVoiceBusy);
             NSString *gameContext=self->_gameScene.presentationContext.length?self->_gameScene.presentationContext:
                 (self->_configScene.presentationContext.length?self->_configScene.presentationContext:
-                 (self->_saveScene.presentationContext?:@""));
+                 (self->_saveScene.presentationContext.length?self->_saveScene.presentationContext:
+                  (self->_editScene.presentationContext?:@"")));
             NSString *probeStatus=@"";
 #if DEBUG
             probeStatus=self->_probeWorkerStatus?:@"";
@@ -2149,14 +2503,20 @@ static void dc_merge_pc_actions(dc_pc_frame input, dc_pad_frame *controller) {
         self.backgroundColor=UIColor.blackColor;
         _surface=[[DCVulkanSpriteView alloc] initWithFrame:self.bounds];
         [self addSubview:_surface];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(overlayLayoutDidChange)
+            name:DCGamepadOverlayLayoutDidChangeNotification object:nil];
     }
     return self;
 }
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+}
+- (void)overlayLayoutDidChange { [self setNeedsLayout]; }
 - (void)setReservesControls:(BOOL)value { _reservesControls=value;[self setNeedsLayout]; }
 - (void)safeAreaInsetsDidChange { [super safeAreaInsetsDidChange];[self setNeedsLayout]; }
 - (void)layoutSubviews {
     [super layoutSubviews];CGRect frame=self.bounds;
-    if(_reservesControls) {
+    if(_reservesControls && dc_gamepad_overlay_reserves_gutters()) {
         UIEdgeInsets s=self.safeAreaInsets;dc_pc_touch_view v;
         if(dc_pc_touch_viewport(frame.size.width,frame.size.height,s.left,s.top,s.right,s.bottom,&v)==DC_OK)
             frame=CGRectMake(v.x,v.y,v.width,v.height);

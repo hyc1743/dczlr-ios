@@ -328,6 +328,21 @@ dc_status dc_xx_material_baseline(const dc_xx *model, uint32_t index, dc_materia
     return DC_OK;
 }
 
+dc_status dc_xx_material_stage_tci(const dc_xx *model, uint32_t material_index,
+        uint32_t stage, uint8_t *out_op, uint8_t *out_tci) {
+    if (!model || !out_op || !out_tci || out_op == out_tci) return DC_ARGUMENT;
+    if (overlap(model->data, model->length, out_op, 1) ||
+        overlap(model->data, model->length, out_tci, 1)) return DC_ARGUMENT;
+    if (material_index >= model->info.materials || stage >= 8u) return DC_RANGE;
+    dc_xx_span span = model->materials[material_index].texture_names[stage];
+    if (span.offset > model->length || span.length > model->length - span.offset ||
+        model->length - (span.offset + span.length) < 16u) return DC_FORMAT;
+    const uint8_t *desc = model->data + span.offset + span.length;
+    *out_op = desc[0];
+    *out_tci = desc[3];
+    return DC_OK;
+}
+
 dc_status dc_xx_find_node_encoded(const dc_xx *model, const void *name_bytes, size_t length, uint32_t *index) {
     if (!model || !name_bytes || !index) return DC_ARGUMENT;
     if (overlap(model->data, model->length, index, sizeof(*index))) return DC_ARGUMENT;

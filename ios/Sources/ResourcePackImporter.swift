@@ -74,10 +74,28 @@ final class ResourcePackImporter {
         do { manifest = try JSONDecoder().decode(DczlrPackManifest.self, from: Data(contentsOf: manifestURL)); try manifest.validate() }
         catch { throw PackImportError.invalidManifest }
         let packs = root.appendingPathComponent("ResourcePacks", isDirectory: true)
+        var searchDirs: [URL] = [
+            root,
+            packs,
+            root.appendingPathComponent("Data", isDirectory: true),
+            root.appendingPathComponent("game/Data", isDirectory: true)
+        ]
+        if let bundleRes = Bundle.main.resourceURL {
+            searchDirs.append(bundleRes)
+            searchDirs.append(bundleRes.appendingPathComponent("ResourcePacks", isDirectory: true))
+            searchDirs.append(bundleRes.appendingPathComponent("Data", isDirectory: true))
+        }
+        let bundleRoot = Bundle.main.bundleURL
+        searchDirs.append(bundleRoot)
+        searchDirs.append(bundleRoot.appendingPathComponent("ResourcePacks", isDirectory: true))
+        searchDirs.append(bundleRoot.appendingPathComponent("Data", isDirectory: true))
         var handles: [FileHandle] = []
         defer { handles.forEach { try? $0.close() } }
         for part in manifest.parts {
-            let url = fileManager.fileExists(atPath: root.appendingPathComponent(part.name).path) ? root.appendingPathComponent(part.name) : packs.appendingPathComponent(part.name)
+            let url = searchDirs
+                .map { $0.appendingPathComponent(part.name) }
+                .first { fileManager.fileExists(atPath: $0.path) }
+                ?? packs.appendingPathComponent(part.name)
             guard fileManager.fileExists(atPath: url.path) else { throw PackImportError.missingPart(part.name) }
             guard (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) == part.size else { throw PackImportError.hashMismatch(part.name) }
             let partHash = try SHA256Stream.hash(file: url, chunkSize: chunkSize)

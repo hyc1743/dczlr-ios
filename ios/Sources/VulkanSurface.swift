@@ -82,7 +82,7 @@ final class SpritePresenter: NSObject {
         }
         view.setActive(model.active)
         let link = CADisplayLink(target: self, selector: #selector(draw))
-        link.preferredFramesPerSecond = 30
+        link.preferredFramesPerSecond = 60
         link.isPaused = !model.active
         link.add(to: .main, forMode: .common)
         displayLink = link

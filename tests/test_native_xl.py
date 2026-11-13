@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from native_core import PPArchive, XLInfo, XLLight, library
+from native_core import PPArchive, XLD3DLight, XLInfo, XLLight, library
 
 
 def encoded(value):
@@ -125,6 +125,30 @@ class NativeXLTests(unittest.TestCase):
                 self.assertEqual(light.target.length, 1)
                 seen += 1
             self.assertEqual(seen, 8)
+
+    @unittest.skipUnless((ROOT / "Data/RPP_10.pp").is_file() and (ROOT / "Data/RPP_07.pp").is_file(),
+                         "local game resources are not present")
+    def test_d3d_light_decoder_aligns_d3dlight9_fields_on_real_archives(self):
+        with PPArchive(ROOT / "Data/RPP_10.pp") as archive:
+            for idx in range(archive.count):
+                entry = archive.entry(idx)
+                if entry.name_bytes.lower().endswith(b"mp00_06.xl"):
+                    data = archive.read(idx)
+                    d3d = XLD3DLight()
+                    self.assertEqual(self.lib.dc_xl_d3d_light_at(data, len(data), 0, C.byref(d3d)), 0)
+                    self.assertEqual((d3d.mode, d3d.d3d_type), (1, 1))
+                    self.assertAlmostEqual(d3d.range, 400.0, places=3)
+                    self.assertAlmostEqual(d3d.position[1], 30.1, places=2)
+                    break
+            else:
+                self.fail("mp00_06.xl not found in RPP_10.pp")
+        with PPArchive(ROOT / "Data/RPP_07.pp") as archive:
+            data = archive.read(0)
+            d3d = XLD3DLight()
+            self.assertEqual(self.lib.dc_xl_d3d_light_at(data, len(data), 0, C.byref(d3d)), 0)
+            self.assertEqual(d3d.mode, 2)
+            self.assertIn(d3d.d3d_type, (1, 2, 3))
+            self.assertGreater(d3d.range, 0.0)
 
 
 if __name__ == "__main__":

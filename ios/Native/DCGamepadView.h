@@ -7,9 +7,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)invalidateInput;
 + (nullable NSString *)verifyControls NS_SWIFT_NAME(verifyControls());
 @end
+extern NSString *const DCGamepadOverlayLayoutDidChangeNotification;
 /* Thread-safe snapshots: the renderer receives a value, never shared UIKit state. */
 dc_pad_frame dc_gamepad_read(void);
 BOOL dc_gamepad_pointer_contact_active(void);
+BOOL dc_gamepad_overlay_reserves_gutters(void);
 NSString *dc_gamepad_presentation(void);
 void dc_gamepad_set_active(BOOL active);
 void dc_gamepad_set_context(uint32_t scene,BOOL completed,BOOL busy);

@@ -16,10 +16,11 @@ dc_status dc_camera_secondary_viewport(const dc_viewport *main,dc_viewport *out)
     *out=next;return DC_OK;
 }
 
-dc_status dc_camera_secondary_pointer(const dc_camera_orbit *source,
+static dc_status camera_pointer_step(const dc_camera_orbit *source,const float anchor[3],
         const dc_camera_pointer_limits *limits,const dc_camera_pointer_input *in,dc_camera_orbit *out) {
-    if(!source||!limits||!in||!out)return DC_ARGUMENT;
+    if(!source||!anchor||!limits||!in||!out)return DC_ARGUMENT;
     if(in->left>3||in->right>3||in->middle>3||in->fast>1)return DC_RANGE;
+    for(unsigned i=0;i<3;++i)if(!isfinite(anchor[i]))return DC_RANGE;
     const float bounds[]={limits->far_distance,limits->near_distance,limits->high,limits->low,limits->wheel_step};
     for(unsigned i=0;i<5;++i)if(!isfinite(bounds[i]))return DC_RANGE;
     if(limits->near_distance<=0||limits->far_distance<limits->near_distance||limits->high<limits->low||limits->wheel_step<0)return DC_RANGE;
@@ -48,10 +49,21 @@ dc_status dc_camera_secondary_pointer(const dc_camera_orbit *source,
         for(unsigned i=0;i<3;++i) {
             float movement=(float)((double)x*camera.world.values[i]+(double)z*camera.world.values[8+i]);
             float value=next.base.values[12+i]+movement;
-            next.base.values[12+i]=fmaxf(-50,fminf(50,value));
+            next.base.values[12+i]=fmaxf(anchor[i]-50.f,fminf(anchor[i]+50.f,value));
         }
     }
     *out=next;return DC_OK;
+}
+
+dc_status dc_camera_secondary_pointer(const dc_camera_orbit *source,
+        const dc_camera_pointer_limits *limits,const dc_camera_pointer_input *in,dc_camera_orbit *out) {
+    static const float origin[3]={0.f,0.f,0.f};
+    return camera_pointer_step(source,origin,limits,in,out);
+}
+
+dc_status dc_camera_primary_pointer(const dc_camera_orbit *source,const float anchor[3],
+        const dc_camera_pointer_limits *limits,const dc_camera_pointer_input *in,dc_camera_orbit *out) {
+    return camera_pointer_step(source,anchor,limits,in,out);
 }
 
 dc_status dc_camera_scene_node(uint32_t stage,uint32_t binding,char *out,size_t capacity) {

@@ -4,6 +4,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <ImageIO/ImageIO.h>
 #include "dc_save.h"
+#include "dc_config.h"
 #include "dc_gameplay.h"
 #include "dc_story.h"
 #include <math.h>
@@ -119,9 +120,31 @@ static uint32_t saveDword(const uint8_t *p) {
     BOOL _entered,_ready,_saveRequested,_saveDisabled,_pausedMusic;
     NSDictionary *_lastRenderCapture;
 }
+- (NSString *)writableStateDirectory {
+    NSString *bundlePath = NSBundle.mainBundle.bundlePath.stringByStandardizingPath;
+    NSString *stdDir = _directory.stringByStandardizingPath;
+    NSFileManager *fm = NSFileManager.defaultManager;
+    if (stdDir.length && (!bundlePath.length || ![stdDir hasPrefix:bundlePath]) && [fm isWritableFileAtPath:stdDir]) {
+        return _directory;
+    }
+    NSString *docsRoot = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    if (docsRoot.length) {
+        NSString *writable = [docsRoot stringByAppendingPathComponent:@"game/Data"];
+        [fm createDirectoryAtPath:writable withIntermediateDirectories:YES attributes:nil error:nil];
+        return writable;
+    }
+    return _directory ?: @"";
+}
+- (NSString *)readableStatePath:(NSString *)relativePath {
+    NSFileManager *fm = NSFileManager.defaultManager;
+    NSString *writable = [[self writableStateDirectory] stringByAppendingPathComponent:relativePath];
+    if (writable.length && [fm fileExistsAtPath:writable]) return writable;
+    NSString *direct = [_directory stringByAppendingPathComponent:relativePath];
+    if (direct.length && [fm fileExistsAtPath:direct]) return direct;
+    return writable.length ? writable : direct;
+}
 - (NSData *)compatibilitySlotFromExistingState {
-    NSString *saveDirectory=[_directory stringByAppendingPathComponent:@"save"];
-    NSData *flow=[NSData dataWithContentsOfFile:[saveDirectory stringByAppendingPathComponent:@"flow.state"]];
+    NSData *flow=[NSData dataWithContentsOfFile:[self readableStatePath:@"save/flow.state"]];
     NSMutableData *raw=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
     dc_save_slot_meta meta={0};BOOL haveRaw=NO;
     if(flow.length>=13+DC_GAME_STATE_BYTES&&memcmp(flow.bytes,"PLFL",4)==0&&((const uint8_t *)flow.bytes)[4]==1) {
@@ -129,7 +152,7 @@ static uint32_t saveDword(const uint8_t *p) {
         memcpy(raw.mutableBytes,(const uint8_t *)flow.bytes+13,DC_GAME_STATE_BYTES);haveRaw=YES;
     }
     if(!haveRaw) {
-        NSData *player=[NSData dataWithContentsOfFile:[saveDirectory stringByAppendingPathComponent:@"player.state"]];
+        NSData *player=[NSData dataWithContentsOfFile:[self readableStatePath:@"save/player.state"]];
         if(player.length<DC_GAME_PLAYER_SAVE_BYTES+DC_STORY_SAVE_BYTES)return nil;
         dc_story_state story;
         if(dc_story_load((const uint8_t *)player.bytes+DC_GAME_PLAYER_SAVE_BYTES,player.length-DC_GAME_PLAYER_SAVE_BYTES,&story)!=DC_OK)return nil;
@@ -137,6 +160,7 @@ static uint32_t saveDword(const uint8_t *p) {
         for(unsigned i=0;i<DC_STORY_STAGES;++i){size_t base=(size_t)i*0x2198;uint8_t *p=raw.mutableBytes;p[base]=story.stages[i].flag_a;p[base+1]=story.stages[i].flag_b;p[base+0x23]=(uint8_t)story.stages[i].progress;}
         meta=(dc_save_slot_meta){(uint8_t)story.chapter,3,3,(uint8_t)story.map,(uint8_t)story.stage,255,255,254};
     }
+    if(meta.chapter==25||meta.chapter==26)return nil;
     NSMutableData *slot=[NSMutableData dataWithLength:DC_SAVE_SLOT_BYTES];
     if(dc_save_slot_encode(raw.bytes,raw.length,&meta,slot.mutableBytes,slot.length)!=DC_OK)return nil;
     return slot;
@@ -181,9 +205,11 @@ static uint32_t saveDword(const uint8_t *p) {
     _select=[self audio:@"se100.wav" archive:@"RPP_14.pp" error:error];
     _toggle=[self audio:@"se101.wav" archive:@"RPP_14.pp" error:error];
     if(!_music||!_select||!_toggle)return nil;
-    NSData *configuration=[NSData dataWithContentsOfFile:[directory stringByAppendingPathComponent:@"gcd.cfg"]];
-    int32_t se=-1200,bgm=-1200;
-    if(configuration.length>=12){const uint8_t *p=configuration.bytes;se=(int32_t)saveDword(p+4);bgm=(int32_t)saveDword(p+8);}
+    NSData *configuration=[NSData dataWithContentsOfFile:[self readableStatePath:@"gcd.cfg"]];
+    float se=-1200.f,bgm=-1200.f;dc_config cfg;
+    if(configuration&&dc_config_decode(configuration.bytes,configuration.length,&cfg)==DC_OK){
+        dc_config_slider_value(&cfg,1,&bgm);dc_config_slider_value(&cfg,2,&se);
+    }
     _music.volume=powf(10,bgm/2000.f);_select.volume=_toggle.volume=powf(10,se/2000.f);
     [self refreshSlots];
     /*00530b90/00530970 choose the latest local DOS date/time; ties keep the
@@ -214,12 +240,20 @@ static uint32_t saveDword(const uint8_t *p) {
 }
 - (void)syncExternalSaveFiles {
     NSFileManager *fm=[NSFileManager defaultManager];
-    NSString *targetDir=[_directory stringByAppendingPathComponent:@"save"];
+    NSString *targetDir=[[self writableStateDirectory] stringByAppendingPathComponent:@"save"];
     [fm createDirectoryAtPath:targetDir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *realDocsRoot=NSSearchPathForDirectoriesInDomains(NSDocumentDirectory,NSUserDomainMask,YES).firstObject;
     NSString *gameRoot=[_directory stringByDeletingLastPathComponent];
     NSString *docsRoot=[gameRoot stringByDeletingLastPathComponent];
     NSMutableArray<NSString *> *searchDirs=[NSMutableArray array];
     for(NSString *candidate in @[
+        realDocsRoot ?: @"",
+        [realDocsRoot stringByAppendingPathComponent:@"save"] ?: @"",
+        [realDocsRoot stringByAppendingPathComponent:@"Save"] ?: @"",
+        [realDocsRoot stringByAppendingPathComponent:@"saves"] ?: @"",
+        [realDocsRoot stringByAppendingPathComponent:@"Saves"] ?: @"",
+        [[realDocsRoot stringByAppendingPathComponent:@"Data"] stringByAppendingPathComponent:@"save"] ?: @"",
+        [[realDocsRoot stringByAppendingPathComponent:@"game/Data"] stringByAppendingPathComponent:@"save"] ?: @"",
         docsRoot ?: @"",
         [docsRoot stringByAppendingPathComponent:@"save"] ?: @"",
         [docsRoot stringByAppendingPathComponent:@"Save"] ?: @"",
@@ -228,6 +262,7 @@ static uint32_t saveDword(const uint8_t *p) {
         [[docsRoot stringByAppendingPathComponent:@"Data"] stringByAppendingPathComponent:@"save"] ?: @"",
         [gameRoot stringByAppendingPathComponent:@"save"] ?: @"",
         [gameRoot stringByAppendingPathComponent:@"saves"] ?: @"",
+        [_directory stringByAppendingPathComponent:@"save"] ?: @"",
         targetDir ?: @""
     ]) {
         if(candidate.length && ![searchDirs containsObject:candidate])[searchDirs addObject:candidate];
@@ -270,7 +305,7 @@ static uint32_t saveDword(const uint8_t *p) {
     NSMutableData *decoded=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];
     for(uint32_t slot=0;slot<80;++slot){
         char name[16];dc_save_slot_name(slot,name,sizeof(name));
-        NSString *path=[[_directory stringByAppendingPathComponent:@"save"] stringByAppendingPathComponent:[NSString stringWithUTF8String:name]];
+        NSString *path=[self readableStatePath:[NSString stringWithFormat:@"save/%s",name]];
         NSFileHandle *file=[NSFileHandle fileHandleForReadingFromURL:[NSURL fileURLWithPath:path] error:nil];
         NSData *bytes=file?[file readDataUpToLength:DC_SAVE_SLOT_BYTES error:nil]:nil;[file closeAndReturnError:nil];
         dc_save_slot_meta meta={0};
@@ -300,35 +335,6 @@ static uint32_t saveDword(const uint8_t *p) {
         }
         [slots addObject:entry];
     }
-    if(![slots[0][@"data"] length]) {
-        NSData *compatibility=[self compatibilitySlotFromExistingState];
-        if(compatibility) {
-            NSMutableData *compatDecoded=[NSMutableData dataWithLength:DC_GAME_STATE_BYTES];dc_save_slot_meta meta={0};
-            if(dc_save_slot_decode(compatibility.bytes,compatibility.length,compatDecoded.mutableBytes,compatDecoded.length,&meta)==DC_OK) {
-                const uint8_t *p=compatDecoded.bytes;
-                NSMutableDictionary *entry=[slots[0] mutableCopy];
-                entry[@"data"]=compatibility;
-                entry[@"prefix"]=[NSData dataWithBytes:p length:DC_SAVE_RECORD_BYTES];
-                entry[@"chapter"]=@(meta.chapter);
-                entry[@"complete"]=@(p[0x23]==2&&p[0x2198+0x23]==2&&p[0x4330+0x23]==2);
-                NSString *saveDirectory=[_directory stringByAppendingPathComponent:@"save"];
-                NSDate *date=[[NSFileManager defaultManager] attributesOfItemAtPath:[saveDirectory stringByAppendingPathComponent:@"flow.state"] error:nil][NSFileModificationDate];
-                if(!date)date=[[NSFileManager defaultManager] attributesOfItemAtPath:[saveDirectory stringByAppendingPathComponent:@"player.state"] error:nil][NSFileModificationDate];
-                if(date){
-                    NSDateComponents *c=[calendar components:NSCalendarUnitYear|NSCalendarUnitMonth|NSCalendarUnitDay|NSCalendarUnitHour|NSCalendarUnitMinute|NSCalendarUnitSecond fromDate:date];
-                    unsigned values[5]={(unsigned)c.year,(unsigned)c.month,(unsigned)c.day,(unsigned)c.hour,(unsigned)c.minute};
-                    NSMutableArray *digits=[NSMutableArray arrayWithCapacity:12];
-                    unsigned year=values[0];[digits addObject:@((year/10)%10)];[digits addObject:@((year/100)%10)];[digits addObject:@((year/1000)%10)];
-                    for(unsigned field=1;field<5;++field){unsigned value=values[field];[digits addObject:@(value%10)];[digits addObject:@((value/10)%10)];}
-                    [digits addObject:@0];
-                    entry[@"digits"]=digits;
-                    uint64_t stamp=(((uint64_t)c.year*10000+(uint64_t)c.month*100+(uint64_t)c.day)*1000000+(uint64_t)c.hour*10000+(uint64_t)c.minute*100+(uint64_t)c.second/2);
-                    entry[@"stamp"]=@(stamp);
-                }
-                slots[0]=entry;
-            }
-        }
-    }
     _slots=slots;
 }
 - (void)detachRenderer {
@@ -338,9 +344,11 @@ static uint32_t saveDword(const uint8_t *p) {
 - (void)pause {_pausedMusic=_pausedMusic||_music.isPlaying;[_music pause];[_select pause];[_toggle pause];}
 - (void)resumeFromTemporaryScreen {
     _pendingAction=_action=0;_entered=_ready=NO;_loadData=nil;
-    NSData *configuration=[NSData dataWithContentsOfFile:[_directory stringByAppendingPathComponent:@"gcd.cfg"]];
-    int32_t se=-1200,bgm=-1200;
-    if(configuration.length>=12){const uint8_t *p=configuration.bytes;se=(int32_t)saveDword(p+4);bgm=(int32_t)saveDword(p+8);}
+    NSData *configuration=[NSData dataWithContentsOfFile:[self readableStatePath:@"gcd.cfg"]];
+    float se=-1200.f,bgm=-1200.f;dc_config cfg;
+    if(configuration&&dc_config_decode(configuration.bytes,configuration.length,&cfg)==DC_OK){
+        dc_config_slider_value(&cfg,1,&bgm);dc_config_slider_value(&cfg,2,&se);
+    }
     if(_music)_music.volume=powf(10,bgm/2000.f);
     if(_select)_select.volume=powf(10,se/2000.f);
     if(_toggle)_toggle.volume=powf(10,se/2000.f);
@@ -374,7 +382,9 @@ static uint32_t saveDword(const uint8_t *p) {
             _pausedMusic=NO;[_music stop];_action=_pendingAction;
         } else if(!_pendingAction)_ready=YES;
     }
-    float x=input.x*1024,y=input.y*768;
+    float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
+    float x=scale>0.f?(input.x*width-ox)/scale:input.x*1024.f;
+    float y=scale>0.f?(input.y*height-oy)/scale:input.y*768.f;
     if(_ready&&!_pendingAction&&!_saveRequested){
         _hoverButton=_hoverAction=-1;
         if(input.keys[1]==3){NSString *failure=[self depart:6 tick:tick];if(failure)return failure;}
@@ -418,7 +428,6 @@ static uint32_t saveDword(const uint8_t *p) {
         }
     }
     dc_vk_sprite_item items[512]={0};size_t count=0;
-    float scale=fminf(width/1024.f,height/768.f),ox=(width-1024*scale)*.5f,oy=(height-768*scale)*.5f;
 #define SAVE_APPEND(i,px,py) [self append:(i) x:(px) y:(py) scale:scale offsetX:ox offsetY:oy items:items count:&count]
     /* Save_select follows the selected row (DAT_0084d07a, 0x84b0d8+0x1fa2), while DAT_0084d07b is the page. */
     SAVE_APPEND(1,0,0);SAVE_APPEND(2,376,64+56*_row);
